@@ -201,6 +201,9 @@ input,select,textarea{font-family:inherit}
     <button class="nav-btn" onclick="goTab('reportes',this)" id="nb-reportes">
       <div class="nav-icon">📊</div><div>Reportes</div>
     </button>
+    <button class="nav-btn" onclick="goTab('plan',this)" id="nb-plan">
+      <div class="nav-icon">🗺️</div><div>Rutas</div>
+    </button>
     <button class="nav-btn" id="nb-admin" onclick="goTab('admin',this)" style="display:none">
       <div class="nav-icon">⚙️</div><div>Admin</div>
     </button>
@@ -391,7 +394,7 @@ function goTab(tab, btn) {
   TAB = tab;
   document.querySelectorAll('.nav-btn').forEach(function(b){b.classList.remove('on');});
   if (btn) btn.classList.add('on');
-  var titulos = {home:'Pedidos',entregar:'Despacho',nuevo:'Nuevo pedido',reportes:'Reportes',admin:'Administración'};
+  var titulos = {home:'Pedidos',entregar:'Despacho',nuevo:'Nuevo pedido',reportes:'Reportes',admin:'Administración',plan:'Plan de Rutas'};
   document.getElementById('topbar-sub').textContent = titulos[tab] || SESSION.nombre;
   var c = document.getElementById('content');
   if (tab==='home')      renderHome(c);
@@ -399,6 +402,7 @@ function goTab(tab, btn) {
   else if (tab==='nuevo')    renderNuevo(c);
   else if (tab==='reportes') renderReportes(c);
   else if (tab==='admin')    renderAdmin(c);
+  else if (tab==='plan')     renderPlanificacion(c);
 }
 
 // ── HELPERS DÍAS ─────────────────────────────────────────────
@@ -902,3 +906,272 @@ init();
 </script>
 </body>
 </html>
+<!-- PLANIFICACION AGREGADA POR CLAUDE -->
+<script>
+// ── ZONAS GEOGRÁFICAS VENEZUELA ───────────────────────────────
+var ZONAS = [
+  { nombre: 'Maracaibo Norte',     ciudades: ['MARACAIBO','NORTE','AMPARO','COROMOTO','HATICOS','LOS HATICOS'] },
+  { nombre: 'Maracaibo Sur',       ciudades: ['SUR','DELICIAS','SANTA LUCIA','SAN FRANCISCO','SIERRA MAESTRA'] },
+  { nombre: 'Maracaibo Centro',    ciudades: ['CENTRO','ZONA INDUSTRIAL','BELLA VISTA'] },
+  { nombre: 'Sur del lago',        ciudades: ['EL MOJAN','MARA','SANTA BARBARA','LOS PUERTOS','ALTAGRACIA'] },
+  { nombre: 'Cabimas / C. Ojeda',  ciudades: ['CABIMAS','CIUDAD OJEDA','LAGUNILLAS'] },
+  { nombre: 'Machiques / Perija',  ciudades: ['MACHIQUES','PERIJA','VILLA DEL ROSARIO','LA VILLA','CARRASQUERO'] },
+  { nombre: 'Coro / Falcón',       ciudades: ['CORO','FALCON','TUCACAS','DABAJURO','PUNTO FIJO'] },
+  { nombre: 'Barquisimeto',        ciudades: ['BARQUISIMETO','CARORA','YARACUY'] },
+  { nombre: 'San Cristóbal',       ciudades: ['SAN CRISTOBAL','TACHIRA','URUMACO'] },
+  { nombre: 'Mérida / Los Andes',  ciudades: ['MERIDA','VALERA','TRUJILLO'] },
+  { nombre: 'Barinas / Llanos',    ciudades: ['BARINAS','ACARIGUA','GUASDUALITO','APURE'] },
+  { nombre: 'Caracas / Centro',    ciudades: ['CARACAS','PETARE','LOS TEQUES','MIRANDA'] },
+  { nombre: 'Valencia / Carabobo', ciudades: ['VALENCIA','CARABOBO','MARACAY','ARAGUA','TURMERO'] },
+  { nombre: 'Oriente',             ciudades: ['MATURIN','EL TIGRE','BARCELONA','CIUDAD BOLIVAR','ANZOATEGUI','GUASIPATI','UPATA','PUERTO ORDAZ'] },
+  { nombre: 'Occidente / Otros',   ciudades: [] }
+];
+
+function getZona(ciudad) {
+  if (!ciudad) return 'Sin ciudad';
+  var cu = ciudad.toUpperCase().trim();
+  for (var i = 0; i < ZONAS.length - 1; i++) {
+    for (var j = 0; j < ZONAS[i].ciudades.length; j++) {
+      if (cu.indexOf(ZONAS[i].ciudades[j]) >= 0 || ZONAS[i].ciudades[j].indexOf(cu) >= 0) {
+        return ZONAS[i].nombre;
+      }
+    }
+  }
+  return ciudad; // devuelve la ciudad si no hay zona conocida
+}
+
+// ── ORDEN DE RUTAS POR PROXIMIDAD DESDE MARACAIBO ────────────
+var ORDEN_RUTAS = [
+  'Maracaibo Norte','Maracaibo Centro','Maracaibo Sur',
+  'Sur del lago','Cabimas / C. Ojeda','Machiques / Perija',
+  'Coro / Falcón','Barquisimeto','San Cristóbal','Mérida / Los Andes',
+  'Barinas / Llanos','Valencia / Carabobo','Caracas / Centro',
+  'Oriente','Occidente / Otros'
+];
+
+// ── RENDER PLANIFICACIÓN ──────────────────────────────────────
+function renderPlanificacion(c) {
+  var pendientes = DB.pedidos.filter(function(p) {
+    return p.estatus !== 'ENTREGADO';
+  });
+
+  if (!pendientes.length) {
+    c.innerHTML = '<div class="empty"><div class="empty-icon">🎉</div>No hay pedidos pendientes para planificar</div>';
+    return;
+  }
+
+  // Agrupar por zona
+  var grupos = {};
+  pendientes.forEach(function(p) {
+    var z = getZona(p.ciudad);
+    if (!grupos[z]) grupos[z] = [];
+    grupos[z].push(p);
+  });
+
+  // Ordenar pedidos dentro de cada zona por fecha más próxima
+  for (var z in grupos) {
+    grupos[z].sort(function(a, b) {
+      var da = diasRestantes(a.fechaLimite);
+      var db = diasRestantes(b.fechaLimite);
+      if (da === null && db === null) return 0;
+      if (da === null) return 1;
+      if (db === null) return -1;
+      return da - db;
+    });
+  }
+
+  // Ordenar zonas: primero las que tienen pedidos urgentes/vencidos
+  var zonasOrdenadas = Object.keys(grupos).sort(function(a, b) {
+    var minA = 9999, minB = 9999;
+    grupos[a].forEach(function(p) {
+      var d = diasRestantes(p.fechaLimite);
+      if (d !== null && d < minA) minA = d;
+    });
+    grupos[b].forEach(function(p) {
+      var d = diasRestantes(p.fechaLimite);
+      if (d !== null && d < minB) minB = d;
+    });
+    return minA - minB;
+  });
+
+  // Contar totales
+  var totalVenc  = pendientes.filter(function(p){return clasif(p)==='vencido';}).length;
+  var totalUrg   = pendientes.filter(function(p){return clasif(p)==='urgente';}).length;
+  var totalSF    = pendientes.filter(function(p){return !p.fechaLimite;}).length;
+  var totalZonas = zonasOrdenadas.length;
+
+  var html = '<div class="stats-bar">'
+    + '<div class="stat"><div class="stat-v">' + pendientes.length + '</div><div class="stat-l">pedidos</div></div>'
+    + '<div class="stat"><div class="stat-v" style="color:#fca5a5">' + totalVenc + '</div><div class="stat-l">vencidos</div></div>'
+    + '<div class="stat"><div class="stat-v" style="color:#fcd34d">' + totalUrg + '</div><div class="stat-l">urgentes</div></div>'
+    + '<div class="stat"><div class="stat-v">' + totalZonas + '</div><div class="stat-l">zonas</div></div>'
+    + '</div>';
+
+  html += '<div style="padding:10px 14px 0">';
+  html += '<div class="sec-label">Plan de entregas — ordenado por urgencia y zona</div>';
+
+  // Botón exportar plan
+  html += '<button class="btn btn-ghost btn-sm" style="margin-bottom:10px;width:100%" onclick="exportarPlan()">📄 Exportar plan como CSV</button>';
+
+  // Viajes sugeridos (agrupar zonas cercanas)
+  var viajes = armarViajes(grupos, zonasOrdenadas);
+  viajes.forEach(function(viaje, vi) {
+    var urgV = viaje.pedidos.filter(function(p){return clasif(p)==='vencido';}).length;
+    var urgU = viaje.pedidos.filter(function(p){return clasif(p)==='urgente';}).length;
+    var proxima = viaje.pedidos.find(function(p){return p.fechaLimite;});
+
+    var colorHead = urgV ? '#dc2626' : urgU ? '#d97706' : '#1a1a2e';
+
+    html += '<div class="card" style="margin-bottom:12px">';
+    html += '<div style="background:' + colorHead + ';padding:10px 14px;display:flex;justify-content:space-between;align-items:flex-start">';
+    html += '<div>';
+    html += '<div style="color:#fff;font-size:13px;font-weight:700">🚚 Viaje ' + (vi+1) + ' — ' + viaje.zonas.join(' + ') + '</div>';
+    html += '<div style="color:rgba(255,255,255,.7);font-size:11px;margin-top:2px">' + viaje.pedidos.length + ' pedido' + (viaje.pedidos.length!==1?'s':'');
+    if (urgV) html += ' · <span style="color:#fca5a5">' + urgV + ' vencido' + (urgV!==1?'s':'') + '</span>';
+    if (urgU) html += ' · <span style="color:#fcd34d">' + urgU + ' urgente' + (urgU!==1?'s':'') + '</span>';
+    if (proxima) html += ' · entrega más próxima: ' + proxima.fechaLimite;
+    html += '</div></div>';
+    html += '<span style="background:rgba(255,255,255,.15);color:#fff;font-size:10px;padding:3px 8px;border-radius:99px;font-weight:600">'
+      + (urgV ? 'URGENTE' : urgU ? 'PRONTO' : 'PLANIFICAR') + '</span>';
+    html += '</div>';
+
+    // Paradas ordenadas
+    html += '<div style="padding:6px 0">';
+    viaje.pedidos.forEach(function(p, pi) {
+      var d = diasRestantes(p.fechaLimite);
+      var color = !p.fechaLimite ? '#6b7280' : d < 0 ? '#dc2626' : d <= 7 ? '#d97706' : '#16a34a';
+      html += '<div style="padding:8px 14px;border-bottom:1px solid #f3f4f6;display:flex;gap:10px;align-items:flex-start">';
+      html += '<div style="min-width:22px;height:22px;border-radius:50%;background:' + color + ';color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px">' + (pi+1) + '</div>';
+      html += '<div style="flex:1;min-width:0">';
+      html += '<div style="font-size:13px;font-weight:600">' + (p.cliente||'Sin nombre') + '</div>';
+      html += '<div style="font-size:11px;color:#6b7280;margin-top:1px">';
+      html += '#' + (p.numero||p.id.substring(0,6));
+      if (p.ciudad) html += ' · ' + p.ciudad;
+      if (p.vendedor) html += ' · ' + p.vendedor;
+      html += '</div>';
+      if (p.descripcion) html += '<div style="font-size:11px;color:#9ca3af;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + p.descripcion.substring(0,60) + '</div>';
+      html += '</div>';
+      html += '<div style="text-align:right;flex-shrink:0">';
+      html += badgeHTML(p);
+      if (p.fechaLimite) html += '<div style="font-size:10px;color:#9ca3af;margin-top:3px">' + p.fechaLimite + '</div>';
+      html += '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+
+    // División de flete
+    html += '<div style="padding:8px 14px;background:#f9fafb;border-top:1px solid #f3f4f6">';
+    html += '<div style="font-size:11px;color:#6b7280;margin-bottom:5px;font-weight:600">DIVIDIR COSTO DE TRANSPORTE</div>';
+    html += '<div style="display:flex;gap:8px;align-items:center">';
+    html += '<input type="number" id="flete-' + vi + '" placeholder="Monto total del flete ($)" style="flex:1;padding:7px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px" oninput="calcFlete(' + vi + ',' + viaje.pedidos.length + ')">';
+    html += '</div>';
+    html += '<div id="flete-result-' + vi + '" style="font-size:12px;color:#374151;margin-top:6px"></div>';
+    html += '</div>';
+    html += '</div>'; // end card
+  });
+
+  html += '</div>'; // end padding
+  c.innerHTML = html;
+}
+
+// ── ARMAR VIAJES CONSOLIDADOS ─────────────────────────────────
+function armarViajes(grupos, zonasOrdenadas) {
+  var viajes = [];
+  var MAX_POR_VIAJE = 8;
+
+  // Zonas de Maracaibo van juntas
+  var zonasLocal = ['Maracaibo Norte','Maracaibo Centro','Maracaibo Sur'];
+  var pedsLocal = [];
+  zonasLocal.forEach(function(z) {
+    if (grupos[z]) pedsLocal = pedsLocal.concat(grupos[z]);
+  });
+  if (pedsLocal.length) {
+    viajes.push({ zonas: ['Maracaibo'], pedidos: pedsLocal });
+  }
+
+  // Zonas cercanas que se pueden combinar
+  var combos = [
+    ['Sur del lago','Cabimas / C. Ojeda'],
+    ['Machiques / Perija'],
+    ['Coro / Falcón'],
+    ['Barquisimeto'],
+    ['San Cristóbal'],
+    ['Mérida / Los Andes'],
+    ['Barinas / Llanos'],
+    ['Valencia / Carabobo','Caracas / Centro'],
+    ['Oriente'],
+  ];
+
+  combos.forEach(function(combo) {
+    var peds = [];
+    var zonasPresentes = [];
+    combo.forEach(function(z) {
+      if (grupos[z] && grupos[z].length) {
+        peds = peds.concat(grupos[z]);
+        zonasPresentes.push(z);
+      }
+    });
+    if (peds.length) {
+      peds.sort(function(a,b){
+        var da=diasRestantes(a.fechaLimite), db=diasRestantes(b.fechaLimite);
+        if(da===null&&db===null)return 0;
+        if(da===null)return 1;if(db===null)return -1;
+        return da-db;
+      });
+      viajes.push({ zonas: zonasPresentes, pedidos: peds });
+    }
+  });
+
+  // Zonas no mapeadas
+  var zonasUsadas = zonasLocal.concat(['Sur del lago','Cabimas / C. Ojeda','Machiques / Perija','Coro / Falcón','Barquisimeto','San Cristóbal','Mérida / Los Andes','Barinas / Llanos','Valencia / Carabobo','Caracas / Centro','Oriente']);
+  var pedsSueltos = [];
+  var zonasSueltas = [];
+  zonasOrdenadas.forEach(function(z) {
+    if (zonasUsadas.indexOf(z) < 0 && grupos[z] && grupos[z].length) {
+      pedsSueltos = pedsSueltos.concat(grupos[z]);
+      zonasSueltas.push(z);
+    }
+  });
+  if (pedsSueltos.length) {
+    viajes.push({ zonas: zonasSueltas.length ? zonasSueltas : ['Otras zonas'], pedidos: pedsSueltos });
+  }
+
+  return viajes.filter(function(v){ return v.pedidos.length > 0; });
+}
+
+// ── CALCULAR DIVISIÓN DE FLETE ────────────────────────────────
+function calcFlete(vi, numPedidos) {
+  var monto = parseFloat(document.getElementById('flete-' + vi).value) || 0;
+  var el = document.getElementById('flete-result-' + vi);
+  if (!monto || !el) return;
+  var porPed = (monto / numPedidos).toFixed(2);
+  el.innerHTML = '<span style="color:#16a34a;font-weight:600">$' + porPed + ' por pedido</span>'
+    + ' <span style="color:#9ca3af">(' + numPedidos + ' pedidos · total $' + monto.toFixed(2) + ')</span>';
+}
+
+// ── EXPORTAR PLAN CSV ─────────────────────────────────────────
+function exportarPlan() {
+  var pendientes = DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';});
+  pendientes.sort(function(a,b){
+    var da=diasRestantes(a.fechaLimite), db=diasRestantes(b.fechaLimite);
+    if(da===null&&db===null)return 0;
+    if(da===null)return 1;if(db===null)return -1;
+    return da-db;
+  });
+  var rows=[['#','Pedido','Cliente','Ciudad','Zona','Vendedor','Fecha limite','Dias restantes','Estado','Descripcion']];
+  pendientes.forEach(function(p,i){
+    var d=diasRestantes(p.fechaLimite);
+    rows.push([
+      i+1, p.numero||p.id.substring(0,6), p.cliente||'', p.ciudad||'',
+      getZona(p.ciudad), p.vendedor||'', p.fechaLimite||'Sin fecha',
+      d!==null?d:'—', p.estatus||'', (p.descripcion||'').substring(0,80)
+    ]);
+  });
+  var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
+  var a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
+  var hoy=new Date().toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'-');
+  a.download='plan_entregas_'+hoy+'.csv';
+  a.click();
+}
+</script>
