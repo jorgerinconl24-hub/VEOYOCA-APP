@@ -241,6 +241,10 @@ input,select,textarea{font-family:inherit}
       <div class="sfield"><label>Descripción</label>
         <textarea id="e-desc" placeholder="Productos, medidas, colores..."></textarea>
       </div>
+      <div class="sfield-row">
+        <div class="sfield"><label>Proveedor</label><input type="text" id="e-proveedor" placeholder="Ej: ORION, COLVEN..."></div>
+        <div class="sfield"><label># Orden de compra</label><input type="text" id="e-oc" placeholder="Ej: OC-2026-045"></div>
+      </div>
       <div class="sfield"><label>Nota / Observación</label>
         <input type="text" id="e-nota" placeholder="Observación adicional">
       </div>
@@ -519,6 +523,7 @@ function cardHTML(p, conEntregar) {
     +'<div class="card-cliente">'+(p.cliente||'Sin nombre')+'</div>'
     +'<div class="card-meta">'+(p.ciudad||'—')+(p.vendedor?' · '+p.vendedor:'')+'</div>'
     +(p.vendedor?'<span class="card-vend">'+p.vendedor+'</span>':'')
+    +(p.proveedor?'<span class="card-vend" style="background:#fef3c7;color:#92400e;margin-left:4px">'+p.proveedor+(p.ordenCompra?' · OC: '+p.ordenCompra:'')+'</span>':'')
     +'<div class="card-desc">'+(p.descripcion||'—')+'</div>'
     +'</div>'+badgeHTML(p)+'</div>'
     +'<div class="card-foot">'
@@ -574,10 +579,17 @@ function renderNuevo(c) {
   var vends=DB.usuarios.map(function(u){return '<option value="'+u.nombre+'">'+u.nombre+'</option>';}).join('');
   c.innerHTML='<div class="section-pad">'
     +'<div class="card" style="padding:16px">'
+    +'<div class="sfield-row">'
+    +'<div class="sfield"><label># Pedido</label><input type="text" id="n-numero" placeholder="Ej: 432"></div>'
     +'<div class="sfield"><label>Cliente *</label><input type="text" id="n-cliente" placeholder="Nombre del cliente"></div>'
+    +'</div>'
     +'<div class="sfield-row">'
     +'<div class="sfield"><label>Ciudad</label><input type="text" id="n-ciudad" placeholder="Ciudad"></div>'
     +'<div class="sfield"><label>Vendedor</label><select id="n-vendedor"><option value="">Seleccionar</option>'+vends+'</select></div>'
+    +'</div>'
+    +'<div class="sfield-row">'
+    +'<div class="sfield"><label>Proveedor</label><input type="text" id="n-proveedor" placeholder="Ej: ORION, COLVEN..."></div>'
+    +'<div class="sfield"><label># Orden de compra</label><input type="text" id="n-oc" placeholder="Ej: OC-2026-045"></div>'
     +'</div>'
     +'<div class="sfield-row">'
     +'<div class="sfield"><label>Fecha límite</label><input type="date" id="n-fecha"></div>'
@@ -597,14 +609,17 @@ function crearPedido() {
   var cliente=document.getElementById('n-cliente').value.trim();
   var desc=document.getElementById('n-desc').value.trim();
   if(!cliente||!desc){toast('Cliente y descripción son obligatorios','err');return;}
+  var numeroManual=document.getElementById('n-numero').value.trim();
   var maxNum=0;
   DB.pedidos.forEach(function(p){var n=parseInt(p.numero||0);if(n>maxNum)maxNum=n;});
-  var numero=maxNum+1;
+  var numero=numeroManual||String(maxNum+1);
   var p={
     id:uid(),numero:numero,
     cliente:cliente,
     ciudad:document.getElementById('n-ciudad').value,
     vendedor:document.getElementById('n-vendedor').value,
+    proveedor:document.getElementById('n-proveedor').value.trim(),
+    ordenCompra:document.getElementById('n-oc').value.trim(),
     fechaLimite:inputFecha(document.getElementById('n-fecha').value),
     estatus:document.getElementById('n-estado').value||'PENDIENTE',
     descripcion:desc,
@@ -616,8 +631,11 @@ function crearPedido() {
   DB.pedidos.push(p);
   registrarBitacora(p.id,'CREADO por '+SESSION.nombre);
   guardarDB();
+  document.getElementById('n-numero').value='';
   document.getElementById('n-cliente').value='';
   document.getElementById('n-ciudad').value='';
+  document.getElementById('n-proveedor').value='';
+  document.getElementById('n-oc').value='';
   document.getElementById('n-fecha').value='';
   document.getElementById('n-desc').value='';
   toast('Pedido #'+numero+' creado exitosamente','ok');
@@ -634,6 +652,8 @@ function abrirEditar(id) {
   document.getElementById('e-ciudad').value=p.ciudad||'';
   document.getElementById('e-fecha').value=fechaInput(p.fechaLimite);
   document.getElementById('e-desc').value=p.descripcion||'';
+  document.getElementById('e-proveedor').value=p.proveedor||'';
+  document.getElementById('e-oc').value=p.ordenCompra||'';
   document.getElementById('e-nota').value='';
   var vsel=document.getElementById('e-vendedor');
   vsel.innerHTML='<option value="">Sin cambio</option>';
@@ -660,12 +680,16 @@ function guardarEdicion() {
   var estado=document.getElementById('e-estado').value;
   var desc=document.getElementById('e-desc').value.trim();
   var nota=document.getElementById('e-nota').value.trim();
+  var prov=document.getElementById('e-proveedor').value.trim();
+  var oc=document.getElementById('e-oc').value.trim();
   if(cliente&&cliente!==p.cliente){cambios.push('cliente');p.cliente=cliente;}
   if(ciudad&&ciudad!==p.ciudad){cambios.push('ciudad');p.ciudad=ciudad;}
   if(vend&&vend!==p.vendedor){cambios.push('vendedor');p.vendedor=vend;}
   if(fecha2&&fecha2!==p.fechaLimite){cambios.push('fechaLimite');p.fechaLimite=fecha2;}
   if(estado&&estado!==p.estatus){cambios.push('estatus');p.estatus=estado;}
   if(desc&&desc!==p.descripcion){cambios.push('descripcion');p.descripcion=desc;}
+  if(prov&&prov!==p.proveedor){cambios.push('proveedor');p.proveedor=prov;}
+  if(oc&&oc!==p.ordenCompra){cambios.push('ordenCompra');p.ordenCompra=oc;}
   if(nota){cambios.push('nota');p.nota=nota;}
   if(!cambios.length){cerrarModal('modal-edit');toast('Sin cambios','warn');return;}
   p.ultimaEdicion=fecha()+' '+hora();
