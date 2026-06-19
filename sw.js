@@ -1,29 +1,25 @@
-// Service Worker — VeoYoca PWA
-var CACHE = 'veoyoca-v5';
-var FILES = ['/', '/index.html', '/manifest.json'];
-
+// sw.js — VeoYoca v6
+// Este service worker se desinstala solo para evitar problemas de cache
 self.addEventListener('install', function(e) {
-  e.waitUntil(
-    caches.open(CACHE).then(function(c) { return c.addAll(FILES); })
-  );
   self.skipWaiting();
 });
-
 self.addEventListener('activate', function(e) {
   e.waitUntil(
     caches.keys().then(function(keys) {
-      return Promise.all(keys.filter(function(k){return k!==CACHE;}).map(function(k){return caches.delete(k);}));
-    })
-  );
-  self.clients.claim();
-});
-
-self.addEventListener('fetch', function(e) {
-  e.respondWith(
-    caches.match(e.request).then(function(r) {
-      return r || fetch(e.request).catch(function() {
-        return caches.match('/index.html');
+      return Promise.all(keys.map(function(k) { return caches.delete(k); }));
+    }).then(function() {
+      return self.clients.claim();
+    }).then(function() {
+      // Notificar a todos los clientes que recarguen
+      return self.clients.matchAll().then(function(clients) {
+        clients.forEach(function(client) {
+          client.postMessage({type: 'RELOAD'});
+        });
       });
     })
   );
+});
+self.addEventListener('fetch', function(e) {
+  // Sin cache — siempre ir a la red
+  e.respondWith(fetch(e.request));
 });
