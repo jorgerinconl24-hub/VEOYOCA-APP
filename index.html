@@ -1,1422 +1,433 @@
-<!DOCTYPE html>
-<!-- saved from url=(0045)file:///C:/Users/isaac/Downloads/index_9.html -->
-<html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <meta name="theme-color" content="#1a1a2e">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="VeoYoca">
-<link rel="manifest" href="file:///C:/Users/isaac/Downloads/manifest.json">
 <title>VeoYoca — Sistema de Pedidos</title>
 <style>
-:root{
-  --accent:#1a1a2e;--accent2:#2d2d5e;--success:#16a34a;--danger:#dc2626;
-  --warning:#d97706;--info:#1d4ed8;--bg:#f4f4f8;--card:#fff;
-  --border:#e5e7eb;--text:#111827;--muted:#6b7280;
-  --sbg:#f0fdf4;--dbg:#fef2f2;--wbg:#fffbeb;--ibg:#eff6ff;
-}
+:root{--accent:#1a1a2e;--accent2:#2d2d5e;--success:#16a34a;--danger:#dc2626;--warning:#d97706;--info:#1d4ed8;--bg:#f4f4f8;--card:#fff;--border:#e5e7eb;--text:#111827;--muted:#6b7280;--sbg:#f0fdf4;--dbg:#fef2f2;--wbg:#fffbeb;--ibg:#eff6ff}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:15px;min-height:100vh}
-button{cursor:pointer;font-family:inherit}
-input,select,textarea{font-family:inherit}
-
-/* ── LOGIN ── */
-#login-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:24px;background:var(--accent)}
+button{cursor:pointer;font-family:inherit}input,select,textarea{font-family:inherit}
+#splash{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:var(--accent)}
+.splash-logo{width:72px;height:72px;background:#fff;border-radius:20px;display:flex;align-items:center;justify-content:center;font-size:32px;margin-bottom:16px}
+.splash-title{color:#fff;font-size:22px;font-weight:700}.splash-sub{color:rgba(255,255,255,.5);font-size:13px;margin-top:4px}
+.splash-spinner{margin-top:32px;width:32px;height:32px;border:3px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#login-screen{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:24px;background:var(--accent)}
 .login-logo{width:72px;height:72px;background:#fff;border-radius:20px;display:flex;align-items:center;justify-content:center;font-size:32px;margin-bottom:20px}
-.login-title{color:#fff;font-size:24px;font-weight:600;margin-bottom:4px}
-.login-sub{color:rgba(255,255,255,.6);font-size:13px;margin-bottom:32px}
-.login-card{background:#fff;border-radius:16px;padding:24px;width:100%;max-width:340px}
-.login-card h2{font-size:16px;font-weight:600;margin-bottom:20px;color:var(--text)}
-.field{margin-bottom:14px}
-.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;font-weight:500;text-transform:uppercase;letter-spacing:.05em}
-.field input,.field select{width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:15px;color:var(--text);background:#fff;transition:border-color .2s}
-.field input:focus,.field select:focus{outline:none;border-color:var(--accent)}
+.login-title{color:#fff;font-size:24px;font-weight:600;margin-bottom:4px}.login-sub{color:rgba(255,255,255,.6);font-size:13px;margin-bottom:32px}
+.login-card{background:#fff;border-radius:16px;padding:24px;width:100%;max-width:340px}.login-card h2{font-size:16px;font-weight:600;margin-bottom:20px}
+.field{margin-bottom:14px}.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;font-weight:500;text-transform:uppercase;letter-spacing:.05em}
+.field input{width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:15px;color:var(--text);background:#fff}
+.field input:focus{outline:none;border-color:var(--accent)}
 .btn-primary{width:100%;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;margin-top:4px}
-.btn-primary:disabled{opacity:.5}
 .login-err{color:var(--danger);font-size:13px;text-align:center;margin-top:10px;display:none}
-
-/* ── SHELL ── */
 #app{display:none;flex-direction:column;min-height:100vh}
 .topbar{background:var(--accent);color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
-.topbar-left{display:flex;align-items:center;gap:10px}
-.topbar h1{font-size:16px;font-weight:600}
-.topbar p{font-size:11px;opacity:.6;margin-top:1px}
+.topbar h1{font-size:16px;font-weight:600}.topbar p{font-size:11px;opacity:.6;margin-top:1px}
 .avatar{width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:#fff;cursor:pointer}
 .navbar{background:var(--accent);display:flex;border-top:1px solid rgba(255,255,255,.1);position:sticky;bottom:0;z-index:50}
 .nav-btn{flex:1;padding:10px 4px 12px;background:none;border:none;color:rgba(255,255,255,.5);display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;transition:color .2s}
-.nav-btn.on{color:#fff}
-.nav-icon{font-size:22px;line-height:1}
-.content{flex:1;overflow-y:auto;padding-bottom:8px}
-
-/* ── STATS BAR ── */
+.nav-btn.on{color:#fff}.nav-icon{font-size:20px;line-height:1}.content{flex:1;overflow-y:auto;padding-bottom:8px}
+.sync-badge{position:fixed;top:56px;right:12px;background:var(--success);color:#fff;font-size:11px;font-weight:600;padding:4px 10px;border-radius:99px;z-index:60;opacity:0;transition:opacity .3s;pointer-events:none}
+.sync-badge.show{opacity:1}.sync-badge.syncing{background:var(--info)}.sync-badge.err{background:var(--danger)}
 .stats-bar{display:grid;grid-template-columns:repeat(4,1fr);background:var(--accent2)}
-.stat{text-align:center;padding:10px 4px;border-right:1px solid rgba(255,255,255,.1)}
-.stat:last-child{border:none}
-.stat-v{font-size:20px;font-weight:600;color:#fff}
-.stat-l{font-size:9px;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.04em;margin-top:1px}
+.stat{text-align:center;padding:10px 4px;border-right:1px solid rgba(255,255,255,.1)}.stat:last-child{border:none}
+.stat-v{font-size:20px;font-weight:600;color:#fff}.stat-l{font-size:9px;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.04em;margin-top:1px}
 .prog-wrap{padding:8px 14px;background:#fff;border-bottom:1px solid var(--border)}
 .prog-bar{height:6px;background:var(--border);border-radius:99px;overflow:hidden;margin-bottom:3px}
-.prog-fill{height:100%;background:var(--success);border-radius:99px;transition:width .4s}
-.prog-label{font-size:11px;color:var(--muted)}
-
-/* ── CARDS ── */
-.section-pad{padding:12px 14px}
-.sec-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:12px 0 6px}
+.prog-fill{height:100%;background:var(--success);border-radius:99px;transition:width .4s}.prog-label{font-size:11px;color:var(--muted)}
+.section-pad{padding:12px 14px}.sec-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:12px 0 6px}
 .card{background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:10px;overflow:hidden}
-.card-head{padding:12px 14px;display:flex;gap:10px;align-items:flex-start}
-.card-num{font-size:12px;font-weight:600;color:var(--muted);min-width:42px}
-.card-body{flex:1;min-width:0}
-.card-cliente{font-size:15px;font-weight:600}
-.card-meta{font-size:12px;color:var(--muted);margin-top:2px}
+.card-head{padding:12px 14px;display:flex;gap:10px;align-items:flex-start}.card-num{font-size:12px;font-weight:600;color:var(--muted);min-width:42px}
+.card-body{flex:1;min-width:0}.card-cliente{font-size:15px;font-weight:600}.card-meta{font-size:12px;color:var(--muted);margin-top:2px}
 .card-desc{font-size:12px;color:var(--muted);margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .card-vend{display:inline-block;font-size:10px;padding:2px 8px;border-radius:99px;background:#e8f0fe;color:#1a1a2e;margin-top:4px;font-weight:600}
 .card-foot{border-top:1px solid var(--border);padding:8px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .card-foot input{flex:1;min-width:100px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:#fff;color:var(--text)}
-.card.done{opacity:.45}
-
-/* ── BADGES ── */
 .badge{display:inline-block;font-size:10px;font-weight:600;padding:3px 9px;border-radius:99px;flex-shrink:0}
-.b-danger{background:var(--dbg);color:var(--danger)}
-.b-warning{background:var(--wbg);color:var(--warning)}
-.b-success{background:var(--sbg);color:var(--success)}
-.b-info{background:var(--ibg);color:var(--info)}
-.b-muted{background:#f3f4f6;color:var(--muted)}
-
-/* ── BUTTONS ── */
+.b-danger{background:var(--dbg);color:var(--danger)}.b-warning{background:var(--wbg);color:var(--warning)}
+.b-success{background:var(--sbg);color:var(--success)}.b-info{background:var(--ibg);color:var(--info)}.b-muted{background:#f3f4f6;color:var(--muted)}
 .btn{border:none;border-radius:8px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:opacity .15s}
-.btn:disabled{opacity:.45;cursor:not-allowed}
-.btn-dark{background:var(--accent);color:#fff}
-.btn-green{background:var(--success);color:#fff}
-.btn-blue{background:var(--info);color:#fff}
-.btn-red{background:var(--danger);color:#fff}
-.btn-ghost{background:#f3f4f6;color:var(--text)}
-.btn-sm{padding:5px 11px;font-size:12px}
-
-/* ── TOOLBAR ── */
+.btn:disabled{opacity:.45;cursor:not-allowed}.btn-dark{background:var(--accent);color:#fff}.btn-green{background:var(--success);color:#fff}
+.btn-blue{background:var(--info);color:#fff}.btn-red{background:var(--danger);color:#fff}.btn-ghost{background:#f3f4f6;color:var(--text)}.btn-sm{padding:5px 11px;font-size:12px}
 .toolbar{padding:8px 14px;background:#fff;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap}
 .toolbar input,.toolbar select{padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:#fff;color:var(--text)}
 .toolbar input{flex:1;min-width:140px}
-
-/* ── MODAL ── */
 .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;align-items:flex-end;justify-content:center}
-.overlay.open{display:flex}
-.sheet{background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:500px;max-height:90vh;overflow-y:auto;padding-bottom:env(safe-area-inset-bottom)}
+.overlay.open{display:flex}.sheet{background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:500px;max-height:90vh;overflow-y:auto}
 .sheet-handle{width:36px;height:4px;background:#e5e7eb;border-radius:99px;margin:12px auto 0}
 .sheet-head{padding:14px 18px 10px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border)}
-.sheet-head h2{font-size:16px;font-weight:600}
-.sheet-close{background:none;border:none;font-size:22px;color:var(--muted);padding:0 4px;line-height:1}
-.sheet-body{padding:16px 18px}
-.sfield{margin-bottom:14px}
+.sheet-head h2{font-size:16px;font-weight:600}.sheet-close{background:none;border:none;font-size:22px;color:var(--muted);padding:0 4px;line-height:1}
+.sheet-body{padding:16px 18px}.sfield{margin-bottom:14px}
 .sfield label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
 .sfield input,.sfield select,.sfield textarea{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;color:var(--text);background:#fff}
 .sfield input:focus,.sfield select:focus,.sfield textarea:focus{outline:none;border-color:var(--accent)}
-.sfield textarea{resize:vertical;min-height:80px}
-.sfield-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sfield textarea{resize:vertical;min-height:80px}.sfield-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .sheet-foot{padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
-
-/* ── REPORTES ── */
 .report-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;padding:14px}
 .report-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center}
-.report-val{font-size:28px;font-weight:700;margin-bottom:4px}
-.report-label{font-size:12px;color:var(--muted)}
+.report-val{font-size:28px;font-weight:700;margin-bottom:4px}.report-label{font-size:12px;color:var(--muted)}
 .chart-wrap{background:#fff;border:1px solid var(--border);border-radius:12px;margin:0 14px 14px;padding:14px}
-.chart-title{font-size:13px;font-weight:600;margin-bottom:12px;color:var(--text)}
-.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.bar-label{font-size:12px;color:var(--muted);min-width:80px;text-align:right}
-.bar-track{flex:1;height:18px;background:#f3f4f6;border-radius:99px;overflow:hidden}
-.bar-fill{height:100%;border-radius:99px;transition:width .6s}
+.chart-title{font-size:13px;font-weight:600;margin-bottom:12px}
+.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}.bar-label{font-size:12px;color:var(--muted);min-width:80px;text-align:right}
+.bar-track{flex:1;height:18px;background:#f3f4f6;border-radius:99px;overflow:hidden}.bar-fill{height:100%;border-radius:99px;transition:width .6s}
 .bar-val{font-size:12px;font-weight:600;min-width:28px}
-
-/* ── ADMIN ── */
 .admin-section{background:#fff;border:1px solid var(--border);border-radius:12px;margin:0 14px 14px;overflow:hidden}
 .admin-row{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}
-.admin-row:last-child{border:none}
-.admin-info{flex:1;min-width:0}
-.admin-name{font-size:14px;font-weight:600}
-.admin-meta{font-size:12px;color:var(--muted);margin-top:1px}
-.role-badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px}
-.role-admin{background:#fef3c7;color:#92400e}
-.role-emp{background:#e0e7ff;color:#3730a3}
-
-/* ── TOAST ── */
+.admin-row:last-child{border:none}.admin-info{flex:1;min-width:0}.admin-name{font-size:14px;font-weight:600}.admin-meta{font-size:12px;color:var(--muted);margin-top:1px}
+.role-badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px}.role-admin{background:#fef3c7;color:#92400e}.role-emp{background:#e0e7ff;color:#3730a3}
 .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;padding:11px 20px;border-radius:10px;font-size:14px;z-index:200;opacity:0;transition:opacity .25s;pointer-events:none;max-width:88vw;text-align:center;font-weight:500}
-.toast.show{opacity:1}
-.toast.t-ok{background:var(--success)}
-.toast.t-err{background:var(--danger)}
-.toast.t-warn{background:var(--warning)}
-
-.empty{text-align:center;padding:48px 20px;color:var(--muted);font-size:14px}
-.empty-icon{font-size:40px;margin-bottom:10px}
+.toast.show{opacity:1}.toast.t-ok{background:var(--success)}.toast.t-err{background:var(--danger)}.toast.t-warn{background:var(--warning)}
+.empty{text-align:center;padding:48px 20px;color:var(--muted);font-size:14px}.empty-icon{font-size:40px;margin-bottom:10px}
 </style>
-<style>@keyframes prog{from{width:0%}to{width:85%}}</style></head>
+</head>
 <body>
-
-<!-- LOGIN -->
-<div id="login-screen" style="display: flex;">
-  <div class="login-logo">📦</div>
-  <div class="login-title">VeoYoca</div>
-  <div class="login-sub">Sistema de gestión de pedidos</div>
-  <div class="login-card">
-    <h2>Iniciar sesión</h2>
-    <div class="field">
-      <label>Usuario</label>
-      <input type="text" id="l-user" placeholder="Tu usuario" autocomplete="username">
-    </div>
-    <div class="field">
-      <label>Contraseña</label>
-      <input type="password" id="l-pass" placeholder="••••••" autocomplete="current-password">
-    </div>
-    <button class="btn-primary" onclick="login()">Entrar</button>
-    <div class="login-err" id="l-err">Usuario o contraseña incorrectos</div>
-  </div>
-</div>
-
-<!-- APP -->
+<div id="splash"><div class="splash-logo">&#x1F4E6;</div><div class="splash-title">VeoYoca</div><div class="splash-sub" id="splash-msg">Conectando con Firebase...</div><div class="splash-spinner"></div></div>
+<div id="login-screen"><div class="login-logo">&#x1F4E6;</div><div class="login-title">VeoYoca</div><div class="login-sub">Sistema de gesti&#xF3;n de pedidos</div>
+<div class="login-card"><h2>Iniciar sesi&#xF3;n</h2>
+<div class="field"><label>Usuario</label><input type="text" id="l-user" placeholder="Tu usuario" autocomplete="username"></div>
+<div class="field"><label>Contrase&#xF1;a</label><input type="password" id="l-pass" placeholder="&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;" autocomplete="current-password"></div>
+<button class="btn-primary" onclick="login()">Entrar</button><div class="login-err" id="l-err">Usuario o contrase&#xF1;a incorrectos</div></div></div>
 <div id="app">
-  <div class="topbar">
-    <div class="topbar-left">
-      <div>
-        <h1>VeoYoca</h1>
-        <p id="topbar-sub">Pedidos</p>
-      </div>
-    </div>
-    <div class="avatar" id="user-avatar" onclick="mostrarPerfil()">--</div>
-  </div>
-
-  <div class="content" id="content">
-    <!-- contenido dinámico -->
-  </div>
-
-  <div class="navbar">
-    <button class="nav-btn on" onclick="goTab(&#39;home&#39;,this)" id="nb-home">
-      <div class="nav-icon">📋</div><div>Pedidos</div>
-    </button>
-    <button class="nav-btn" onclick="goTab(&#39;entregar&#39;,this)" id="nb-entregar">
-      <div class="nav-icon">🚚</div><div>Despacho</div>
-    </button>
-    <button class="nav-btn" onclick="goTab(&#39;nuevo&#39;,this)" id="nb-nuevo">
-      <div class="nav-icon">➕</div><div>Nuevo</div>
-    </button>
-    <button class="nav-btn" onclick="goTab(&#39;reportes&#39;,this)" id="nb-reportes">
-      <div class="nav-icon">📊</div><div>Reportes</div>
-    </button>
-    <button class="nav-btn" onclick="goTab(&#39;ia&#39;,this)" id="nb-ia">
-      <div class="nav-icon">🤖</div><div>IA</div>
-    </button>
-    <button class="nav-btn" onclick="goTab(&#39;plan&#39;,this)" id="nb-plan">
-      <div class="nav-icon">🗺️</div><div>Rutas</div>
-    </button>
-    <button class="nav-btn" id="nb-admin" onclick="goTab(&#39;admin&#39;,this)" style="display:none">
-      <div class="nav-icon">⚙️</div><div>Admin</div>
-    </button>
-  </div>
-</div>
-
-<!-- MODAL EDITAR/DETALLE -->
-<div class="overlay" id="modal-edit">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-head">
-      <h2 id="modal-titulo">Editar pedido</h2>
-      <button class="sheet-close" onclick="cerrarModal(&#39;modal-edit&#39;)">✕</button>
-    </div>
-    <div class="sheet-body">
-      <input type="hidden" id="e-id">
-      <div class="sfield"><label>Cliente</label><input type="text" id="e-cliente"></div>
-      <div class="sfield-row">
-        <div class="sfield"><label>Ciudad</label><input type="text" id="e-ciudad"></div>
-        <div class="sfield"><label>Vendedor</label>
-          <select id="e-vendedor"><option value="">Sin cambio</option></select>
-        </div>
-      </div>
-      <div class="sfield-row">
-        <div class="sfield"><label>Fecha límite</label><input type="date" id="e-fecha"></div>
-        <div class="sfield"><label>Estado</label>
-          <select id="e-estado">
-            <option value="">Sin cambio</option>
-            <option value="PENDIENTE">Pendiente</option>
-            <option value="EN PROCESO">En proceso</option>
-            <option value="LISTO">Listo para entregar</option>
-          </select>
-        </div>
-      </div>
-      <div class="sfield"><label>Descripción</label>
-        <textarea id="e-desc" placeholder="Productos, medidas, colores..."></textarea>
-      </div>
-      <div class="sfield-row">
-        <div class="sfield"><label>Proveedor</label><input type="text" id="e-proveedor" placeholder="Ej: ORION, COLVEN..."></div>
-        <div class="sfield"><label># Orden de compra</label><input type="text" id="e-oc" placeholder="Ej: OC-2026-045"></div>
-      </div>
-      <div class="sfield"><label>Nota / Observación</label>
-        <input type="text" id="e-nota" placeholder="Observación adicional">
-      </div>
-    </div>
-    <div class="sheet-foot">
-      <button class="btn btn-ghost" onclick="cerrarModal(&#39;modal-edit&#39;)">Cancelar</button>
-      <button class="btn btn-blue" onclick="guardarEdicion()">Guardar cambios</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL PERFIL -->
-<div class="overlay" id="modal-perfil">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-head">
-      <h2>Mi perfil</h2>
-      <button class="sheet-close" onclick="cerrarModal(&#39;modal-perfil&#39;)">✕</button>
-    </div>
-    <div class="sheet-body" id="perfil-body"></div>
-    <div class="sheet-foot">
-      <button class="btn btn-red" onclick="logout()">Cerrar sesión</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL NUEVO USUARIO (admin) -->
-<div class="overlay" id="modal-usuario">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-head">
-      <h2 id="u-titulo">Nuevo usuario</h2>
-      <button class="sheet-close" onclick="cerrarModal(&#39;modal-usuario&#39;)">✕</button>
-    </div>
-    <div class="sheet-body">
-      <input type="hidden" id="u-id">
-      <div class="sfield"><label>Nombre completo</label><input type="text" id="u-nombre" placeholder="Ej: María López"></div>
-      <div class="sfield-row">
-        <div class="sfield"><label>Usuario</label><input type="text" id="u-user" placeholder="marialopez"></div>
-        <div class="sfield"><label>Contraseña</label><input type="password" id="u-pass" placeholder="••••••"></div>
-      </div>
-      <div class="sfield"><label>Rol</label>
-        <select id="u-rol">
-          <option value="empleado">Empleado</option>
-          <option value="admin">Administrador</option>
-        </select>
-      </div>
-    </div>
-    <div class="sheet-foot">
-      <button class="btn btn-ghost" onclick="cerrarModal(&#39;modal-usuario&#39;)">Cancelar</button>
-      <button class="btn btn-dark" onclick="guardarUsuario()">Guardar</button>
-    </div>
-  </div>
-</div>
-
+<div class="topbar"><div><h1>VeoYoca</h1><p id="topbar-sub">Pedidos</p></div><div class="avatar" id="user-avatar" onclick="mostrarPerfil()">--</div></div>
+<div class="content" id="content"></div>
+<div class="navbar">
+<button class="nav-btn on" onclick="goTab('home',this)" id="nb-home"><div class="nav-icon">&#x1F4CB;</div><div>Pedidos</div></button>
+<button class="nav-btn" onclick="goTab('entregar',this)" id="nb-entregar"><div class="nav-icon">&#x1F69A;</div><div>Despacho</div></button>
+<button class="nav-btn" onclick="goTab('nuevo',this)" id="nb-nuevo"><div class="nav-icon">&#x2795;</div><div>Nuevo</div></button>
+<button class="nav-btn" onclick="goTab('reportes',this)" id="nb-reportes"><div class="nav-icon">&#x1F4CA;</div><div>Reportes</div></button>
+<button class="nav-btn" onclick="goTab('ia',this)" id="nb-ia"><div class="nav-icon">&#x1F916;</div><div>IA</div></button>
+<button class="nav-btn" onclick="goTab('plan',this)" id="nb-plan"><div class="nav-icon">&#x1F5FA;</div><div>Rutas</div></button>
+<button class="nav-btn" id="nb-admin" onclick="goTab('admin',this)" style="display:none"><div class="nav-icon">&#x2699;&#xFE0F;</div><div>Admin</div></button>
+</div></div>
+<div class="sync-badge" id="sync-badge">&#x2713; Guardado</div>
+<div class="overlay" id="modal-edit"><div class="sheet"><div class="sheet-handle"></div>
+<div class="sheet-head"><h2 id="modal-titulo">Editar pedido</h2><button class="sheet-close" onclick="cerrarModal('modal-edit')">&#x2715;</button></div>
+<div class="sheet-body"><input type="hidden" id="e-id">
+<div class="sfield"><label>Cliente</label><input type="text" id="e-cliente"></div>
+<div class="sfield-row"><div class="sfield"><label>Ciudad</label><input type="text" id="e-ciudad"></div>
+<div class="sfield"><label>Vendedor</label><select id="e-vendedor"><option value="">Sin cambio</option></select></div></div>
+<div class="sfield-row"><div class="sfield"><label>Fecha l&#xED;mite</label><input type="date" id="e-fecha"></div>
+<div class="sfield"><label>Estado</label><select id="e-estado"><option value="">Sin cambio</option><option value="PENDIENTE">Pendiente</option><option value="EN PROCESO">En proceso</option><option value="LISTO">Listo para entregar</option></select></div></div>
+<div class="sfield"><label>Descripci&#xF3;n</label><textarea id="e-desc" placeholder="Productos, medidas, colores..."></textarea></div>
+<div class="sfield-row"><div class="sfield"><label>Proveedor</label><input type="text" id="e-proveedor" placeholder="Ej: ORION, COLVEN..."></div>
+<div class="sfield"><label># Orden de compra</label><input type="text" id="e-oc" placeholder="Ej: OC-2026-045"></div></div>
+<div class="sfield"><label>Nota / Observaci&#xF3;n</label><input type="text" id="e-nota" placeholder="Observaci&#xF3;n adicional"></div></div>
+<div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal('modal-edit')">Cancelar</button><button class="btn btn-blue" onclick="guardarEdicion()">Guardar cambios</button></div></div></div>
+<div class="overlay" id="modal-perfil"><div class="sheet"><div class="sheet-handle"></div>
+<div class="sheet-head"><h2>Mi perfil</h2><button class="sheet-close" onclick="cerrarModal('modal-perfil')">&#x2715;</button></div>
+<div class="sheet-body" id="perfil-body"></div>
+<div class="sheet-foot"><button class="btn btn-red" onclick="logout()">Cerrar sesi&#xF3;n</button></div></div></div>
+<div class="overlay" id="modal-usuario"><div class="sheet"><div class="sheet-handle"></div>
+<div class="sheet-head"><h2 id="u-titulo">Nuevo usuario</h2><button class="sheet-close" onclick="cerrarModal('modal-usuario')">&#x2715;</button></div>
+<div class="sheet-body"><input type="hidden" id="u-id">
+<div class="sfield"><label>Nombre completo</label><input type="text" id="u-nombre" placeholder="Ej: Mar&#xED;a L&#xF3;pez"></div>
+<div class="sfield-row"><div class="sfield"><label>Usuario</label><input type="text" id="u-user" placeholder="marialopez"></div>
+<div class="sfield"><label>Contrase&#xF1;a</label><input type="password" id="u-pass" placeholder="&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;"></div></div>
+<div class="sfield"><label>Rol</label><select id="u-rol"><option value="empleado">Empleado</option><option value="admin">Administrador</option></select></div></div>
+<div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal('modal-usuario')">Cancelar</button><button class="btn btn-dark" onclick="guardarUsuario()">Guardar</button></div></div></div>
 <div class="toast" id="toast"></div>
-
 <script>
-// ============================================================
-// VEOYOCA PWA — Sistema de Pedidos
-// Datos en localStorage — sin backend externo
-// ============================================================
-
-var DB = {
-  usuarios: [],
-  pedidos: [],
-  bitacora: []
-};
+// VeoYoca con Firebase — variables globales
+var DB = {usuarios:[],pedidos:[],bitacora:[]};
 var SESSION = null;
-var PEDIDO_EDIT_ID = null;
 var TAB = 'home';
+var PEDIDO_EDIT_ID = null;
+var SAVING = false;
+var _db = null;
 
-// ── INIT ─────────────────────────────────────────────────────
-function init() {
-  cargarDB();
-  if (!DB.usuarios.length) crearAdminInicial();
-  var sess = localStorage.getItem('veo_session');
-  if (sess) {
-    try {
-      SESSION = JSON.parse(sess);
-      var u = DB.usuarios.find(function(x){return x.id===SESSION.id;});
-      if (u) { SESSION = u; mostrarApp(); return; }
-    } catch(e) {}
-  }
-  document.getElementById('login-screen').style.display='flex';
-  document.getElementById('l-user').focus();
-  document.getElementById('l-user').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('l-pass').focus();});
-  document.getElementById('l-pass').addEventListener('keydown',function(e){if(e.key==='Enter')login();});
+// Helpers
+function fecha(){return new Date().toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'});}
+function hora(){return new Date().toLocaleTimeString('es-VE',{hour:'2-digit',minute:'2-digit'});}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).substr(2,5);}
+function cerrarModal(id){document.getElementById(id).classList.remove('open');}
+function toast(msg,tipo){var t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(tipo==='ok'?' t-ok':tipo==='err'?' t-err':tipo==='warn'?' t-warn':'');setTimeout(function(){t.className='toast';},4000);}
+function mostrarBadge(tipo){var b=document.getElementById('sync-badge');b.className='sync-badge show'+(tipo==='syncing'?' syncing':tipo==='err'?' err':'');b.textContent=tipo==='syncing'?'Guardando...':tipo==='err'?'Error al guardar':'Guardado';if(tipo!=='syncing')setTimeout(function(){b.className='sync-badge';},2500);}
+function diasRestantes(f){if(!f)return null;var p=f.split('/');if(p.length!==3)return null;var d=parseInt(p[0]),m=parseInt(p[1])-1,y=parseInt(p[2]);if(y<100)y+=2000;var dt=new Date(y,m,d);dt.setHours(0,0,0,0);var hoy=new Date();hoy.setHours(0,0,0,0);return isNaN(dt.getTime())?null:Math.round((dt-hoy)/86400000);}
+function clasif(p){if(p.estatus==='ENTREGADO')return 'done';var d=diasRestantes(p.fechaLimite);if(d===null)return 'sf';if(d<0)return 'vencido';if(d<=7)return 'urgente';return 'ok';}
+function badgeHTML(p){var d=diasRestantes(p.fechaLimite);if(p.estatus==='LISTO')return '<span class="badge b-success">Listo</span>';if(p.estatus==='EN PROCESO')return '<span class="badge b-info">En proceso</span>';if(d===null)return '<span class="badge b-muted">Sin fecha</span>';if(d<0)return '<span class="badge b-danger">Vencido '+Math.abs(d)+'d</span>';if(d<=7)return '<span class="badge b-warning">En '+d+'d</span>';return '<span class="badge b-muted">En '+d+'d</span>';}
+function fechaInput(f){if(!f)return '';var p=f.split('/');if(p.length!==3)return '';var y=p[2];if(y.length===2)y='20'+y;return y+'-'+('0'+p[1]).slice(-2)+'-'+('0'+p[0]).slice(-2);}
+function inputFecha(f){if(!f)return '';var p=f.split('-');if(p.length!==3)return '';return p[2]+'/'+p[1]+'/'+p[0];}
+function registrarBitacora(id,accion){DB.bitacora.push({pedidoId:id,accion:accion,usuario:SESSION.nombre,fecha:fecha(),hora:hora()});if(DB.bitacora.length>500)DB.bitacora=DB.bitacora.slice(-500);}
+
+// Firebase guardar
+async function guardarDB(){
+  if(SAVING||!_db)return;
+  SAVING=true;mostrarBadge('syncing');
+  try{
+    var {setDoc,doc}=window._firestore;
+    await setDoc(doc(_db,'veoyoca','data'),{usuarios:DB.usuarios,pedidos:DB.pedidos,bitacora:DB.bitacora.slice(-500),updatedAt:Date.now()});
+    mostrarBadge('ok');
+  }catch(e){mostrarBadge('err');toast('Error: '+e.message,'err');}
+  SAVING=false;
 }
 
-function crearAdminInicial() {
-  DB.usuarios = [{
-    id: 'admin',
-    nombre: 'Administrador',
-    username: 'admin',
-    password: 'admin123',
-    rol: 'admin',
-    creado: fecha()
-  }];
-  guardarDB();
+// Auth
+function login(){
+  var u=document.getElementById('l-user').value.trim().toLowerCase();
+  var p=document.getElementById('l-pass').value;
+  var usuario=DB.usuarios.find(function(x){return x.username.toLowerCase()===u&&x.password===p;});
+  if(!usuario){document.getElementById('l-err').style.display='block';return;}
+  SESSION=usuario;localStorage.setItem('veo_session',JSON.stringify({id:usuario.id}));mostrarApp();
 }
-
-// ── AUTH ──────────────────────────────────────────────────────
-function login() {
-  var u = document.getElementById('l-user').value.trim().toLowerCase();
-  var p = document.getElementById('l-pass').value;
-  var usuario = DB.usuarios.find(function(x){return x.username.toLowerCase()===u && x.password===p;});
-  if (!usuario) {
-    document.getElementById('l-err').style.display='block';
-    return;
-  }
-  SESSION = usuario;
-  localStorage.setItem('veo_session', JSON.stringify(usuario));
-  mostrarApp();
-}
-
-function logout() {
-  SESSION = null;
-  localStorage.removeItem('veo_session');
-  location.reload();
-}
-
-function mostrarApp() {
+function logout(){SESSION=null;localStorage.removeItem('veo_session');location.reload();}
+function mostrarApp(){
+  document.getElementById('splash').style.display='none';
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='flex';
-  document.getElementById('user-avatar').textContent = SESSION.nombre.substring(0,2).toUpperCase();
-  document.getElementById('topbar-sub').textContent = SESSION.nombre;
-  if (SESSION.rol==='admin') document.getElementById('nb-admin').style.display='flex';
-  goTab('home', document.getElementById('nb-home'));
+  document.getElementById('user-avatar').textContent=SESSION.nombre.substring(0,2).toUpperCase();
+  document.getElementById('topbar-sub').textContent=SESSION.nombre;
+  if(SESSION.rol==='admin')document.getElementById('nb-admin').style.display='flex';
+  goTab('home',document.getElementById('nb-home'));
 }
-
-// ── DB ────────────────────────────────────────────────────────
-function cargarDB() {
-  try { DB.usuarios  = JSON.parse(localStorage.getItem('veo_usuarios')  || '[]'); } catch(e){ DB.usuarios=[]; }
-  try { DB.pedidos   = JSON.parse(localStorage.getItem('veo_pedidos')   || '[]'); } catch(e){ DB.pedidos=[]; }
-  try { DB.bitacora  = JSON.parse(localStorage.getItem('veo_bitacora')  || '[]'); } catch(e){ DB.bitacora=[]; }
-}
-
-function guardarDB() {
-  localStorage.setItem('veo_usuarios',  JSON.stringify(DB.usuarios));
-  localStorage.setItem('veo_pedidos',   JSON.stringify(DB.pedidos));
-  localStorage.setItem('veo_bitacora',  JSON.stringify(DB.bitacora));
-}
-
-function fecha() { return new Date().toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'}); }
-function hora()  { return new Date().toLocaleTimeString('es-VE',{hour:'2-digit',minute:'2-digit'}); }
-function uid()   { return Date.now().toString(36)+Math.random().toString(36).substr(2,5); }
-
-// ── TABS ──────────────────────────────────────────────────────
-function goTab(tab, btn) {
-  TAB = tab;
-  document.querySelectorAll('.nav-btn').forEach(function(b){b.classList.remove('on');});
-  if (btn) btn.classList.add('on');
-  var titulos = {home:'Pedidos',entregar:'Despacho',nuevo:'Nuevo pedido',reportes:'Reportes',admin:'Administración',plan:'Plan de Rutas',ia:'Plan IA'};
-  document.getElementById('topbar-sub').textContent = titulos[tab] || SESSION.nombre;
-  var c = document.getElementById('content');
-  if (tab==='home')      renderHome(c);
-  else if (tab==='entregar') renderEntregar(c);
-  else if (tab==='nuevo')    renderNuevo(c);
-  else if (tab==='reportes') renderReportes(c);
-  else if (tab==='admin')    renderAdmin(c);
-  else if (tab==='plan')     renderPlanificacion(c);
-  else if (tab==='ia')       renderPlanIA(c);
-}
-
-// ── HELPERS DÍAS ─────────────────────────────────────────────
-function diasRestantes(f) {
-  if (!f) return null;
-  var p=f.split('/'); if(p.length!==3)return null;
-  var d=parseInt(p[0]),m=parseInt(p[1])-1,y=parseInt(p[2]);
-  if(y<100)y+=2000;
-  var dt=new Date(y,m,d); dt.setHours(0,0,0,0);
-  var hoy=new Date(); hoy.setHours(0,0,0,0);
-  return isNaN(dt.getTime())?null:Math.round((dt-hoy)/86400000);
-}
-
-function clasif(p) {
-  if (p.estatus==='ENTREGADO') return 'done';
-  var d=diasRestantes(p.fechaLimite);
-  if(d===null)return 'sf';
-  if(d<0)return 'vencido';
-  if(d<=7)return 'urgente';
-  return 'ok';
-}
-
-function badgeHTML(p) {
-  var d=diasRestantes(p.fechaLimite);
-  if(p.estatus==='LISTO')return '<span class="badge b-success">Listo</span>';
-  if(p.estatus==='EN PROCESO')return '<span class="badge b-info">En proceso</span>';
-  if(d===null)return '<span class="badge b-muted">Sin fecha</span>';
-  if(d<0)return '<span class="badge b-danger">Vencido '+Math.abs(d)+'d</span>';
-  if(d<=7)return '<span class="badge b-warning">En '+d+'d</span>';
-  return '<span class="badge b-muted">En '+d+'d</span>';
-}
-
-function fechaInput(f){
-  if(!f)return '';
-  var p=f.split('/');if(p.length!==3)return '';
-  var y=p[2];if(y.length===2)y='20'+y;
-  return y+'-'+('0'+p[1]).slice(-2)+'-'+('0'+p[0]).slice(-2);
-}
-
-function inputFecha(f){
-  if(!f)return '';
-  var p=f.split('-');if(p.length!==3)return '';
-  return p[2]+'/'+p[1]+'/'+p[0];
-}
-
-// ── HOME — TODOS LOS PEDIDOS ──────────────────────────────────
-function renderHome(c) {
-  var pends = DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';});
-  var venc  = pends.filter(function(p){return clasif(p)==='vencido';}).length;
-  var urg   = pends.filter(function(p){return clasif(p)==='urgente';}).length;
-  var ent   = DB.pedidos.filter(function(p){return p.estatus==='ENTREGADO';}).length;
-  var total = DB.pedidos.length;
-  var pct   = total ? Math.round((ent/total)*100) : 0;
-
-  var html = '<div class="stats-bar">'
-    +'<div class="stat"><div class="stat-v">'+pends.length+'</div><div class="stat-l">pendientes</div></div>'
-    +'<div class="stat"><div class="stat-v" style="color:#fca5a5">'+venc+'</div><div class="stat-l">vencidos</div></div>'
-    +'<div class="stat"><div class="stat-v" style="color:#fcd34d">'+urg+'</div><div class="stat-l">urgentes</div></div>'
-    +'<div class="stat"><div class="stat-v" style="color:#86efac">'+ent+'</div><div class="stat-l">entregados</div></div>'
-    +'</div>'
-    +'<div class="prog-wrap"><div class="prog-bar"><div class="prog-fill" style="width:'+pct+'%"></div></div>'
-    +'<div class="prog-label">'+ent+' de '+total+' entregados ('+pct+'%)</div></div>'
-    +'<div class="toolbar">'
-    +'<input type="text" id="h-buscar" placeholder="Buscar cliente o # pedido..." oninput="filtrarHome()">'
-    +'<select id="h-est" onchange="filtrarHome()">'
-    +'<option value="">Todos</option>'
-    +'<option value="vencido">Vencidos</option>'
-    +'<option value="urgente">Urgentes</option>'
-    +'<option value="sf">Sin fecha</option>'
-    +'<option value="ok">Con tiempo</option>'
-    +'<option value="LISTO">Listos</option>'
-    +'</select></div>'
-    +'<div class="section-pad" id="home-lista"></div>';
-  c.innerHTML = html;
-  filtrarHome();
-}
-
-function filtrarHome() {
-  var b  = (document.getElementById('h-buscar')||{value:''}).value.toLowerCase();
-  var fe = (document.getElementById('h-est')||{value:''}).value;
-  var lista = DB.pedidos.filter(function(p){
-    if(p.estatus==='ENTREGADO')return false;
-    var mb=!b||((p.cliente||'').toLowerCase().indexOf(b)>=0||(p.id||'').toLowerCase().indexOf(b)>=0);
-    var mfe=!fe||clasif(p)===fe||(fe==='LISTO'&&p.estatus==='LISTO');
-    return mb&&mfe;
-  });
-  lista.sort(function(a,b){
-    var da=diasRestantes(a.fechaLimite),db=diasRestantes(b.fechaLimite);
-    if(da===null&&db===null)return 0;
-    if(da===null)return 1;if(db===null)return -1;
-    return da-db;
-  });
-  var el = document.getElementById('home-lista');
-  if(!el)return;
-  if(!lista.length){el.innerHTML='<div class="empty"><div class="empty-icon">✅</div>No hay pedidos pendientes</div>';return;}
-  var g={vencido:[],urgente:[],sf:[],ok:[],LISTO:[]};
-  lista.forEach(function(p){var c=p.estatus==='LISTO'?'LISTO':clasif(p);if(g[c])g[c].push(p);else g.ok.push(p);});
-  var etq={vencido:'Vencidos',urgente:'Urgentes',sf:'Sin fecha',ok:'Con tiempo',LISTO:'Listos para entregar'};
-  var h='';
-  ['vencido','urgente','LISTO','sf','ok'].forEach(function(t){
-    if(!g[t]||!g[t].length)return;
-    h+='<div class="sec-label">'+etq[t]+' ('+g[t].length+')</div>';
-    g[t].forEach(function(p){h+=cardHTML(p,false);});
-  });
-  el.innerHTML=h;
-}
-
-function cardHTML(p, conEntregar) {
-  var canEdit = SESSION.rol==='admin'||SESSION.username===p.creadoPor||SESSION.username===p.vendedor;
-  return '<div class="card" id="card-'+p.id+'">'
-    +'<div class="card-head">'
-    +'<div class="card-num">#'+p.id.substring(0,6)+'</div>'
-    +'<div class="card-body">'
-    +'<div class="card-cliente">'+(p.cliente||'Sin nombre')+'</div>'
-    +'<div class="card-meta">'+(p.ciudad||'—')+(p.vendedor?' · '+p.vendedor:'')+'</div>'
-    +(p.vendedor?'<span class="card-vend">'+p.vendedor+'</span>':'')
-    +(p.proveedor?'<span class="card-vend" style="background:#fef3c7;color:#92400e;margin-left:4px">'+p.proveedor+(p.ordenCompra?' · OC: '+p.ordenCompra:'')+'</span>':'')
-    +'<div class="card-desc">'+(p.descripcion||'—')+'</div>'
-    +'</div>'+badgeHTML(p)+'</div>'
-    +'<div class="card-foot">'
-    +(canEdit?'<button class="btn btn-ghost btn-sm" onclick="abrirEditar(\''+p.id+'\')">Editar</button>':'')
-    +(conEntregar&&p.estatus!=='ENTREGADO'
-      ?'<input type="text" id="nota-'+p.id+'" placeholder="Nota de entrega...">'
-        +'<button class="btn btn-green btn-sm" onclick="marcarEntregado(\''+p.id+'\')">Entregar</button>'
-      :'')
-    +'</div></div>';
-}
-
-// ── DESPACHO ──────────────────────────────────────────────────
-function renderEntregar(c) {
-  var listos  = DB.pedidos.filter(function(p){return p.estatus==='LISTO';});
-  var urgentes= DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&clasif(p)==='urgente';});
-  var vencidos= DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&clasif(p)==='vencido';});
-  var todos   = listos.concat(urgentes.filter(function(p){return p.estatus!=='LISTO';}))
-                      .concat(vencidos.filter(function(p){return p.estatus!=='LISTO'&&clasif(p)!=='urgente';}));
-  var html='<div class="section-pad">';
-  if(!todos.length){html+='<div class="empty"><div class="empty-icon">🎉</div>No hay pedidos urgentes ni listos</div>';}
-  else {
-    if(listos.length){html+='<div class="sec-label">Listos para entregar ('+listos.length+')</div>';listos.forEach(function(p){html+=cardHTML(p,true);});}
-    if(urgentes.filter(function(p){return p.estatus!=='LISTO';}).length){
-      html+='<div class="sec-label">Urgentes</div>';
-      urgentes.filter(function(p){return p.estatus!=='LISTO';}).forEach(function(p){html+=cardHTML(p,true);});
-    }
-    if(vencidos.filter(function(p){return p.estatus!=='LISTO'&&clasif(p)!=='urgente';}).length){
-      html+='<div class="sec-label">Vencidos</div>';
-      vencidos.filter(function(p){return p.estatus!=='LISTO'&&clasif(p)!=='urgente';}).forEach(function(p){html+=cardHTML(p,true);});
-    }
-  }
-  html+='</div>';
-  c.innerHTML=html;
-}
-
-function marcarEntregado(id) {
-  var p=DB.pedidos.find(function(x){return x.id===id;});
-  if(!p)return;
-  var nota=(document.getElementById('nota-'+id)||{}).value||'';
-  p.estatus='ENTREGADO';
-  p.fechaEntrega=fecha();
-  p.notaEntrega=nota;
-  p.entregadoPor=SESSION.nombre;
-  registrarBitacora(id,'ENTREGADO. Nota: '+nota);
-  guardarDB();
-  var card=document.getElementById('card-'+id);
-  if(card){card.style.opacity='.4';card.querySelector('.card-foot').innerHTML='<span style="color:var(--success);font-size:13px;font-weight:600">✓ Entregado hoy</span>';}
-  toast('Pedido #'+id.substring(0,6)+' marcado como entregado','ok');
-}
-
-// ── NUEVO PEDIDO ──────────────────────────────────────────────
-function renderNuevo(c) {
-  var vends=DB.usuarios.map(function(u){return '<option value="'+u.nombre+'">'+u.nombre+'</option>';}).join('');
-  c.innerHTML='<div class="section-pad">'
-    +'<div class="card" style="padding:16px">'
-    +'<div class="sfield-row">'
-    +'<div class="sfield"><label># Pedido</label><input type="text" id="n-numero" placeholder="Ej: 432"></div>'
-    +'<div class="sfield"><label>Cliente *</label><input type="text" id="n-cliente" placeholder="Nombre del cliente"></div>'
-    +'</div>'
-    +'<div class="sfield-row">'
-    +'<div class="sfield"><label>Ciudad</label><input type="text" id="n-ciudad" placeholder="Ciudad"></div>'
-    +'<div class="sfield"><label>Vendedor</label><select id="n-vendedor"><option value="">Seleccionar</option>'+vends+'</select></div>'
-    +'</div>'
-    +'<div class="sfield-row">'
-    +'<div class="sfield"><label>Proveedor</label><input type="text" id="n-proveedor" placeholder="Ej: ORION, COLVEN..."></div>'
-    +'<div class="sfield"><label># Orden de compra</label><input type="text" id="n-oc" placeholder="Ej: OC-2026-045"></div>'
-    +'</div>'
-    +'<div class="sfield-row">'
-    +'<div class="sfield"><label>Fecha límite</label><input type="date" id="n-fecha"></div>'
-    +'<div class="sfield"><label>Estado</label><select id="n-estado">'
-    +'<option value="PENDIENTE">Pendiente</option>'
-    +'<option value="EN PROCESO">En proceso</option>'
-    +'<option value="LISTO">Listo para entregar</option>'
-    +'</select></div>'
-    +'</div>'
-    +'<div class="sfield"><label>Descripción *</label>'
-    +'<textarea id="n-desc" placeholder="Productos, medidas, colores, cantidades..."></textarea></div>'
-    +'<button class="btn btn-dark" style="width:100%;padding:13px;font-size:15px;margin-top:4px" onclick="crearPedido()">Crear pedido</button>'
-    +'</div></div>';
-}
-
-function crearPedido() {
-  var cliente=document.getElementById('n-cliente').value.trim();
-  var desc=document.getElementById('n-desc').value.trim();
-  if(!cliente||!desc){toast('Cliente y descripción son obligatorios','err');return;}
-  var numeroManual=document.getElementById('n-numero').value.trim();
-  var maxNum=0;
-  DB.pedidos.forEach(function(p){var n=parseInt(p.numero||0);if(n>maxNum)maxNum=n;});
-  var numero=numeroManual||String(maxNum+1);
-  var p={
-    id:uid(),numero:numero,
-    cliente:cliente,
-    ciudad:document.getElementById('n-ciudad').value,
-    vendedor:document.getElementById('n-vendedor').value,
-    proveedor:document.getElementById('n-proveedor').value.trim(),
-    ordenCompra:document.getElementById('n-oc').value.trim(),
-    fechaLimite:inputFecha(document.getElementById('n-fecha').value),
-    estatus:document.getElementById('n-estado').value||'PENDIENTE',
-    descripcion:desc,
-    creadoPor:SESSION.username,
-    creadoPorNombre:SESSION.nombre,
-    fechaCreacion:fecha(),
-    horaCreacion:hora()
-  };
-  DB.pedidos.push(p);
-  registrarBitacora(p.id,'CREADO por '+SESSION.nombre);
-  guardarDB();
-  document.getElementById('n-numero').value='';
-  document.getElementById('n-cliente').value='';
-  document.getElementById('n-ciudad').value='';
-  document.getElementById('n-proveedor').value='';
-  document.getElementById('n-oc').value='';
-  document.getElementById('n-fecha').value='';
-  document.getElementById('n-desc').value='';
-  toast('Pedido #'+numero+' creado exitosamente','ok');
-}
-
-// ── EDITAR ────────────────────────────────────────────────────
-function abrirEditar(id) {
-  var p=DB.pedidos.find(function(x){return x.id===id;});
-  if(!p)return;
-  PEDIDO_EDIT_ID=id;
-  document.getElementById('modal-titulo').textContent='Editar pedido #'+(p.numero||id.substring(0,6));
-  document.getElementById('e-id').value=id;
-  document.getElementById('e-cliente').value=p.cliente||'';
-  document.getElementById('e-ciudad').value=p.ciudad||'';
-  document.getElementById('e-fecha').value=fechaInput(p.fechaLimite);
-  document.getElementById('e-desc').value=p.descripcion||'';
-  document.getElementById('e-proveedor').value=p.proveedor||'';
-  document.getElementById('e-oc').value=p.ordenCompra||'';
-  document.getElementById('e-nota').value='';
-  var vsel=document.getElementById('e-vendedor');
-  vsel.innerHTML='<option value="">Sin cambio</option>';
-  DB.usuarios.forEach(function(u){
-    var o=document.createElement('option');
-    o.value=u.nombre;o.textContent=u.nombre;
-    if(u.nombre===p.vendedor)o.selected=true;
-    vsel.appendChild(o);
-  });
-  var esel=document.getElementById('e-estado');
-  esel.value=p.estatus||'';
-  document.getElementById('modal-edit').classList.add('open');
-}
-
-function guardarEdicion() {
-  var id=PEDIDO_EDIT_ID;
-  var p=DB.pedidos.find(function(x){return x.id===id;});
-  if(!p)return;
-  var cambios=[];
-  var cliente=document.getElementById('e-cliente').value.trim();
-  var ciudad=document.getElementById('e-ciudad').value.trim();
-  var vend=document.getElementById('e-vendedor').value;
-  var fecha2=inputFecha(document.getElementById('e-fecha').value);
-  var estado=document.getElementById('e-estado').value;
-  var desc=document.getElementById('e-desc').value.trim();
-  var nota=document.getElementById('e-nota').value.trim();
-  var prov=document.getElementById('e-proveedor').value.trim();
-  var oc=document.getElementById('e-oc').value.trim();
-  if(cliente&&cliente!==p.cliente){cambios.push('cliente');p.cliente=cliente;}
-  if(ciudad&&ciudad!==p.ciudad){cambios.push('ciudad');p.ciudad=ciudad;}
-  if(vend&&vend!==p.vendedor){cambios.push('vendedor');p.vendedor=vend;}
-  if(fecha2&&fecha2!==p.fechaLimite){cambios.push('fechaLimite');p.fechaLimite=fecha2;}
-  if(estado&&estado!==p.estatus){cambios.push('estatus');p.estatus=estado;}
-  if(desc&&desc!==p.descripcion){cambios.push('descripcion');p.descripcion=desc;}
-  if(prov&&prov!==p.proveedor){cambios.push('proveedor');p.proveedor=prov;}
-  if(oc&&oc!==p.ordenCompra){cambios.push('ordenCompra');p.ordenCompra=oc;}
-  if(nota){cambios.push('nota');p.nota=nota;}
-  if(!cambios.length){cerrarModal('modal-edit');toast('Sin cambios','warn');return;}
-  p.ultimaEdicion=fecha()+' '+hora();
-  p.editadoPor=SESSION.nombre;
-  registrarBitacora(id,'EDICION ('+cambios.join(', ')+') por '+SESSION.nombre+(nota?' | Nota: '+nota:''));
-  guardarDB();
-  cerrarModal('modal-edit');
-  goTab(TAB,document.getElementById('nb-'+TAB));
-  toast('Pedido actualizado','ok');
-}
-
-// ── REPORTES ──────────────────────────────────────────────────
-function renderReportes(c) {
-  var total=DB.pedidos.length;
-  var ent=DB.pedidos.filter(function(p){return p.estatus==='ENTREGADO';}).length;
-  var pend=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';}).length;
-  var venc=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&clasif(p)==='vencido';}).length;
-  var listos=DB.pedidos.filter(function(p){return p.estatus==='LISTO';}).length;
-  var hoy=fecha();
-  var entHoy=DB.pedidos.filter(function(p){return p.estatus==='ENTREGADO'&&p.fechaEntrega===hoy;}).length;
-  var pct=total?Math.round((ent/total)*100):0;
-
-  // Por vendedor
-  var porVend={};
-  DB.pedidos.forEach(function(p){
-    var v=p.vendedor||'Sin vendedor';
-    if(!porVend[v])porVend[v]={total:0,ent:0};
-    porVend[v].total++;
-    if(p.estatus==='ENTREGADO')porVend[v].ent++;
-  });
-  var vendArr=[];
-  for(var v in porVend)vendArr.push({v:v,t:porVend[v].total,e:porVend[v].ent});
-  vendArr.sort(function(a,b){return b.t-a.t;});
-  var maxT=vendArr.length?vendArr[0].t:1;
-
-  // Bitacora reciente
-  var bit=DB.bitacora.slice(-10).reverse();
-
-  var html='<div class="report-grid">'
-    +'<div class="report-card"><div class="report-val" style="color:var(--accent)">'+total+'</div><div class="report-label">Total pedidos</div></div>'
-    +'<div class="report-card"><div class="report-val" style="color:var(--success)">'+ent+'</div><div class="report-label">Entregados</div></div>'
-    +'<div class="report-card"><div class="report-val" style="color:var(--warning)">'+pend+'</div><div class="report-label">Pendientes</div></div>'
-    +'<div class="report-card"><div class="report-val" style="color:var(--danger)">'+venc+'</div><div class="report-label">Vencidos</div></div>'
-    +'<div class="report-card"><div class="report-val" style="color:var(--info)">'+listos+'</div><div class="report-label">Listos hoy</div></div>'
-    +'<div class="report-card"><div class="report-val" style="color:var(--success)">'+entHoy+'</div><div class="report-label">Entregados hoy</div></div>'
-    +'<div class="report-card"><div class="report-val">'+pct+'%</div><div class="report-label">Completados</div></div>'
-    +'<div class="report-card"><div class="report-val">'+DB.bitacora.length+'</div><div class="report-label">Acciones</div></div>'
-    +'</div>';
-
-  if(vendArr.length){
-    html+='<div class="chart-wrap"><div class="chart-title">Pedidos por vendedor</div>';
-    vendArr.slice(0,8).forEach(function(item){
-      var pctV=Math.round((item.t/maxT)*100);
-      var pctE=item.t?Math.round((item.e/item.t)*100):0;
-      html+='<div class="bar-row">'
-        +'<div class="bar-label">'+item.v.split(' ')[0]+'</div>'
-        +'<div class="bar-track"><div class="bar-fill" style="width:'+pctV+'%;background:var(--accent)"></div></div>'
-        +'<div class="bar-val">'+item.t+'</div>'
-        +'</div>';
-    });
-    html+='</div>';
-  }
-
-  if(bit.length){
-    html+='<div class="chart-wrap"><div class="chart-title">Actividad reciente</div>';
-    bit.forEach(function(b){
-      html+='<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">'
-        +'<div style="font-weight:600;color:var(--text)">'+(b.accion||'').substring(0,60)+'</div>'
-        +'<div style="color:var(--muted);margin-top:2px">'+b.fecha+' '+b.hora+'</div>'
-        +'</div>';
-    });
-    html+='</div>';
-  }
-
-  c.innerHTML=html;
-}
-
-// ── ADMIN ─────────────────────────────────────────────────────
-function renderAdmin(c) {
-  if(SESSION.rol!=='admin'){c.innerHTML='<div class="empty">Acceso denegado</div>';return;}
-  var html='<div class="section-pad">'
-    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
-    +'<div class="sec-label" style="margin:0">Usuarios ('+DB.usuarios.length+')</div>'
-    +'<button class="btn btn-dark btn-sm" onclick="abrirNuevoUsuario()">+ Agregar</button>'
-    +'</div>'
-    +'<div class="admin-section">';
-  DB.usuarios.forEach(function(u){
-    html+='<div class="admin-row">'
-      +'<div class="admin-info">'
-      +'<div class="admin-name">'+u.nombre+'</div>'
-      +'<div class="admin-meta">@'+u.username+' · creado '+u.creado+'</div>'
-      +'</div>'
-      +'<span class="role-badge '+(u.rol==='admin'?'role-admin':'role-emp')+'">'+u.rol+'</span>'
-      +(u.id!==SESSION.id
-        ?'<button class="btn btn-ghost btn-sm" onclick="editarUsuario(\''+u.id+'\')">Editar</button>'
-         +'<button class="btn btn-red btn-sm" onclick="eliminarUsuario(\''+u.id+'\')">Eliminar</button>'
-        :'<span style="font-size:11px;color:var(--muted)">Tú</span>')
-      +'</div>';
-  });
-  html+='</div>'
-    +'<div class="sec-label" style="margin-top:20px">Estadísticas del sistema</div>'
-    +'<div class="admin-section">'
-    +'<div class="admin-row"><div class="admin-info"><div class="admin-name">Total pedidos</div></div><strong>'+DB.pedidos.length+'</strong></div>'
-    +'<div class="admin-row"><div class="admin-info"><div class="admin-name">Acciones en bitácora</div></div><strong>'+DB.bitacora.length+'</strong></div>'
-    +'<div class="admin-row"><div class="admin-info"><div class="admin-name">Exportar datos</div></div>'
-    +'<button class="btn btn-ghost btn-sm" onclick="exportarJSON()">JSON</button>'
-    +'<button class="btn btn-ghost btn-sm" onclick="exportarCSV()" style="margin-left:6px">CSV</button>'
-    +'</div>'
-    +'<div class="admin-row"><div class="admin-info"><div class="admin-name" style="color:var(--danger)">Borrar todos los pedidos</div>'
-    +'<div class="admin-meta">Esta acción no se puede deshacer</div></div>'
-    +'<button class="btn btn-red btn-sm" onclick="borrarPedidos()">Borrar</button></div>'
-    +'</div></div>';
-  c.innerHTML=html;
-}
-
-function abrirNuevoUsuario() {
-  document.getElementById('u-titulo').textContent='Nuevo usuario';
-  document.getElementById('u-id').value='';
-  document.getElementById('u-nombre').value='';
-  document.getElementById('u-user').value='';
-  document.getElementById('u-pass').value='';
-  document.getElementById('u-rol').value='empleado';
-  document.getElementById('modal-usuario').classList.add('open');
-}
-
-function editarUsuario(id) {
-  var u=DB.usuarios.find(function(x){return x.id===id;});
-  if(!u)return;
-  document.getElementById('u-titulo').textContent='Editar usuario';
-  document.getElementById('u-id').value=id;
-  document.getElementById('u-nombre').value=u.nombre;
-  document.getElementById('u-user').value=u.username;
-  document.getElementById('u-pass').value=u.password;
-  document.getElementById('u-rol').value=u.rol;
-  document.getElementById('modal-usuario').classList.add('open');
-}
-
-function guardarUsuario() {
-  var nombre=document.getElementById('u-nombre').value.trim();
-  var user=document.getElementById('u-user').value.trim().toLowerCase();
-  var pass=document.getElementById('u-pass').value;
-  var rol=document.getElementById('u-rol').value;
-  var eid=document.getElementById('u-id').value;
-  if(!nombre||!user||!pass){toast('Todos los campos son obligatorios','err');return;}
-  var existe=DB.usuarios.find(function(x){return x.username===user&&x.id!==eid;});
-  if(existe){toast('El usuario ya existe','err');return;}
-  if(eid){
-    var u=DB.usuarios.find(function(x){return x.id===eid;});
-    if(u){u.nombre=nombre;u.username=user;u.password=pass;u.rol=rol;}
-  } else {
-    DB.usuarios.push({id:uid(),nombre:nombre,username:user,password:pass,rol:rol,creado:fecha()});
-  }
-  guardarDB();
-  cerrarModal('modal-usuario');
-  goTab('admin',document.getElementById('nb-admin'));
-  toast('Usuario guardado','ok');
-}
-
-function eliminarUsuario(id) {
-  if(!confirm('¿Eliminar este usuario?'))return;
-  DB.usuarios=DB.usuarios.filter(function(x){return x.id!==id;});
-  guardarDB();
-  goTab('admin',document.getElementById('nb-admin'));
-  toast('Usuario eliminado','warn');
-}
-
-function borrarPedidos() {
-  if(!confirm('¿Borrar TODOS los pedidos? Esta acción no se puede deshacer.'))return;
-  DB.pedidos=[];
-  guardarDB();
-  goTab('admin',document.getElementById('nb-admin'));
-  toast('Pedidos eliminados','warn');
-}
-
-function exportarJSON() {
-  var data=JSON.stringify({pedidos:DB.pedidos,bitacora:DB.bitacora},null,2);
-  var a=document.createElement('a');
-  a.href='data:application/json;charset=utf-8,'+encodeURIComponent(data);
-  a.download='veoyoca_'+fecha().replace(/\//g,'-')+'.json';
-  a.click();
-}
-
-function exportarCSV() {
-  var rows=[['ID','Numero','Cliente','Ciudad','Vendedor','Estado','Fecha limite','Fecha entrega','Descripcion','Creado por','Creado']];
-  DB.pedidos.forEach(function(p){
-    rows.push([p.id,p.numero||'',p.cliente||'',p.ciudad||'',p.vendedor||'',p.estatus||'',p.fechaLimite||'',p.fechaEntrega||'',p.descripcion||'',p.creadoPorNombre||'',p.fechaCreacion||'']);
-  });
-  var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
-  var a=document.createElement('a');
-  a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
-  a.download='pedidos_'+fecha().replace(/\//g,'-')+'.csv';
-  a.click();
-}
-
-// ── PERFIL ────────────────────────────────────────────────────
-function mostrarPerfil() {
-  var misPedidos=DB.pedidos.filter(function(p){return p.creadoPor===SESSION.username||p.vendedor===SESSION.nombre;});
-  var entregados=misPedidos.filter(function(p){return p.estatus==='ENTREGADO';});
-  document.getElementById('perfil-body').innerHTML=
-    '<div style="text-align:center;padding:8px 0 20px">'
-    +'<div style="width:64px;height:64px;border-radius:50%;background:var(--accent);color:#fff;font-size:22px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 12px">'+SESSION.nombre.substring(0,2).toUpperCase()+'</div>'
-    +'<div style="font-size:18px;font-weight:700">'+SESSION.nombre+'</div>'
-    +'<div style="font-size:13px;color:var(--muted);margin-top:3px">@'+SESSION.username+' · '+SESSION.rol+'</div>'
-    +'</div>'
-    +'<div class="admin-section">'
-    +'<div class="admin-row"><div>Mis pedidos</div><strong>'+misPedidos.length+'</strong></div>'
-    +'<div class="admin-row"><div>Entregados</div><strong>'+entregados.length+'</strong></div>'
-    +'</div>';
+function mostrarPerfil(){
+  var mis=DB.pedidos.filter(function(p){return p.creadoPor===SESSION.username||p.vendedor===SESSION.nombre;});
+  var ent=mis.filter(function(p){return p.estatus==='ENTREGADO';});
+  document.getElementById('perfil-body').innerHTML='<div style="text-align:center;padding:8px 0 20px"><div style="width:64px;height:64px;border-radius:50%;background:var(--accent);color:#fff;font-size:22px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 12px">'+SESSION.nombre.substring(0,2).toUpperCase()+'</div><div style="font-size:18px;font-weight:700">'+SESSION.nombre+'</div><div style="font-size:13px;color:var(--muted);margin-top:3px">@'+SESSION.username+' - '+SESSION.rol+'</div></div><div class="admin-section"><div class="admin-row"><div>Mis pedidos</div><strong>'+mis.length+'</strong></div><div class="admin-row"><div>Entregados</div><strong>'+ent.length+'</strong></div></div>';
   document.getElementById('modal-perfil').classList.add('open');
 }
 
-// ── BITACORA ──────────────────────────────────────────────────
-function registrarBitacora(pedidoId, accion) {
-  DB.bitacora.push({
-    pedidoId:pedidoId,
-    accion:accion,
-    usuario:SESSION.nombre,
-    fecha:fecha(),
-    hora:hora()
+// Tabs
+function goTab(tab,btn){
+  TAB=tab;document.querySelectorAll('.nav-btn').forEach(function(b){b.classList.remove('on');});if(btn)btn.classList.add('on');
+  var titulos={home:'Pedidos',entregar:'Despacho',nuevo:'Nuevo pedido',reportes:'Reportes',admin:'Administracion',plan:'Rutas',ia:'Plan IA'};
+  document.getElementById('topbar-sub').textContent=titulos[tab]||SESSION.nombre;
+  var c=document.getElementById('content');
+  if(tab==='home')renderHome(c);else if(tab==='entregar')renderEntregar(c);else if(tab==='nuevo')renderNuevo(c);else if(tab==='reportes')renderReportes(c);else if(tab==='admin')renderAdmin(c);else if(tab==='plan')renderPlanificacion(c);else if(tab==='ia')renderPlanIA(c);
+}
+
+// Home
+function renderHome(c){
+  var pends=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';});
+  var venc=pends.filter(function(p){return clasif(p)==='vencido';}).length;
+  var urg=pends.filter(function(p){return clasif(p)==='urgente';}).length;
+  var ent=DB.pedidos.filter(function(p){return p.estatus==='ENTREGADO';}).length;
+  var total=DB.pedidos.length;var pct=total?Math.round((ent/total)*100):0;
+  c.innerHTML='<div class="stats-bar"><div class="stat"><div class="stat-v">'+pends.length+'</div><div class="stat-l">pendientes</div></div><div class="stat"><div class="stat-v" style="color:#fca5a5">'+venc+'</div><div class="stat-l">vencidos</div></div><div class="stat"><div class="stat-v" style="color:#fcd34d">'+urg+'</div><div class="stat-l">urgentes</div></div><div class="stat"><div class="stat-v" style="color:#86efac">'+ent+'</div><div class="stat-l">entregados</div></div></div><div class="prog-wrap"><div class="prog-bar"><div class="prog-fill" style="width:'+pct+'%"></div></div><div class="prog-label">'+ent+' de '+total+' entregados ('+pct+'%)</div></div><div class="toolbar"><input type="text" id="h-buscar" placeholder="Buscar cliente o numero..." oninput="filtrarHome()"><select id="h-est" onchange="filtrarHome()"><option value="">Todos</option><option value="vencido">Vencidos</option><option value="urgente">Urgentes</option><option value="sf">Sin fecha</option><option value="ok">Con tiempo</option><option value="LISTO">Listos</option></select></div><div class="section-pad" id="home-lista"></div>';
+  filtrarHome();
+}
+function filtrarHome(){
+  var b=(document.getElementById('h-buscar')||{value:''}).value.toLowerCase();
+  var fe=(document.getElementById('h-est')||{value:''}).value;
+  var lista=DB.pedidos.filter(function(p){if(p.estatus==='ENTREGADO')return false;var mb=!b||((p.cliente||'').toLowerCase().indexOf(b)>=0||(p.numero||'').indexOf(b)>=0);var mfe=!fe||clasif(p)===fe||(fe==='LISTO'&&p.estatus==='LISTO');return mb&&mfe;});
+  lista.sort(function(a,b){var da=diasRestantes(a.fechaLimite),db=diasRestantes(b.fechaLimite);if(da===null&&db===null)return 0;if(da===null)return 1;if(db===null)return -1;return da-db;});
+  var el=document.getElementById('home-lista');if(!el)return;
+  if(!lista.length){el.innerHTML='<div class="empty"><div class="empty-icon">OK</div>No hay pedidos pendientes</div>';return;}
+  var g={vencido:[],urgente:[],sf:[],ok:[],LISTO:[]};
+  lista.forEach(function(p){var cc=p.estatus==='LISTO'?'LISTO':clasif(p);if(g[cc])g[cc].push(p);else g.ok.push(p);});
+  var etq={vencido:'Vencidos',urgente:'Urgentes',sf:'Sin fecha',ok:'Con tiempo',LISTO:'Listos para entregar'};
+  var h='';
+  ['vencido','urgente','LISTO','sf','ok'].forEach(function(t){if(!g[t]||!g[t].length)return;h+='<div class="sec-label">'+etq[t]+' ('+g[t].length+')</div>';g[t].forEach(function(p){h+=cardHTML(p,false);});});
+  el.innerHTML=h;
+}
+function cardHTML(p,conEntregar){
+  var canEdit=SESSION.rol==='admin'||SESSION.username===p.creadoPor||SESSION.username===p.vendedor;
+  return '<div class="card" id="card-'+p.id+'"><div class="card-head"><div class="card-num">#'+(p.numero||p.id.substring(0,6))+'</div><div class="card-body"><div class="card-cliente">'+(p.cliente||'Sin nombre')+'</div><div class="card-meta">'+(p.ciudad||'sin ciudad')+(p.vendedor?' - '+p.vendedor:'')+'</div>'+(p.proveedor?'<span class="card-vend" style="background:#fef3c7;color:#92400e">'+p.proveedor+(p.ordenCompra?' OC:'+p.ordenCompra:'')+'</span>':'')+' <div class="card-desc">'+(p.descripcion||'')+'</div></div>'+badgeHTML(p)+'</div><div class="card-foot">'+(canEdit?'<button class="btn btn-ghost btn-sm" onclick="abrirEditar(''+p.id+'')">Editar</button>':'')+(conEntregar&&p.estatus!=='ENTREGADO'?'<input type="text" id="nota-'+p.id+'" placeholder="Nota de entrega..."><button class="btn btn-green btn-sm" onclick="marcarEntregado(''+p.id+'')">Entregar</button>':'')+'</div></div>';
+}
+
+// Despacho
+function renderEntregar(c){
+  var listos=DB.pedidos.filter(function(p){return p.estatus==='LISTO';});
+  var urgentes=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&clasif(p)==='urgente';});
+  var vencidos=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&clasif(p)==='vencido';});
+  var html='<div class="section-pad">';
+  if(!listos.length&&!urgentes.length&&!vencidos.length){html+='<div class="empty"><div class="empty-icon">OK</div>No hay pedidos urgentes ni listos</div>';}
+  else{if(listos.length){html+='<div class="sec-label">Listos ('+listos.length+')</div>';listos.forEach(function(p){html+=cardHTML(p,true);});}
+  var un=urgentes.filter(function(p){return p.estatus!=='LISTO';});if(un.length){html+='<div class="sec-label">Urgentes</div>';un.forEach(function(p){html+=cardHTML(p,true);});}
+  var vn=vencidos.filter(function(p){return p.estatus!=='LISTO'&&clasif(p)!=='urgente';});if(vn.length){html+='<div class="sec-label">Vencidos</div>';vn.forEach(function(p){html+=cardHTML(p,true);});}}
+  c.innerHTML=html+'</div>';
+}
+async function marcarEntregado(id){
+  var p=DB.pedidos.find(function(x){return x.id===id;});if(!p)return;
+  var nota=(document.getElementById('nota-'+id)||{}).value||'';
+  p.estatus='ENTREGADO';p.fechaEntrega=fecha();p.notaEntrega=nota;p.entregadoPor=SESSION.nombre;
+  registrarBitacora(id,'ENTREGADO. Nota: '+nota);await guardarDB();
+  var card=document.getElementById('card-'+id);
+  if(card){card.style.opacity='.4';card.querySelector('.card-foot').innerHTML='<span style="color:var(--success);font-size:13px;font-weight:600">Entregado hoy</span>';}
+  toast('Pedido entregado','ok');
+}
+
+// Nuevo
+function renderNuevo(c){
+  var vends=DB.usuarios.map(function(u){return '<option value="'+u.nombre+'">'+u.nombre+'</option>';}).join('');
+  c.innerHTML='<div class="section-pad"><div class="card" style="padding:16px"><div class="sfield-row"><div class="sfield"><label># Pedido</label><input type="text" id="n-numero" placeholder="Ej: 432"></div><div class="sfield"><label>Cliente *</label><input type="text" id="n-cliente" placeholder="Nombre del cliente"></div></div><div class="sfield-row"><div class="sfield"><label>Ciudad</label><input type="text" id="n-ciudad" placeholder="Ciudad"></div><div class="sfield"><label>Vendedor</label><select id="n-vendedor"><option value="">Seleccionar</option>'+vends+'</select></div></div><div class="sfield-row"><div class="sfield"><label>Proveedor</label><input type="text" id="n-proveedor" placeholder="Ej: ORION..."></div><div class="sfield"><label># OC</label><input type="text" id="n-oc" placeholder="Ej: OC-2026-045"></div></div><div class="sfield-row"><div class="sfield"><label>Fecha limite</label><input type="date" id="n-fecha"></div><div class="sfield"><label>Estado</label><select id="n-estado"><option value="PENDIENTE">Pendiente</option><option value="EN PROCESO">En proceso</option><option value="LISTO">Listo</option></select></div></div><div class="sfield"><label>Descripcion *</label><textarea id="n-desc" placeholder="Productos, medidas, colores, cantidades..."></textarea></div><button class="btn btn-dark" style="width:100%;padding:13px;font-size:15px;margin-top:4px" onclick="crearPedido()">Crear pedido</button></div></div>';
+}
+async function crearPedido(){
+  var cliente=document.getElementById('n-cliente').value.trim();
+  var desc=document.getElementById('n-desc').value.trim();
+  if(!cliente||!desc){toast('Cliente y descripcion son obligatorios','err');return;}
+  var num=document.getElementById('n-numero').value.trim();
+  var maxN=0;DB.pedidos.forEach(function(p){var n=parseInt(p.numero||0);if(n>maxN)maxN=n;});
+  var numero=num||String(maxN+1);
+  var p={id:uid(),numero:numero,cliente:cliente,ciudad:document.getElementById('n-ciudad').value,vendedor:document.getElementById('n-vendedor').value,proveedor:document.getElementById('n-proveedor').value.trim(),ordenCompra:document.getElementById('n-oc').value.trim(),fechaLimite:inputFecha(document.getElementById('n-fecha').value),estatus:document.getElementById('n-estado').value||'PENDIENTE',descripcion:desc,creadoPor:SESSION.username,creadoPorNombre:SESSION.nombre,fechaCreacion:fecha(),horaCreacion:hora()};
+  DB.pedidos.push(p);registrarBitacora(p.id,'CREADO por '+SESSION.nombre);
+  await guardarDB();
+  ['n-numero','n-cliente','n-ciudad','n-proveedor','n-oc','n-fecha','n-desc'].forEach(function(id){document.getElementById(id).value='';});
+  toast('Pedido #'+numero+' creado en la nube','ok');
+}
+
+// Editar
+function abrirEditar(id){
+  var p=DB.pedidos.find(function(x){return x.id===id;});if(!p)return;
+  PEDIDO_EDIT_ID=id;
+  document.getElementById('modal-titulo').textContent='Editar #'+(p.numero||id.substring(0,6));
+  document.getElementById('e-id').value=id;document.getElementById('e-cliente').value=p.cliente||'';document.getElementById('e-ciudad').value=p.ciudad||'';
+  document.getElementById('e-fecha').value=fechaInput(p.fechaLimite);document.getElementById('e-desc').value=p.descripcion||'';
+  document.getElementById('e-proveedor').value=p.proveedor||'';document.getElementById('e-oc').value=p.ordenCompra||'';document.getElementById('e-nota').value='';
+  var vsel=document.getElementById('e-vendedor');vsel.innerHTML='<option value="">Sin cambio</option>';
+  DB.usuarios.forEach(function(u){var o=document.createElement('option');o.value=u.nombre;o.textContent=u.nombre;if(u.nombre===p.vendedor)o.selected=true;vsel.appendChild(o);});
+  document.getElementById('e-estado').value=p.estatus||'';
+  document.getElementById('modal-edit').classList.add('open');
+}
+async function guardarEdicion(){
+  var id=PEDIDO_EDIT_ID;var p=DB.pedidos.find(function(x){return x.id===id;});if(!p)return;
+  var cambios=[];
+  var vals={cliente:document.getElementById('e-cliente').value.trim(),ciudad:document.getElementById('e-ciudad').value.trim(),vendedor:document.getElementById('e-vendedor').value,fechaLimite:inputFecha(document.getElementById('e-fecha').value),estatus:document.getElementById('e-estado').value,descripcion:document.getElementById('e-desc').value.trim(),proveedor:document.getElementById('e-proveedor').value.trim(),ordenCompra:document.getElementById('e-oc').value.trim()};
+  var nota=document.getElementById('e-nota').value.trim();
+  for(var k in vals){if(vals[k]&&vals[k]!==p[k]){cambios.push(k);p[k]=vals[k];}}
+  if(nota){cambios.push('nota');p.nota=nota;}
+  if(!cambios.length){cerrarModal('modal-edit');toast('Sin cambios','warn');return;}
+  p.ultimaEdicion=fecha()+' '+hora();p.editadoPor=SESSION.nombre;
+  registrarBitacora(id,'EDICION ('+cambios.join(', ')+') por '+SESSION.nombre);
+  await guardarDB();cerrarModal('modal-edit');goTab(TAB,document.getElementById('nb-'+TAB));toast('Pedido actualizado','ok');
+}
+
+// Reportes
+function renderReportes(c){
+  var total=DB.pedidos.length,ent=DB.pedidos.filter(function(p){return p.estatus==='ENTREGADO';}).length;
+  var pend=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';}).length;
+  var venc=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&clasif(p)==='vencido';}).length;
+  var listos=DB.pedidos.filter(function(p){return p.estatus==='LISTO';}).length;
+  var entHoy=DB.pedidos.filter(function(p){return p.estatus==='ENTREGADO'&&p.fechaEntrega===fecha();}).length;
+  var pct=total?Math.round((ent/total)*100):0;
+  var pv={};DB.pedidos.forEach(function(p){var v=p.vendedor||'Sin vendedor';if(!pv[v])pv[v]={t:0,e:0};pv[v].t++;if(p.estatus==='ENTREGADO')pv[v].e++;});
+  var va=[];for(var v in pv)va.push({v:v,t:pv[v].t,e:pv[v].e});va.sort(function(a,b){return b.t-a.t;});
+  var maxT=va.length?va[0].t:1;var bit=DB.bitacora.slice(-10).reverse();
+  var html='<div class="report-grid"><div class="report-card"><div class="report-val" style="color:var(--accent)">'+total+'</div><div class="report-label">Total</div></div><div class="report-card"><div class="report-val" style="color:var(--success)">'+ent+'</div><div class="report-label">Entregados</div></div><div class="report-card"><div class="report-val" style="color:var(--warning)">'+pend+'</div><div class="report-label">Pendientes</div></div><div class="report-card"><div class="report-val" style="color:var(--danger)">'+venc+'</div><div class="report-label">Vencidos</div></div><div class="report-card"><div class="report-val" style="color:var(--info)">'+listos+'</div><div class="report-label">Listos</div></div><div class="report-card"><div class="report-val" style="color:var(--success)">'+entHoy+'</div><div class="report-label">Entregados hoy</div></div><div class="report-card"><div class="report-val">'+pct+'%</div><div class="report-label">Completados</div></div><div class="report-card"><div class="report-val">'+DB.bitacora.length+'</div><div class="report-label">Acciones</div></div></div>';
+  if(va.length){html+='<div class="chart-wrap"><div class="chart-title">Por vendedor</div>';va.slice(0,8).forEach(function(item){html+='<div class="bar-row"><div class="bar-label">'+item.v.split(' ')[0]+'</div><div class="bar-track"><div class="bar-fill" style="width:'+Math.round((item.t/maxT)*100)+'%;background:var(--accent)"></div></div><div class="bar-val">'+item.t+'</div></div>';});html+='</div>';}
+  if(bit.length){html+='<div class="chart-wrap"><div class="chart-title">Actividad reciente</div>';bit.forEach(function(b){html+='<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:12px"><div style="font-weight:600">'+(b.accion||'').substring(0,60)+'</div><div style="color:var(--muted)">'+b.fecha+' '+b.hora+'</div></div>';});html+='</div>';}
+  c.innerHTML=html;
+}
+
+// Admin
+function renderAdmin(c){
+  if(SESSION.rol!=='admin'){c.innerHTML='<div class="empty">Acceso denegado</div>';return;}
+  var html='<div class="section-pad"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="sec-label" style="margin:0">Usuarios ('+DB.usuarios.length+')</div><button class="btn btn-dark btn-sm" onclick="abrirNuevoUsuario()">+ Agregar</button></div><div class="admin-section">';
+  DB.usuarios.forEach(function(u){html+='<div class="admin-row"><div class="admin-info"><div class="admin-name">'+u.nombre+'</div><div class="admin-meta">@'+u.username+' - '+u.creado+'</div></div><span class="role-badge '+(u.rol==='admin'?'role-admin':'role-emp')+'">'+u.rol+'</span>'+(u.id!==SESSION.id?'<button class="btn btn-ghost btn-sm" onclick="editarUsuario(''+u.id+'')">Editar</button><button class="btn btn-red btn-sm" onclick="eliminarUsuario(''+u.id+'')">Eliminar</button>':'<span style="font-size:11px;color:var(--muted)">Tu</span>')+'</div>';});
+  html+='</div><div class="sec-label" style="margin-top:20px">Sistema</div><div class="admin-section"><div class="admin-row"><div class="admin-info"><div class="admin-name">Total pedidos</div></div><strong>'+DB.pedidos.length+'</strong></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Base de datos</div></div><span style="color:var(--success);font-weight:600">Firebase activo</span></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Exportar</div></div><button class="btn btn-ghost btn-sm" onclick="exportarJSON()">JSON</button><button class="btn btn-ghost btn-sm" onclick="exportarCSV()" style="margin-left:6px">CSV</button></div><div class="admin-row"><div class="admin-info"><div class="admin-name" style="color:var(--danger)">Borrar todos los pedidos</div><div class="admin-meta">No se puede deshacer</div></div><button class="btn btn-red btn-sm" onclick="borrarPedidos()">Borrar</button></div></div></div>';
+  c.innerHTML=html;
+}
+function abrirNuevoUsuario(){document.getElementById('u-titulo').textContent='Nuevo usuario';['u-id','u-nombre','u-user','u-pass'].forEach(function(id){document.getElementById(id).value='';});document.getElementById('u-rol').value='empleado';document.getElementById('modal-usuario').classList.add('open');}
+function editarUsuario(id){var u=DB.usuarios.find(function(x){return x.id===id;});if(!u)return;document.getElementById('u-titulo').textContent='Editar usuario';document.getElementById('u-id').value=id;document.getElementById('u-nombre').value=u.nombre;document.getElementById('u-user').value=u.username;document.getElementById('u-pass').value=u.password;document.getElementById('u-rol').value=u.rol;document.getElementById('modal-usuario').classList.add('open');}
+async function guardarUsuario(){
+  var nombre=document.getElementById('u-nombre').value.trim();var user=document.getElementById('u-user').value.trim().toLowerCase();var pass=document.getElementById('u-pass').value;var rol=document.getElementById('u-rol').value;var eid=document.getElementById('u-id').value;
+  if(!nombre||!user||!pass){toast('Todos los campos son obligatorios','err');return;}
+  if(DB.usuarios.find(function(x){return x.username===user&&x.id!==eid;})){toast('El usuario ya existe','err');return;}
+  if(eid){var u=DB.usuarios.find(function(x){return x.id===eid;});if(u){u.nombre=nombre;u.username=user;u.password=pass;u.rol=rol;}}
+  else{DB.usuarios.push({id:uid(),nombre:nombre,username:user,password:pass,rol:rol,creado:fecha()});}
+  await guardarDB();cerrarModal('modal-usuario');goTab('admin',document.getElementById('nb-admin'));toast('Usuario guardado','ok');
+}
+async function eliminarUsuario(id){if(!confirm('Eliminar este usuario?'))return;DB.usuarios=DB.usuarios.filter(function(x){return x.id!==id;});await guardarDB();goTab('admin',document.getElementById('nb-admin'));toast('Usuario eliminado','warn');}
+async function borrarPedidos(){if(!confirm('Borrar TODOS los pedidos?'))return;DB.pedidos=[];await guardarDB();goTab('admin',document.getElementById('nb-admin'));toast('Pedidos eliminados','warn');}
+function exportarJSON(){var a=document.createElement('a');a.href='data:application/json;charset=utf-8,'+encodeURIComponent(JSON.stringify({pedidos:DB.pedidos,bitacora:DB.bitacora},null,2));a.download='veoyoca_'+fecha().replace(/\//g,'-')+'.json';a.click();}
+function exportarCSV(){var rows=[['ID','Numero','Cliente','Ciudad','Vendedor','Estado','Fecha limite','Descripcion']];DB.pedidos.forEach(function(p){rows.push([p.id,p.numero||'',p.cliente||'',p.ciudad||'',p.vendedor||'',p.estatus||'',p.fechaLimite||'',p.descripcion||'']);});var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download='pedidos_'+fecha().replace(/\//g,'-')+'.csv';a.click();}
+
+// Rutas/Plan
+var ZONAS=[{nombre:'Maracaibo',ciudades:['MARACAIBO','NORTE','SUR','CENTRO','AMPARO','COROMOTO','HATICOS','DELICIAS','SANTA LUCIA','SAN FRANCISCO','SIERRA MAESTRA','ZONA INDUSTRIAL','BELLA VISTA']},{nombre:'Sur del lago',ciudades:['EL MOJAN','MARA','SANTA BARBARA','LOS PUERTOS','ALTAGRACIA']},{nombre:'Cabimas / C. Ojeda',ciudades:['CABIMAS','CIUDAD OJEDA','LAGUNILLAS']},{nombre:'Machiques / Perija',ciudades:['MACHIQUES','PERIJA','VILLA DEL ROSARIO','LA VILLA','CARRASQUERO']},{nombre:'Coro / Falcon',ciudades:['CORO','FALCON','TUCACAS','DABAJURO','PUNTO FIJO']},{nombre:'Barquisimeto',ciudades:['BARQUISIMETO','CARORA','YARACUY']},{nombre:'San Cristobal',ciudades:['SAN CRISTOBAL','TACHIRA']},{nombre:'Merida / Los Andes',ciudades:['MERIDA','VALERA','TRUJILLO']},{nombre:'Barinas / Llanos',ciudades:['BARINAS','ACARIGUA','GUASDUALITO','APURE']},{nombre:'Caracas / Centro',ciudades:['CARACAS','PETARE','LOS TEQUES','MIRANDA']},{nombre:'Valencia / Carabobo',ciudades:['VALENCIA','CARABOBO','MARACAY','ARAGUA','TURMERO']},{nombre:'Oriente',ciudades:['MATURIN','EL TIGRE','BARCELONA','CIUDAD BOLIVAR','ANZOATEGUI','PUERTO ORDAZ']},{nombre:'Otros',ciudades:[]}];
+function getZona(ciudad){if(!ciudad)return 'Sin ciudad';var cu=ciudad.toUpperCase().trim();for(var i=0;i<ZONAS.length-1;i++)for(var j=0;j<ZONAS[i].ciudades.length;j++)if(cu.indexOf(ZONAS[i].ciudades[j])>=0||ZONAS[i].ciudades[j].indexOf(cu)>=0)return ZONAS[i].nombre;return ciudad;}
+function renderPlanificacion(c){
+  var pends=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';});
+  if(!pends.length){c.innerHTML='<div class="empty"><div class="empty-icon">OK</div>No hay pedidos pendientes</div>';return;}
+  var grupos={};pends.forEach(function(p){var z=getZona(p.ciudad);if(!grupos[z])grupos[z]=[];grupos[z].push(p);});
+  for(var z in grupos){grupos[z].sort(function(a,b){var da=diasRestantes(a.fechaLimite),db=diasRestantes(b.fechaLimite);if(da===null&&db===null)return 0;if(da===null)return 1;if(db===null)return -1;return da-db;});}
+  var zo=Object.keys(grupos).sort(function(a,b){var ma=9999,mb=9999;grupos[a].forEach(function(p){var d=diasRestantes(p.fechaLimite);if(d!==null&&d<ma)ma=d;});grupos[b].forEach(function(p){var d=diasRestantes(p.fechaLimite);if(d!==null&&d<mb)mb=d;});return ma-mb;});
+  var tv=pends.filter(function(p){return clasif(p)==='vencido';}).length,tu=pends.filter(function(p){return clasif(p)==='urgente';}).length;
+  var html='<div class="stats-bar"><div class="stat"><div class="stat-v">'+pends.length+'</div><div class="stat-l">pedidos</div></div><div class="stat"><div class="stat-v" style="color:#fca5a5">'+tv+'</div><div class="stat-l">vencidos</div></div><div class="stat"><div class="stat-v" style="color:#fcd34d">'+tu+'</div><div class="stat-l">urgentes</div></div><div class="stat"><div class="stat-v">'+zo.length+'</div><div class="stat-l">zonas</div></div></div><div style="padding:10px 14px 0"><div class="sec-label">Plan de entregas</div><button class="btn btn-ghost btn-sm" style="margin-bottom:10px;width:100%" onclick="exportarPlan()">Exportar CSV</button>';
+  zo.forEach(function(zona){
+    var pedidos=grupos[zona];var urgV=pedidos.filter(function(p){return clasif(p)==='vencido';}).length;var urgU=pedidos.filter(function(p){return clasif(p)==='urgente';}).length;var ch=urgV?'#dc2626':urgU?'#d97706':'#1a1a2e';
+    html+='<div class="card" style="margin-bottom:12px"><div style="background:'+ch+';padding:10px 14px"><div style="color:#fff;font-size:13px;font-weight:700">'+zona+' ('+pedidos.length+' pedidos)</div>'+(urgV?'<div style="color:#fca5a5;font-size:11px">'+urgV+' vencido'+(urgV>1?'s':'')+'</div>':urgU?'<div style="color:#fcd34d;font-size:11px">'+urgU+' urgente'+(urgU>1?'s':'')+'</div>':'')+'</div><div style="padding:6px 0">';
+    pedidos.forEach(function(p,pi){var d=diasRestantes(p.fechaLimite);var col=!p.fechaLimite?'#6b7280':d<0?'#dc2626':d<=7?'#d97706':'#16a34a';html+='<div style="padding:8px 14px;border-bottom:1px solid #f3f4f6;display:flex;gap:10px;align-items:center"><div style="min-width:22px;height:22px;border-radius:50%;background:'+col+';color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+(pi+1)+'</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+(p.cliente||'Sin nombre')+'</div><div style="font-size:11px;color:#6b7280">#'+(p.numero||p.id.substring(0,6))+(p.vendedor?' - '+p.vendedor:'')+'</div></div>'+badgeHTML(p)+'</div>';});
+    html+='</div></div>';
   });
-  if(DB.bitacora.length>500)DB.bitacora=DB.bitacora.slice(-500);
-  guardarDB();
+  c.innerHTML=html+'</div>';
 }
-
-// ── MODAL ────────────────────────────────────────────────────
-function cerrarModal(id){document.getElementById(id).classList.remove('open');}
-
-// ── TOAST ────────────────────────────────────────────────────
-function toast(msg,tipo){
-  var t=document.getElementById('toast');
-  t.textContent=msg;
-  t.className='toast show'+(tipo==='ok'?' t-ok':tipo==='err'?' t-err':tipo==='warn'?' t-warn':'');
-  setTimeout(function(){t.className='toast';},4000);
-}
-
-// ── START ─────────────────────────────────────────────────────
-init();
-</script>
-
-<script>
-// ============================================================
-// MÓDULO DE IA — PLAN DE ENTREGAS CON CLAUDE
-// Agregar este bloque al final del index.html antes de </body>
-// ============================================================
-
-var API_KEY = localStorage.getItem('veo_apikey') || '';
-var MODELO  = 'claude-sonnet-4-6';
-
-// ── RENDER PESTAÑA IA ─────────────────────────────────────────
-function renderPlanIA(c) {
-  var pendientes = DB.pedidos.filter(function(p){ return p.estatus !== 'ENTREGADO'; });
-  var apikey = localStorage.getItem('veo_apikey') || '';
-
-  c.innerHTML = ''
-    + '<div class="stats-bar">'
-    + '<div class="stat"><div class="stat-v">' + pendientes.length + '</div><div class="stat-l">pendientes</div></div>'
-    + '<div class="stat"><div class="stat-v" style="color:#fca5a5">' + pendientes.filter(function(p){return clasif(p)==='vencido';}).length + '</div><div class="stat-l">vencidos</div></div>'
-    + '<div class="stat"><div class="stat-v" style="color:#fcd34d">' + pendientes.filter(function(p){return clasif(p)==='urgente';}).length + '</div><div class="stat-l">urgentes</div></div>'
-    + '<div class="stat"><div class="stat-v">' + [...new Set(pendientes.map(function(p){return p.ciudad||'?';}))].length + '</div><div class="stat-l">ciudades</div></div>'
-    + '</div>'
-    + '<div style="padding:14px">'
-
-    // CONFIG API KEY — solo si no está guardada
-    + (!apikey
-      ? '<div style="background:#fff;border:2px solid #f59e0b;border-radius:12px;padding:16px;margin-bottom:14px">'
-        + '<div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px">🔑 CONFIGURAR API KEY</div>'
-        + '<div style="font-size:12px;color:#6b7280;margin-bottom:10px">Ingresa tu clave de Anthropic. Se guarda solo en este dispositivo, nunca en internet.</div>'
-        + '<input type="password" id="ia-keyinput" placeholder="sk-ant-api03-..." style="width:100%;padding:10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;margin-bottom:8px">'
-        + '<button class="btn btn-dark" style="width:100%" onclick="guardarAPIKey()">Guardar clave</button>'
-        + '</div>'
-      : '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">'
-        + '<div style="font-size:12px;color:#16a34a;font-weight:600">🔑 API Key configurada</div>'
-        + '<button onclick="cambiarAPIKey()" style="background:none;border:none;font-size:11px;color:#6b7280;cursor:pointer;text-decoration:underline">Cambiar</button>'
-        + '</div>'
-    )
-
-    // BOTÓN PRINCIPAL
-    + '<div style="background:linear-gradient(135deg,#1a1a2e,#2d2d5e);border-radius:14px;padding:20px;margin-bottom:14px;text-align:center">'
-    + '<div style="font-size:28px;margin-bottom:8px">🤖</div>'
-    + '<div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:4px">Plan de Entregas con IA</div>'
-    + '<div style="color:rgba(255,255,255,.6);font-size:12px;margin-bottom:16px">Claude analiza tus ' + pendientes.length + ' pedidos y arma el plan óptimo de rutas, consolidados y alertas</div>'
-    + '<button class="btn btn-green" style="width:100%;padding:13px;font-size:15px;font-weight:700" onclick="generarPlanIA()" id="btn-ia" ' + (!apikey?'disabled':'')+  '>'
-    + (apikey ? '✨ Generar plan inteligente' : '🔑 Configura tu API Key primero') + '</button>'
-    + '</div>'
-
-    // OPCIONES
-    + '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin-bottom:14px">'
-    + '<div style="font-size:12px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Qué incluir en el análisis</div>'
-    + '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px"><input type="checkbox" id="ia-rutas" checked> Plan de rutas por zona y urgencia</label>'
-    + '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px"><input type="checkbox" id="ia-alertas" checked> Alertas de pedidos críticos</label>'
-    + '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px"><input type="checkbox" id="ia-consolidados" checked> Consolidados de carga por camión</label>'
-    + '<label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="ia-costos" checked> División de costos de transporte</label>'
-    + '</div>'
-
-    // RESULTADO — mostrar último plan si existe
-    + (DB.planIA ? '<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:11px;color:#6b7280">Último plan generado: ' + DB.planIA.fecha + ' ' + DB.planIA.hora + ' · <button onclick="mostrarResultadoIA(DB.planIA.texto)" style="background:none;border:none;color:#1d4ed8;cursor:pointer;font-size:11px;text-decoration:underline">Ver</button></div>' : '')
-    + '<div id="ia-resultado"></div>'
-    + '</div>';
-}
-
-function guardarAPIKey() {
-  var k = (document.getElementById('ia-keyinput')||{}).value || '';
-  if (!k || !k.startsWith('sk-ant')) { toast('Clave inválida — debe empezar con sk-ant', 'err'); return; }
-  localStorage.setItem('veo_apikey', k);
-  API_KEY = k;
-  toast('Clave guardada en este dispositivo', 'ok');
-  renderPlanIA(document.getElementById('content'));
-}
-
-function cambiarAPIKey() {
-  localStorage.removeItem('veo_apikey');
-  API_KEY = '';
-  renderPlanIA(document.getElementById('content'));
-}
-
-// ── GENERAR PLAN CON IA ───────────────────────────────────────
-function generarPlanIA() {
-  var pendientes = DB.pedidos.filter(function(p){ return p.estatus !== 'ENTREGADO'; });
-  if (!pendientes.length) { toast('No hay pedidos pendientes', 'warn'); return; }
-
-  API_KEY = localStorage.getItem('veo_apikey') || '';
-  if (!API_KEY) { toast('Configura tu API Key primero', 'err'); return; }
-  var btn = document.getElementById('btn-ia');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Analizando pedidos...'; }
-
-  var res = document.getElementById('ia-resultado');
-  if (res) {
-    res.innerHTML = '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:20px;text-align:center">'
-      + '<div style="font-size:32px;margin-bottom:10px">🔄</div>'
-      + '<div style="font-size:14px;font-weight:600;color:#1a1a2e;margin-bottom:4px">Claude está analizando tus pedidos...</div>'
-      + '<div style="font-size:12px;color:#6b7280">Esto toma unos segundos</div>'
-      + '<div style="margin-top:14px;height:4px;background:#e5e7eb;border-radius:99px;overflow:hidden">'
-      + '<div style="height:100%;width:0%;background:linear-gradient(90deg,#1a1a2e,#16a34a);border-radius:99px;animation:prog 3s ease forwards" id="ia-prog"></div>'
-      + '</div></div>';
-    // Animar barra
-    setTimeout(function(){ var p=document.getElementById('ia-prog'); if(p)p.style.width='85%'; }, 100);
-  }
-
-  // Construir prompt con todos los pedidos
-  var hoy = new Date().toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'});
-  var opcRutas       = document.getElementById('ia-rutas')?.checked !== false;
-  var opcAlertas     = document.getElementById('ia-alertas')?.checked !== false;
-  var opcConsol      = document.getElementById('ia-consolidados')?.checked !== false;
-  var opcCostos      = document.getElementById('ia-costos')?.checked !== false;
-
-  var listaPedidos = pendientes.map(function(p) {
-    var d = diasRestantes(p.fechaLimite);
-    return '- Pedido #' + (p.numero||p.id.substring(0,6))
-      + ' | Cliente: ' + (p.cliente||'?')
-      + ' | Ciudad: ' + (p.ciudad||'Sin ciudad')
-      + ' | Vendedor: ' + (p.vendedor||'?')
-      + ' | Fecha límite: ' + (p.fechaLimite||'Sin fecha')
-      + ' | Días restantes: ' + (d!==null?d:'Sin fecha')
-      + ' | Estado: ' + (p.estatus||'PENDIENTE')
-      + ' | Proveedor: ' + (p.proveedor||'-')
-      + ' | OC: ' + (p.ordenCompra||'-')
-      + ' | Descripción: ' + (p.descripcion||'').substring(0,80);
-  }).join('\n');
-
-  var prompt = 'Eres el asistente de logística de una empresa venezolana de equipos comerciales (estanterías, neveras, carros de supermercado, etc). Hoy es ' + hoy + '.\n\n'
-    + 'Tengo ' + pendientes.length + ' pedidos pendientes de entrega. Analízalos y dame un plan completo:\n\n'
-    + listaPedidos + '\n\n'
-    + 'Por favor genera:\n'
-    + (opcRutas ? '1. PLAN DE RUTAS: Agrupa los pedidos por zona geográfica de Venezuela y arma viajes en orden óptimo. Para cada viaje indica: zonas que cubre, pedidos en orden de parada, por qué ese orden, urgencia del viaje (salir esta semana / próxima / flexible).\n' : '')
-    + (opcAlertas ? '2. ALERTAS CRÍTICAS: Lista los pedidos que necesitan atención inmediata con el motivo específico y la acción recomendada.\n' : '')
-    + (opcConsol ? '3. CONSOLIDADOS DE CARGA: Sugiere exactamente qué pedidos meter en cada camión para optimizar el espacio y la ruta. Considera el tipo de mercancía.\n' : '')
-    + (opcCostos ? '4. DIVISIÓN DE COSTOS: Para cada consolidado, explica cómo dividir el costo del flete entre los pedidos (por igual, por volumen estimado, etc).\n' : '')
-    + '\nResponde en español, con formato claro usando emojis para identificar secciones. Sé específico con los números de pedido. Si un pedido tiene fecha vencida, indícalo claramente.';
-
-  // Llamar a la API de Claude
-  fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': API_KEY,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
-    body: JSON.stringify({
-      model: MODELO,
-      max_tokens: 4000,
-      messages: [{ role: 'user', content: prompt }]
-    })
-  })
-  .then(function(r){ return r.json(); })
-  .then(function(data) {
-    var texto = '';
-    if (data.content && data.content[0] && data.content[0].text) {
-      texto = data.content[0].text;
-    } else if (data.error) {
-      texto = 'Error: ' + data.error.message;
-    }
-    mostrarResultadoIA(texto);
-    if (btn) { btn.disabled = false; btn.textContent = '✨ Generar nuevo plan'; }
-  })
-  .catch(function(err) {
-    mostrarResultadoIA('❌ Error al conectar con Claude: ' + err.message + '\n\nVerifica tu conexión a internet.');
-    if (btn) { btn.disabled = false; btn.textContent = '✨ Reintentar'; }
-  });
-}
-
-// ── MOSTRAR RESULTADO ─────────────────────────────────────────
-function mostrarResultadoIA(texto) {
-  var res = document.getElementById('ia-resultado');
-  if (!res) return;
-
-  // Convertir markdown básico a HTML
-  var html = texto
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g,'<em>$1</em>')
-    .replace(/^#{1,3} (.+)$/gm,'<div style="font-size:15px;font-weight:700;color:#1a1a2e;margin:16px 0 8px">$1</div>')
-    .replace(/^- (.+)$/gm,'<div style="padding:3px 0 3px 12px;border-left:3px solid #e5e7eb;margin:4px 0;font-size:13px">$1</div>')
-    .replace(/\n\n/g,'<br><br>')
-    .replace(/\n/g,'<br>');
-
-  res.innerHTML = '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">'
-    + '<div style="background:linear-gradient(135deg,#1a1a2e,#2d2d5e);padding:12px 16px;display:flex;justify-content:space-between;align-items:center">'
-    + '<div style="color:#fff;font-size:13px;font-weight:600">🤖 Plan generado por Claude</div>'
-    + '<button onclick="copiarPlan()" style="background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">Copiar</button>'
-    + '</div>'
-    + '<div style="padding:16px;font-size:13px;line-height:1.7;color:#374151" id="ia-texto">' + html + '</div>'
-    + '<div style="padding:12px 16px;border-top:1px solid #e5e7eb;display:flex;gap:8px">'
-    + '<button class="btn btn-ghost btn-sm" onclick="generarPlanIA()">🔄 Regenerar</button>'
-    + '<button class="btn btn-ghost btn-sm" onclick="exportarPlanIA()">📄 Exportar</button>'
-    + '</div>'
-    + '</div>';
-
-  // Guardar en DB para historial
-  DB.planIA = { fecha: new Date().toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'}), hora: new Date().toLocaleTimeString('es-VE',{hour:'2-digit',minute:'2-digit'}), texto: texto };
-  guardarDB();
-}
-
-function copiarPlan() {
-  var el = document.getElementById('ia-texto');
-  if (!el) return;
-  var txt = el.innerText || el.textContent;
-  navigator.clipboard.writeText(txt).then(function(){ toast('Plan copiado al portapapeles','ok'); }).catch(function(){ toast('No se pudo copiar','err'); });
-}
-
-function exportarPlanIA() {
-  if (!DB.planIA) return;
-  var a = document.createElement('a');
-  a.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(DB.planIA.texto);
-  a.download = 'plan_IA_' + DB.planIA.fecha.replace(/\//g,'-') + '.txt';
-  a.click();
-}
-
-// Agregar estilo de animación
-var styleIA = document.createElement('style');
-styleIA.textContent = '@keyframes prog{from{width:0%}to{width:85%}}';
-document.head.appendChild(styleIA);
-
-</script>
-
-
-
-<script>
-// ── ZONAS GEOGRÁFICAS VENEZUELA ───────────────────────────────
-var ZONAS = [
-  { nombre: 'Maracaibo Norte',     ciudades: ['MARACAIBO','NORTE','AMPARO','COROMOTO','HATICOS','LOS HATICOS'] },
-  { nombre: 'Maracaibo Sur',       ciudades: ['SUR','DELICIAS','SANTA LUCIA','SAN FRANCISCO','SIERRA MAESTRA'] },
-  { nombre: 'Maracaibo Centro',    ciudades: ['CENTRO','ZONA INDUSTRIAL','BELLA VISTA'] },
-  { nombre: 'Sur del lago',        ciudades: ['EL MOJAN','MARA','SANTA BARBARA','LOS PUERTOS','ALTAGRACIA'] },
-  { nombre: 'Cabimas / C. Ojeda',  ciudades: ['CABIMAS','CIUDAD OJEDA','LAGUNILLAS'] },
-  { nombre: 'Machiques / Perija',  ciudades: ['MACHIQUES','PERIJA','VILLA DEL ROSARIO','LA VILLA','CARRASQUERO'] },
-  { nombre: 'Coro / Falcón',       ciudades: ['CORO','FALCON','TUCACAS','DABAJURO','PUNTO FIJO'] },
-  { nombre: 'Barquisimeto',        ciudades: ['BARQUISIMETO','CARORA','YARACUY'] },
-  { nombre: 'San Cristóbal',       ciudades: ['SAN CRISTOBAL','TACHIRA','URUMACO'] },
-  { nombre: 'Mérida / Los Andes',  ciudades: ['MERIDA','VALERA','TRUJILLO'] },
-  { nombre: 'Barinas / Llanos',    ciudades: ['BARINAS','ACARIGUA','GUASDUALITO','APURE'] },
-  { nombre: 'Caracas / Centro',    ciudades: ['CARACAS','PETARE','LOS TEQUES','MIRANDA'] },
-  { nombre: 'Valencia / Carabobo', ciudades: ['VALENCIA','CARABOBO','MARACAY','ARAGUA','TURMERO'] },
-  { nombre: 'Oriente',             ciudades: ['MATURIN','EL TIGRE','BARCELONA','CIUDAD BOLIVAR','ANZOATEGUI','GUASIPATI','UPATA','PUERTO ORDAZ'] },
-  { nombre: 'Occidente / Otros',   ciudades: [] }
-];
-
-function getZona(ciudad) {
-  if (!ciudad) return 'Sin ciudad';
-  var cu = ciudad.toUpperCase().trim();
-  for (var i = 0; i < ZONAS.length - 1; i++) {
-    for (var j = 0; j < ZONAS[i].ciudades.length; j++) {
-      if (cu.indexOf(ZONAS[i].ciudades[j]) >= 0 || ZONAS[i].ciudades[j].indexOf(cu) >= 0) {
-        return ZONAS[i].nombre;
-      }
-    }
-  }
-  return ciudad; // devuelve la ciudad si no hay zona conocida
-}
-
-// ── ORDEN DE RUTAS POR PROXIMIDAD DESDE MARACAIBO ────────────
-var ORDEN_RUTAS = [
-  'Maracaibo Norte','Maracaibo Centro','Maracaibo Sur',
-  'Sur del lago','Cabimas / C. Ojeda','Machiques / Perija',
-  'Coro / Falcón','Barquisimeto','San Cristóbal','Mérida / Los Andes',
-  'Barinas / Llanos','Valencia / Carabobo','Caracas / Centro',
-  'Oriente','Occidente / Otros'
-];
-
-// ── RENDER PLANIFICACIÓN ──────────────────────────────────────
-function renderPlanificacion(c) {
-  var pendientes = DB.pedidos.filter(function(p) {
-    return p.estatus !== 'ENTREGADO';
-  });
-
-  if (!pendientes.length) {
-    c.innerHTML = '<div class="empty"><div class="empty-icon">🎉</div>No hay pedidos pendientes para planificar</div>';
-    return;
-  }
-
-  // Agrupar por zona
-  var grupos = {};
-  pendientes.forEach(function(p) {
-    var z = getZona(p.ciudad);
-    if (!grupos[z]) grupos[z] = [];
-    grupos[z].push(p);
-  });
-
-  // Ordenar pedidos dentro de cada zona por fecha más próxima
-  for (var z in grupos) {
-    grupos[z].sort(function(a, b) {
-      var da = diasRestantes(a.fechaLimite);
-      var db = diasRestantes(b.fechaLimite);
-      if (da === null && db === null) return 0;
-      if (da === null) return 1;
-      if (db === null) return -1;
-      return da - db;
-    });
-  }
-
-  // Ordenar zonas: primero las que tienen pedidos urgentes/vencidos
-  var zonasOrdenadas = Object.keys(grupos).sort(function(a, b) {
-    var minA = 9999, minB = 9999;
-    grupos[a].forEach(function(p) {
-      var d = diasRestantes(p.fechaLimite);
-      if (d !== null && d < minA) minA = d;
-    });
-    grupos[b].forEach(function(p) {
-      var d = diasRestantes(p.fechaLimite);
-      if (d !== null && d < minB) minB = d;
-    });
-    return minA - minB;
-  });
-
-  // Contar totales
-  var totalVenc  = pendientes.filter(function(p){return clasif(p)==='vencido';}).length;
-  var totalUrg   = pendientes.filter(function(p){return clasif(p)==='urgente';}).length;
-  var totalSF    = pendientes.filter(function(p){return !p.fechaLimite;}).length;
-  var totalZonas = zonasOrdenadas.length;
-
-  var html = '<div class="stats-bar">'
-    + '<div class="stat"><div class="stat-v">' + pendientes.length + '</div><div class="stat-l">pedidos</div></div>'
-    + '<div class="stat"><div class="stat-v" style="color:#fca5a5">' + totalVenc + '</div><div class="stat-l">vencidos</div></div>'
-    + '<div class="stat"><div class="stat-v" style="color:#fcd34d">' + totalUrg + '</div><div class="stat-l">urgentes</div></div>'
-    + '<div class="stat"><div class="stat-v">' + totalZonas + '</div><div class="stat-l">zonas</div></div>'
-    + '</div>';
-
-  html += '<div style="padding:10px 14px 0">';
-  html += '<div class="sec-label">Plan de entregas — ordenado por urgencia y zona</div>';
-
-  // Botón exportar plan
-  html += '<button class="btn btn-ghost btn-sm" style="margin-bottom:10px;width:100%" onclick="exportarPlan()">📄 Exportar plan como CSV</button>';
-
-  // Viajes sugeridos (agrupar zonas cercanas)
-  var viajes = armarViajes(grupos, zonasOrdenadas);
-  viajes.forEach(function(viaje, vi) {
-    var urgV = viaje.pedidos.filter(function(p){return clasif(p)==='vencido';}).length;
-    var urgU = viaje.pedidos.filter(function(p){return clasif(p)==='urgente';}).length;
-    var proxima = viaje.pedidos.find(function(p){return p.fechaLimite;});
-
-    var colorHead = urgV ? '#dc2626' : urgU ? '#d97706' : '#1a1a2e';
-
-    html += '<div class="card" style="margin-bottom:12px">';
-    html += '<div style="background:' + colorHead + ';padding:10px 14px;display:flex;justify-content:space-between;align-items:flex-start">';
-    html += '<div>';
-    html += '<div style="color:#fff;font-size:13px;font-weight:700">🚚 Viaje ' + (vi+1) + ' — ' + viaje.zonas.join(' + ') + '</div>';
-    html += '<div style="color:rgba(255,255,255,.7);font-size:11px;margin-top:2px">' + viaje.pedidos.length + ' pedido' + (viaje.pedidos.length!==1?'s':'');
-    if (urgV) html += ' · <span style="color:#fca5a5">' + urgV + ' vencido' + (urgV!==1?'s':'') + '</span>';
-    if (urgU) html += ' · <span style="color:#fcd34d">' + urgU + ' urgente' + (urgU!==1?'s':'') + '</span>';
-    if (proxima) html += ' · entrega más próxima: ' + proxima.fechaLimite;
-    html += '</div></div>';
-    html += '<span style="background:rgba(255,255,255,.15);color:#fff;font-size:10px;padding:3px 8px;border-radius:99px;font-weight:600">'
-      + (urgV ? 'URGENTE' : urgU ? 'PRONTO' : 'PLANIFICAR') + '</span>';
-    html += '</div>';
-
-    // Paradas ordenadas
-    html += '<div style="padding:6px 0">';
-    viaje.pedidos.forEach(function(p, pi) {
-      var d = diasRestantes(p.fechaLimite);
-      var color = !p.fechaLimite ? '#6b7280' : d < 0 ? '#dc2626' : d <= 7 ? '#d97706' : '#16a34a';
-      html += '<div style="padding:8px 14px;border-bottom:1px solid #f3f4f6;display:flex;gap:10px;align-items:flex-start">';
-      html += '<div style="min-width:22px;height:22px;border-radius:50%;background:' + color + ';color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px">' + (pi+1) + '</div>';
-      html += '<div style="flex:1;min-width:0">';
-      html += '<div style="font-size:13px;font-weight:600">' + (p.cliente||'Sin nombre') + '</div>';
-      html += '<div style="font-size:11px;color:#6b7280;margin-top:1px">';
-      html += '#' + (p.numero||p.id.substring(0,6));
-      if (p.ciudad) html += ' · ' + p.ciudad;
-      if (p.vendedor) html += ' · ' + p.vendedor;
-      html += '</div>';
-      if (p.descripcion) html += '<div style="font-size:11px;color:#9ca3af;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + p.descripcion.substring(0,60) + '</div>';
-      html += '</div>';
-      html += '<div style="text-align:right;flex-shrink:0">';
-      html += badgeHTML(p);
-      if (p.fechaLimite) html += '<div style="font-size:10px;color:#9ca3af;margin-top:3px">' + p.fechaLimite + '</div>';
-      html += '</div>';
-      html += '</div>';
-    });
-    html += '</div>';
-
-    // División de flete
-    html += '<div style="padding:8px 14px;background:#f9fafb;border-top:1px solid #f3f4f6">';
-    html += '<div style="font-size:11px;color:#6b7280;margin-bottom:5px;font-weight:600">DIVIDIR COSTO DE TRANSPORTE</div>';
-    html += '<div style="display:flex;gap:8px;align-items:center">';
-    html += '<input type="number" id="flete-' + vi + '" placeholder="Monto total del flete ($)" style="flex:1;padding:7px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px" oninput="calcFlete(' + vi + ',' + viaje.pedidos.length + ')">';
-    html += '</div>';
-    html += '<div id="flete-result-' + vi + '" style="font-size:12px;color:#374151;margin-top:6px"></div>';
-    html += '</div>';
-    html += '</div>'; // end card
-  });
-
-  html += '</div>'; // end padding
-  c.innerHTML = html;
-}
-
-// ── ARMAR VIAJES CONSOLIDADOS ─────────────────────────────────
-function armarViajes(grupos, zonasOrdenadas) {
-  var viajes = [];
-  var MAX_POR_VIAJE = 8;
-
-  // Zonas de Maracaibo van juntas
-  var zonasLocal = ['Maracaibo Norte','Maracaibo Centro','Maracaibo Sur'];
-  var pedsLocal = [];
-  zonasLocal.forEach(function(z) {
-    if (grupos[z]) pedsLocal = pedsLocal.concat(grupos[z]);
-  });
-  if (pedsLocal.length) {
-    viajes.push({ zonas: ['Maracaibo'], pedidos: pedsLocal });
-  }
-
-  // Zonas cercanas que se pueden combinar
-  var combos = [
-    ['Sur del lago','Cabimas / C. Ojeda'],
-    ['Machiques / Perija'],
-    ['Coro / Falcón'],
-    ['Barquisimeto'],
-    ['San Cristóbal'],
-    ['Mérida / Los Andes'],
-    ['Barinas / Llanos'],
-    ['Valencia / Carabobo','Caracas / Centro'],
-    ['Oriente'],
-  ];
-
-  combos.forEach(function(combo) {
-    var peds = [];
-    var zonasPresentes = [];
-    combo.forEach(function(z) {
-      if (grupos[z] && grupos[z].length) {
-        peds = peds.concat(grupos[z]);
-        zonasPresentes.push(z);
-      }
-    });
-    if (peds.length) {
-      peds.sort(function(a,b){
-        var da=diasRestantes(a.fechaLimite), db=diasRestantes(b.fechaLimite);
-        if(da===null&&db===null)return 0;
-        if(da===null)return 1;if(db===null)return -1;
-        return da-db;
-      });
-      viajes.push({ zonas: zonasPresentes, pedidos: peds });
-    }
-  });
-
-  // Zonas no mapeadas
-  var zonasUsadas = zonasLocal.concat(['Sur del lago','Cabimas / C. Ojeda','Machiques / Perija','Coro / Falcón','Barquisimeto','San Cristóbal','Mérida / Los Andes','Barinas / Llanos','Valencia / Carabobo','Caracas / Centro','Oriente']);
-  var pedsSueltos = [];
-  var zonasSueltas = [];
-  zonasOrdenadas.forEach(function(z) {
-    if (zonasUsadas.indexOf(z) < 0 && grupos[z] && grupos[z].length) {
-      pedsSueltos = pedsSueltos.concat(grupos[z]);
-      zonasSueltas.push(z);
-    }
-  });
-  if (pedsSueltos.length) {
-    viajes.push({ zonas: zonasSueltas.length ? zonasSueltas : ['Otras zonas'], pedidos: pedsSueltos });
-  }
-
-  return viajes.filter(function(v){ return v.pedidos.length > 0; });
-}
-
-// ── CALCULAR DIVISIÓN DE FLETE ────────────────────────────────
-function calcFlete(vi, numPedidos) {
-  var monto = parseFloat(document.getElementById('flete-' + vi).value) || 0;
-  var el = document.getElementById('flete-result-' + vi);
-  if (!monto || !el) return;
-  var porPed = (monto / numPedidos).toFixed(2);
-  el.innerHTML = '<span style="color:#16a34a;font-weight:600">$' + porPed + ' por pedido</span>'
-    + ' <span style="color:#9ca3af">(' + numPedidos + ' pedidos · total $' + monto.toFixed(2) + ')</span>';
-}
-
-// ── EXPORTAR PLAN CSV ─────────────────────────────────────────
-function exportarPlan() {
-  var pendientes = DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';});
-  pendientes.sort(function(a,b){
-    var da=diasRestantes(a.fechaLimite), db=diasRestantes(b.fechaLimite);
-    if(da===null&&db===null)return 0;
-    if(da===null)return 1;if(db===null)return -1;
-    return da-db;
-  });
-  var rows=[['#','Pedido','Cliente','Ciudad','Zona','Vendedor','Fecha limite','Dias restantes','Estado','Descripcion']];
-  pendientes.forEach(function(p,i){
-    var d=diasRestantes(p.fechaLimite);
-    rows.push([
-      i+1, p.numero||p.id.substring(0,6), p.cliente||'', p.ciudad||'',
-      getZona(p.ciudad), p.vendedor||'', p.fechaLimite||'Sin fecha',
-      d!==null?d:'—', p.estatus||'', (p.descripcion||'').substring(0,80)
-    ]);
-  });
+function exportarPlan(){
+  var pends=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';});
+  pends.sort(function(a,b){var da=diasRestantes(a.fechaLimite),db=diasRestantes(b.fechaLimite);if(da===null&&db===null)return 0;if(da===null)return 1;if(db===null)return -1;return da-db;});
+  var rows=[['#','Pedido','Cliente','Ciudad','Zona','Vendedor','Fecha limite','Dias','Estado','Descripcion']];
+  pends.forEach(function(p,i){var d=diasRestantes(p.fechaLimite);rows.push([i+1,p.numero||p.id.substring(0,6),p.cliente||'',p.ciudad||'',getZona(p.ciudad),p.vendedor||'',p.fechaLimite||'',d!==null?d:'',p.estatus||'',(p.descripcion||'').substring(0,80)]);});
   var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
-  var a=document.createElement('a');
-  a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
-  var hoy=new Date().toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'-');
-  a.download='plan_entregas_'+hoy+'.csv';
-  a.click();
+  var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download='plan_'+fecha().replace(/\//g,'-')+'.csv';a.click();
 }
+
+// Plan IA
+var MODELO='claude-sonnet-4-6';
+function renderPlanIA(c){
+  var pends=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';});
+  var apikey=localStorage.getItem('veo_apikey')||'';
+  c.innerHTML='<div class="stats-bar"><div class="stat"><div class="stat-v">'+pends.length+'</div><div class="stat-l">pendientes</div></div><div class="stat"><div class="stat-v" style="color:#fca5a5">'+pends.filter(function(p){return clasif(p)==='vencido';}).length+'</div><div class="stat-l">vencidos</div></div><div class="stat"><div class="stat-v" style="color:#fcd34d">'+pends.filter(function(p){return clasif(p)==='urgente';}).length+'</div><div class="stat-l">urgentes</div></div><div class="stat"><div class="stat-v">'+ [...new Set(pends.map(function(p){return p.ciudad||'?';}))].length+'</div><div class="stat-l">ciudades</div></div></div><div style="padding:14px">'+(!apikey?'<div style="background:#fff;border:2px solid #f59e0b;border-radius:12px;padding:16px;margin-bottom:14px"><div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px">CONFIGURAR API KEY</div><div style="font-size:12px;color:#6b7280;margin-bottom:10px">Ingresa tu clave de Anthropic (sk-ant-...). Se guarda solo en este dispositivo.</div><input type="password" id="ia-keyinput" placeholder="sk-ant-api03-..." style="width:100%;padding:10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;margin-bottom:8px"><button class="btn btn-dark" style="width:100%" onclick="guardarAPIKey()">Guardar clave</button></div>':'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:12px;color:#16a34a;font-weight:600">API Key configurada</div><button onclick="cambiarAPIKey()" style="background:none;border:none;font-size:11px;color:#6b7280;cursor:pointer;text-decoration:underline">Cambiar</button></div>')+'<div style="background:linear-gradient(135deg,#1a1a2e,#2d2d5e);border-radius:14px;padding:20px;margin-bottom:14px;text-align:center"><div style="font-size:28px;margin-bottom:8px">IA</div><div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:4px">Plan de Entregas con IA</div><div style="color:rgba(255,255,255,.6);font-size:12px;margin-bottom:16px">Claude analiza tus '+pends.length+' pedidos y arma el plan optimo</div><button class="btn btn-green" style="width:100%;padding:13px;font-size:15px;font-weight:700" onclick="generarPlanIA()" id="btn-ia"'+(!apikey?' disabled':'')+'>'+(apikey?'Generar plan inteligente':'Configura tu API Key primero')+'</button></div><div id="ia-resultado"></div></div>';
+}
+function guardarAPIKey(){var k=(document.getElementById('ia-keyinput')||{}).value||'';if(!k||!k.startsWith('sk-ant')){toast('Clave invalida','err');return;}localStorage.setItem('veo_apikey',k);toast('Clave guardada','ok');renderPlanIA(document.getElementById('content'));}
+function cambiarAPIKey(){localStorage.removeItem('veo_apikey');renderPlanIA(document.getElementById('content'));}
+function generarPlanIA(){
+  var pends=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';});
+  if(!pends.length){toast('No hay pedidos pendientes','warn');return;}
+  var API_KEY=localStorage.getItem('veo_apikey')||'';if(!API_KEY){toast('Configura tu API Key primero','err');return;}
+  var btn=document.getElementById('btn-ia');if(btn){btn.disabled=true;btn.textContent='Analizando...';}
+  var res=document.getElementById('ia-resultado');if(res)res.innerHTML='<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:20px;text-align:center"><div style="font-size:14px;font-weight:600;color:#1a1a2e">Claude analizando pedidos...</div></div>';
+  var hoy=new Date().toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'});
+  var lista=pends.map(function(p){var d=diasRestantes(p.fechaLimite);return '- Pedido #'+(p.numero||p.id.substring(0,6))+' | Cliente: '+(p.cliente||'?')+' | Ciudad: '+(p.ciudad||'Sin ciudad')+' | Dias restantes: '+(d!==null?d:'Sin fecha')+' | Estado: '+(p.estatus||'PENDIENTE')+' | Desc: '+(p.descripcion||'').substring(0,60);}).join('\n');
+  var prompt='Eres el asistente de logistica de una empresa venezolana de equipos comerciales. Hoy es '+hoy+'.\n\nTengo '+pends.length+' pedidos pendientes:\n\n'+lista+'\n\nGenera:\n1. PLAN DE RUTAS: Agrupa por zona geografica de Venezuela, orden optimo de paradas.\n2. ALERTAS CRITICAS: Pedidos que necesitan atencion inmediata.\n3. CONSOLIDADOS DE CARGA: Que pedidos meter en cada camion.\n4. DIVISION DE COSTOS: Como dividir el flete.\n\nResponde en espanol con emojis para identificar secciones.';
+  fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:MODELO,max_tokens:4000,messages:[{role:'user',content:prompt}]})})
+  .then(function(r){return r.json();}).then(function(data){var texto='';if(data.content&&data.content[0]&&data.content[0].text)texto=data.content[0].text;else if(data.error)texto='Error: '+data.error.message;mostrarResultadoIA(texto);if(btn){btn.disabled=false;btn.textContent='Generar nuevo plan';}}).catch(function(err){mostrarResultadoIA('Error: '+err.message);if(btn){btn.disabled=false;btn.textContent='Reintentar';}});
+}
+function mostrarResultadoIA(texto){
+  var res=document.getElementById('ia-resultado');if(!res)return;
+  var html=texto.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/^#{1,3} (.+)$/gm,'<div style="font-size:15px;font-weight:700;color:#1a1a2e;margin:16px 0 8px">$1</div>').replace(/^- (.+)$/gm,'<div style="padding:3px 0 3px 12px;border-left:3px solid #e5e7eb;margin:4px 0;font-size:13px">$1</div>').replace(/\n\n/g,'<br><br>').replace(/\n/g,'<br>');
+  res.innerHTML='<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden"><div style="background:linear-gradient(135deg,#1a1a2e,#2d2d5e);padding:12px 16px;display:flex;justify-content:space-between;align-items:center"><div style="color:#fff;font-size:13px;font-weight:600">Plan generado por Claude</div><button onclick="copiarPlan()" style="background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">Copiar</button></div><div style="padding:16px;font-size:13px;line-height:1.7;color:#374151" id="ia-texto">'+html+'</div><div style="padding:12px 16px;border-top:1px solid #e5e7eb"><button class="btn btn-ghost btn-sm" onclick="generarPlanIA()">Regenerar</button></div></div>';
+}
+function copiarPlan(){var el=document.getElementById('ia-texto');if(!el)return;navigator.clipboard.writeText(el.innerText||el.textContent).then(function(){toast('Copiado','ok');}).catch(function(){toast('No se pudo copiar','err');});}
+
+// FIREBASE INIT — usando CDN importmap
+async function initFirebase(){
+  try{
+    document.getElementById('splash-msg').textContent='Conectando con Firebase...';
+    var fb=await import('https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js');
+    var fs=await import('https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js');
+    var firebaseConfig={apiKey:'AIzaSyD-fyGTFiZgn_FfZN-VC0fS_rFNtVsg5kc',authDomain:'veoyoca-54caf.firebaseapp.com',projectId:'veoyoca-54caf',storageBucket:'veoyoca-54caf.firebasestorage.app',messagingSenderId:'510700319861',appId:'1:510700319861:web:1cc96074cec81134a7f43c'};
+    var app=fb.initializeApp(firebaseConfig);
+    _db=fs.getFirestore(app);
+    window._firestore=fs;
+
+    var snap=await fs.getDoc(fs.doc(_db,'veoyoca','data'));
+    if(snap.exists()){var d=snap.data();DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];}
+    else{DB.usuarios=[{id:'admin',nombre:'Administrador',username:'admin',password:'admin123',rol:'admin',creado:fecha()}];await guardarDB();}
+
+    // Tiempo real
+    fs.onSnapshot(fs.doc(_db,'veoyoca','data'),function(snap){
+      if(!snap.exists()||SAVING)return;
+      var d=snap.data();DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];
+      if(SESSION&&TAB){var nb=document.getElementById('nb-'+TAB);if(nb)goTab(TAB,nb);}
+    });
+
+    // Sesion local
+    var sess=null;try{sess=JSON.parse(localStorage.getItem('veo_session')||'null');}catch(e){}
+    if(sess){var u=DB.usuarios.find(function(x){return x.id===sess.id;});if(u){SESSION=u;mostrarApp();return;}}
+    document.getElementById('splash').style.display='none';
+    document.getElementById('login-screen').style.display='flex';
+    setTimeout(function(){document.getElementById('l-user').focus();},100);
+    document.getElementById('l-user').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('l-pass').focus();});
+    document.getElementById('l-pass').addEventListener('keydown',function(e){if(e.key==='Enter')login();});
+  }catch(e){
+    document.getElementById('splash-msg').textContent='Error: '+e.message;
+    console.error('Firebase error:',e);
+  }
+}
+initFirebase();
 </script>
-</body></html>
+</body>
+</html>
