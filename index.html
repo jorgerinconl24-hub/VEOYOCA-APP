@@ -197,6 +197,12 @@ function goTab(tab,btn){
   var titulos={home:'Pedidos',entregar:'Despacho',nuevo:'Nuevo pedido',reportes:'Reportes',admin:'Administracion',plan:'Rutas',ia:'Plan IA'};
   document.getElementById('topbar-sub').textContent=titulos[tab]||SESSION.nombre;
   var c=document.getElementById('content');
+  c.onclick=function(e){
+    var ed=e.target.getAttribute('data-edit');
+    var en=e.target.getAttribute('data-entregar');
+    if(ed)abrirEditar(ed);
+    if(en)marcarEntregado(en);
+  };
   if(tab==='home')renderHome(c);else if(tab==='entregar')renderEntregar(c);else if(tab==='nuevo')renderNuevo(c);else if(tab==='reportes')renderReportes(c);else if(tab==='admin')renderAdmin(c);else if(tab==='plan')renderPlanificacion(c);else if(tab==='ia')renderPlanIA(c);
 }
 
@@ -226,7 +232,25 @@ function filtrarHome(){
 }
 function cardHTML(p,conEntregar){
   var canEdit=SESSION.rol==='admin'||SESSION.username===p.creadoPor||SESSION.username===p.vendedor;
-  return '<div class="card" id="card-'+p.id+'"><div class="card-head"><div class="card-num">#'+(p.numero||p.id.substring(0,6))+'</div><div class="card-body"><div class="card-cliente">'+(p.cliente||'Sin nombre')+'</div><div class="card-meta">'+(p.ciudad||'sin ciudad')+(p.vendedor?' - '+p.vendedor:'')+'</div>'+(p.proveedor?'<span class="card-vend" style="background:#fef3c7;color:#92400e">'+p.proveedor+(p.ordenCompra?' OC:'+p.ordenCompra:'')+'</span>':'')+' <div class="card-desc">'+(p.descripcion||'')+'</div></div>'+badgeHTML(p)+'</div><div class="card-foot">'+(canEdit?'<button class="btn btn-ghost btn-sm" onclick="abrirEditar(''+p.id+'')">Editar</button>':'')+(conEntregar&&p.estatus!=='ENTREGADO'?'<input type="text" id="nota-'+p.id+'" placeholder="Nota de entrega..."><button class="btn btn-green btn-sm" onclick="marcarEntregado(''+p.id+'')">Entregar</button>':'')+'</div></div>';
+  var pid=p.id;
+  var num=p.numero||pid.substring(0,6);
+  var h='<div class="card" id="card-'+pid+'">';
+  h+='<div class="card-head">';
+  h+='<div class="card-num">#'+num+'</div>';
+  h+='<div class="card-body">';
+  h+='<div class="card-cliente">'+(p.cliente||'Sin nombre')+'</div>';
+  h+='<div class="card-meta">'+(p.ciudad||'sin ciudad')+(p.vendedor?' - '+p.vendedor:'')+'</div>';
+  if(p.proveedor)h+='<span class="card-vend" style="background:#fef3c7;color:#92400e">'+p.proveedor+(p.ordenCompra?' OC:'+p.ordenCompra:'')+'</span>';
+  h+='<div class="card-desc">'+(p.descripcion||'')+'</div>';
+  h+='</div>'+badgeHTML(p)+'</div>';
+  h+='<div class="card-foot">';
+  if(canEdit)h+='<button class="btn btn-ghost btn-sm" data-edit="'+pid+'">Editar</button>';
+  if(conEntregar&&p.estatus!=='ENTREGADO'){
+    h+='<input type="text" id="nota-'+pid+'" placeholder="Nota de entrega...">';
+    h+='<button class="btn btn-green btn-sm" data-entregar="'+pid+'">Entregar</button>';
+  }
+  h+='</div></div>';
+  return h;
 }
 
 // Despacho
@@ -316,10 +340,29 @@ function renderReportes(c){
 // Admin
 function renderAdmin(c){
   if(SESSION.rol!=='admin'){c.innerHTML='<div class="empty">Acceso denegado</div>';return;}
-  var html='<div class="section-pad"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="sec-label" style="margin:0">Usuarios ('+DB.usuarios.length+')</div><button class="btn btn-dark btn-sm" onclick="abrirNuevoUsuario()">+ Agregar</button></div><div class="admin-section">';
-  DB.usuarios.forEach(function(u){html+='<div class="admin-row"><div class="admin-info"><div class="admin-name">'+u.nombre+'</div><div class="admin-meta">@'+u.username+' - '+u.creado+'</div></div><span class="role-badge '+(u.rol==='admin'?'role-admin':'role-emp')+'">'+u.rol+'</span>'+(u.id!==SESSION.id?'<button class="btn btn-ghost btn-sm" onclick="editarUsuario(''+u.id+'')">Editar</button><button class="btn btn-red btn-sm" onclick="eliminarUsuario(''+u.id+'')">Eliminar</button>':'<span style="font-size:11px;color:var(--muted)">Tu</span>')+'</div>';});
-  html+='</div><div class="sec-label" style="margin-top:20px">Sistema</div><div class="admin-section"><div class="admin-row"><div class="admin-info"><div class="admin-name">Total pedidos</div></div><strong>'+DB.pedidos.length+'</strong></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Base de datos</div></div><span style="color:var(--success);font-weight:600">Firebase activo</span></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Exportar</div></div><button class="btn btn-ghost btn-sm" onclick="exportarJSON()">JSON</button><button class="btn btn-ghost btn-sm" onclick="exportarCSV()" style="margin-left:6px">CSV</button></div><div class="admin-row"><div class="admin-info"><div class="admin-name" style="color:var(--danger)">Borrar todos los pedidos</div><div class="admin-meta">No se puede deshacer</div></div><button class="btn btn-red btn-sm" onclick="borrarPedidos()">Borrar</button></div></div></div>';
+  var html='<div class="section-pad"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="sec-label" style="margin:0">Usuarios ('+DB.usuarios.length+')</div><button class="btn btn-dark btn-sm" data-nuevo-usuario="1">+ Agregar</button></div><div class="admin-section">';
+  DB.usuarios.forEach(function(u){
+    html+='<div class="admin-row"><div class="admin-info"><div class="admin-name">'+u.nombre+'</div><div class="admin-meta">@'+u.username+' - '+u.creado+'</div></div>';
+    html+='<span class="role-badge '+(u.rol==='admin'?'role-admin':'role-emp')+'">'+u.rol+'</span>';
+    if(u.id!==SESSION.id){html+='<button class="btn btn-ghost btn-sm" data-edit-user="'+u.id+'">Editar</button><button class="btn btn-red btn-sm" data-del-user="'+u.id+'">Eliminar</button>';}
+    else{html+='<span style="font-size:11px;color:var(--muted)">Tu</span>';}
+    html+='</div>';
+  });
+  html+='</div><div class="sec-label" style="margin-top:20px">Sistema</div><div class="admin-section">';
+  html+='<div class="admin-row"><div class="admin-info"><div class="admin-name">Total pedidos</div></div><strong>'+DB.pedidos.length+'</strong></div>';
+  html+='<div class="admin-row"><div class="admin-info"><div class="admin-name">Base de datos</div></div><span style="color:var(--success);font-weight:600">Firebase activo</span></div>';
+  html+='<div class="admin-row"><div class="admin-info"><div class="admin-name">Exportar</div></div><button class="btn btn-ghost btn-sm" data-exportar="json">JSON</button><button class="btn btn-ghost btn-sm" data-exportar="csv" style="margin-left:6px">CSV</button></div>';
+  html+='<div class="admin-row"><div class="admin-info"><div class="admin-name" style="color:var(--danger)">Borrar todos los pedidos</div><div class="admin-meta">No se puede deshacer</div></div><button class="btn btn-red btn-sm" data-borrar-pedidos="1">Borrar</button></div>';
+  html+='</div></div>';
   c.innerHTML=html;
+  c.onclick=function(e){
+    var t=e.target;
+    if(t.getAttribute('data-nuevo-usuario'))abrirNuevoUsuario();
+    var eu=t.getAttribute('data-edit-user');if(eu)editarUsuario(eu);
+    var du=t.getAttribute('data-del-user');if(du)eliminarUsuario(du);
+    var ex=t.getAttribute('data-exportar');if(ex==='json')exportarJSON();if(ex==='csv')exportarCSV();
+    if(t.getAttribute('data-borrar-pedidos'))borrarPedidos();
+  };
 }
 function abrirNuevoUsuario(){document.getElementById('u-titulo').textContent='Nuevo usuario';['u-id','u-nombre','u-user','u-pass'].forEach(function(id){document.getElementById(id).value='';});document.getElementById('u-rol').value='empleado';document.getElementById('modal-usuario').classList.add('open');}
 function editarUsuario(id){var u=DB.usuarios.find(function(x){return x.id===id;});if(!u)return;document.getElementById('u-titulo').textContent='Editar usuario';document.getElementById('u-id').value=id;document.getElementById('u-nombre').value=u.nombre;document.getElementById('u-user').value=u.username;document.getElementById('u-pass').value=u.password;document.getElementById('u-rol').value=u.rol;document.getElementById('modal-usuario').classList.add('open');}
