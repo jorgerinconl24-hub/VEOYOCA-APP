@@ -1,5 +1,5 @@
 // Service Worker — VeoYoca PWA
-var CACHE = 'veoyoca-v1';
+var CACHE = 'veoyoca-v3';
 var FILES = ['/', '/index.html', '/manifest.json'];
 
 self.addEventListener('install', function(e) {
