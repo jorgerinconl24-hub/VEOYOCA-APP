@@ -583,21 +583,70 @@ function enviarCorreo(){
   var total = r.vencidos.length + r.urgentes.length;
   if(total === 0){ toast('No hay pedidos críticos para reportar','ok'); return; }
 
-  var listaVenc = r.vencidos.map(function(p){
-    return '#'+(p.numero||'?')+' '+p.cliente+' ('+p.ciudad+') — Vencido '+ Math.abs(diasRestantes(p.fechaLimite))+'d';
-  }).join('\n');
-  var listaUrg = r.urgentes.map(function(p){
-    return '#'+(p.numero||'?')+' '+p.cliente+' ('+p.ciudad+') — Vence en '+diasRestantes(p.fechaLimite)+'d';
-  }).join('\n');
+  function filasTabla(lista, esVencido){
+    return lista.map(function(p){
+      var d = diasRestantes(p.fechaLimite);
+      var diasTxt = esVencido ? 'Venció hace '+Math.abs(d)+'d' : 'Vence en '+d+'d';
+      var colorDias = esVencido ? '#dc2626' : '#d97706';
+      return '<tr style="border-bottom:1px solid #f3f4f6">'
+        +'<td style="padding:8px 10px;font-weight:600;color:#1a1a2e">#'+(p.numero||'?')+'</td>'
+        +'<td style="padding:8px 10px">'+(p.cliente||'')+'</td>'
+        +'<td style="padding:8px 10px;color:#6b7280">'+(p.ciudad||'—')+'</td>'
+        +'<td style="padding:8px 10px;color:#6b7280">'+(p.vendedor||'—')+'</td>'
+        +'<td style="padding:8px 10px">'+(p.fechaLimite||'—')+'</td>'
+        +'<td style="padding:8px 10px;font-weight:700;color:'+colorDias+'">'+diasTxt+'</td>'
+        +'</tr>';
+    }).join('');
+  }
+
+  function seccionTabla(lista, titulo, color, esVencido){
+    if(!lista.length) return '';
+    return '<div style="margin-bottom:24px">'
+      +'<h3 style="color:'+color+';margin:0 0 10px;font-size:15px">'+titulo+' ('+lista.length+')</h3>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:13px;background:#fff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb">'
+      +'<thead><tr style="background:#f9fafb">'
+      +'<th style="padding:8px 10px;text-align:left;color:#6b7280;font-size:11px">#Ped</th>'
+      +'<th style="padding:8px 10px;text-align:left;color:#6b7280;font-size:11px">Cliente</th>'
+      +'<th style="padding:8px 10px;text-align:left;color:#6b7280;font-size:11px">Ciudad</th>'
+      +'<th style="padding:8px 10px;text-align:left;color:#6b7280;font-size:11px">Vendedor</th>'
+      +'<th style="padding:8px 10px;text-align:left;color:#6b7280;font-size:11px">F. Límite</th>'
+      +'<th style="padding:8px 10px;text-align:left;color:#6b7280;font-size:11px">Días</th>'
+      +'</tr></thead>'
+      +'<tbody>'+filasTabla(lista, esVencido)+'</tbody>'
+      +'</table></div>';
+  }
+
+  var htmlCorreo =
+    '<div style="font-family:Arial,sans-serif;max-width:680px;margin:0 auto">'
+    +'<div style="background:#1a1a2e;padding:20px 24px;border-radius:10px 10px 0 0">'
+    +'<h2 style="color:#fff;margin:0;font-size:18px">Reporte diario de pedidos</h2>'
+    +'<p style="color:rgba(255,255,255,.6);margin:4px 0 0;font-size:13px">'+fecha()+'</p>'
+    +'</div>'
+    +'<div style="display:flex;border:1px solid #e5e7eb;border-top:none">'
+    +'<div style="flex:1;background:#fef2f2;padding:14px;text-align:center;border-right:1px solid #e5e7eb">'
+    +'<div style="font-size:24px;font-weight:700;color:#dc2626">'+r.vencidos.length+'</div>'
+    +'<div style="font-size:11px;color:#dc2626;font-weight:600">VENCIDOS</div></div>'
+    +'<div style="flex:1;background:#fffbeb;padding:14px;text-align:center;border-right:1px solid #e5e7eb">'
+    +'<div style="font-size:24px;font-weight:700;color:#d97706">'+r.urgentes.length+'</div>'
+    +'<div style="font-size:11px;color:#d97706;font-weight:600">URGENTES</div></div>'
+    +'<div style="flex:1;background:#f0fdf4;padding:14px;text-align:center">'
+    +'<div style="font-size:24px;font-weight:700;color:#16a34a">'+total+'</div>'
+    +'<div style="font-size:11px;color:#16a34a;font-weight:600">TOTAL ALERTAS</div></div>'
+    +'</div>'
+    +'<div style="padding:20px;background:#f9fafb;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 10px 10px">'
+    + seccionTabla(r.vencidos, '🔴 VENCIDOS', '#dc2626', true)
+    + seccionTabla(r.urgentes, '🟡 URGENTES', '#d97706', false)
+    +'<div style="text-align:center;font-size:11px;color:#9ca3af;margin-top:16px">VeoYoca — Sistema de Pedidos</div>'
+    +'</div></div>';
 
   var templateParams = {
-    to_email:    cfg.emailDestino,
-    fecha:       fecha(),
-    total:       total,
-    vencidos_n:  r.vencidos.length,
-    urgentes_n:  r.urgentes.length,
-    lista_vencidos:  listaVenc || 'Ninguno',
-    lista_urgentes:  listaUrg || 'Ninguno',
+    to_email:       cfg.emailDestino,
+    fecha:          fecha(),
+    total:          total,
+    vencidos_n:     r.vencidos.length,
+    urgentes_n:     r.urgentes.length,
+    lista_vencidos: htmlCorreo,
+    lista_urgentes: '',
   };
 
   toast('Enviando correo...','');
