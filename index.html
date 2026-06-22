@@ -333,6 +333,8 @@ async function marcarEntregado(id){
   if(card){card.style.opacity='.4';card.querySelector('.card-foot').innerHTML='<span style="color:var(--success);font-size:13px;font-weight:600">Entregado hoy</span>';}
   toast('Pedido entregado','ok');
   notificarSW('✅ Pedido entregado', 'Cliente: '+(p.cliente||'')+(nota?' — '+nota:''), 'entregado-'+id);
+  notificarEventoCorreo('ENTREGADO', p);
+  notificarEventoWA('ENTREGADO', p);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -355,6 +357,8 @@ async function crearPedido(){
   ['n-numero','n-cliente','n-ciudad','n-proveedor','n-oc','n-fecha','n-desc'].forEach(function(id){document.getElementById(id).value='';});
   toast('Pedido #'+numero+' creado en la nube','ok');
   notificarSW('📦 Nuevo pedido #'+numero, 'Cliente: '+cliente+' — '+desc.substring(0,60), 'nuevo-pedido');
+  notificarEventoCorreo('NUEVO', p);
+  notificarEventoWA('NUEVO', p);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -701,6 +705,98 @@ function enviarWhatsApp(){
   fetch(url, {mode:'no-cors'})
     .then(function(){ toast('WhatsApp enviado ✓ (verifica tu teléfono)','ok'); })
     .catch(function(e){ toast('Error WA: '+e.message,'err'); });
+}
+
+// --- Notificar por correo evento (nuevo pedido / entregado) ---
+function notificarEventoCorreo(tipo, pedido) {
+  var cfg = getNotifConfig();
+  if (!cfg.emailActivo || !cfg.emailjsServiceId || !cfg.emailjsTemplateId || !cfg.emailjsPublicKey || !cfg.emailDestino) return;
+
+  var esNuevo = tipo === 'NUEVO';
+  var emoji   = esNuevo ? '📦' : '✅';
+  var titulo  = esNuevo ? 'Nuevo pedido registrado' : 'Pedido entregado';
+
+  var htmlEvento =
+    '<div style="font-family:Arial,sans-serif;max-width:680px;margin:0 auto">'
+    + '<div style="background:#1a1a2e;padding:20px 24px;border-radius:10px 10px 0 0">'
+    + '<h2 style="color:#fff;margin:0;font-size:18px">' + emoji + ' ' + titulo + '</h2>'
+    + '<p style="color:rgba(255,255,255,.6);margin:4px 0 0;font-size:13px">' + fecha() + ' — ' + hora() + '</p>'
+    + '</div>'
+    + '<div style="background:#fff;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 10px 10px;padding:20px">'
+    + '<table style="width:100%;border-collapse:collapse;font-size:14px">'
+    + '<tr><td style="padding:8px 0;color:#6b7280;width:140px">Pedido #</td><td style="padding:8px 0;font-weight:700">' + (pedido.numero||'?') + '</td></tr>'
+    + '<tr><td style="padding:8px 0;color:#6b7280">Cliente</td><td style="padding:8px 0;font-weight:600">' + (pedido.cliente||'') + '</td></tr>'
+    + '<tr><td style="padding:8px 0;color:#6b7280">Ciudad</td><td style="padding:8px 0">' + (pedido.ciudad||'—') + '</td></tr>'
+    + '<tr><td style="padding:8px 0;color:#6b7280">Vendedor</td><td style="padding:8px 0">' + (pedido.vendedor||'—') + '</td></tr>'
+    + '<tr><td style="padding:8px 0;color:#6b7280">Proveedor</td><td style="padding:8px 0">' + (pedido.proveedor||'—') + '</td></tr>'
+    + '<tr><td style="padding:8px 0;color:#6b7280">F. Límite</td><td style="padding:8px 0">' + (pedido.fechaLimite||'—') + '</td></tr>'
+    + '<tr><td style="padding:8px 0;color:#6b7280">Descripción</td><td style="padding:8px 0">' + (pedido.descripcion||'') + '</td></tr>'
+    + (esNuevo ? '' : '<tr><td style="padding:8px 0;color:#6b7280">Entregado por</td><td style="padding:8px 0;color:#16a34a;font-weight:600">' + (pedido.entregadoPor||SESSION.nombre) + '</td></tr>')
+    + '</table>'
+    + '<div style="text-align:center;margin-top:20px">'
+    + '<a href="https://jorgerinconl24-hub.github.io/VEOYOCA-APP/" style="display:inline-block;background:#1a1a2e;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600">📦 Ver en VeoYoca</a>'
+    + '</div></div></div>';
+
+  var asunto = emoji + ' VeoYoca — ' + titulo + ' #' + (pedido.numero||'?') + ' ' + (pedido.cliente||'');
+
+  function doSend() {
+    window.emailjs.init({ publicKey: cfg.emailjsPublicKey });
+    window.emailjs.send(cfg.emailjsServiceId, cfg.emailjsTemplateId, {
+      to_email:       cfg.emailDestino,
+      fecha:          fecha(),
+      total:          1,
+      vencidos_n:     esNuevo ? 0 : 1,
+      urgentes_n:     0,
+      lista_vencidos: htmlEvento,
+      lista_urgentes: '',
+    }).then(function(){ console.log('Correo evento enviado'); })
+      .catch(function(e){ console.log('Error correo evento:', e); });
+  }
+
+  if (window.emailjs) { doSend(); }
+  else {
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';
+    s.onload = doSend;
+    document.head.appendChild(s);
+  }
+}
+
+// --- Notificar por WhatsApp evento ---
+function notificarEventoWA(tipo, pedido) {
+  var cfg = getNotifConfig();
+  if (!cfg.waActivo || !cfg.waNumero || !cfg.waApikey) return;
+
+  var esNuevo = tipo === 'NUEVO';
+  var emoji   = esNuevo ? '📦' : '✅';
+  var titulo  = esNuevo ? 'NUEVO PEDIDO REGISTRADO' : 'PEDIDO ENTREGADO';
+
+  var msg = emoji + ' *VeoYoca — ' + titulo + '*
+
+'
+    + '• Pedido #: *' + (pedido.numero||'?') + '*
+'
+    + '• Cliente: *' + (pedido.cliente||'') + '*
+'
+    + '• Ciudad: ' + (pedido.ciudad||'—') + '
+'
+    + '• Vendedor: ' + (pedido.vendedor||'—') + '
+'
+    + '• F. Límite: ' + (pedido.fechaLimite||'—') + '
+'
+    + '• Descripción: ' + (pedido.descripcion||'').substring(0,80) + '
+'
+    + (esNuevo ? '' : '• Entregado por: *' + (pedido.entregadoPor||SESSION.nombre) + '*
+')
+    + '
+📦 https://jorgerinconl24-hub.github.io/VEOYOCA-APP/';
+
+  // Usar UltraMsg
+  fetch('https://api.ultramsg.com/instance181941/messages/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'token=jd3odrhspk539mmp&to=' + encodeURIComponent(cfg.waNumero) + '&body=' + encodeURIComponent(msg)
+  }).catch(function(){});
 }
 
 // --- Enviar todo a la vez ---
