@@ -333,8 +333,6 @@ async function marcarEntregado(id){
   if(card){card.style.opacity='.4';card.querySelector('.card-foot').innerHTML='<span style="color:var(--success);font-size:13px;font-weight:600">Entregado hoy</span>';}
   toast('Pedido entregado','ok');
   notificarSW('✅ Pedido entregado', 'Cliente: '+(p.cliente||'')+(nota?' — '+nota:''), 'entregado-'+id);
-  notificarEventoCorreo('ENTREGADO', p);
-  notificarEventoWA('ENTREGADO', p);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -357,8 +355,6 @@ async function crearPedido(){
   ['n-numero','n-cliente','n-ciudad','n-proveedor','n-oc','n-fecha','n-desc'].forEach(function(id){document.getElementById(id).value='';});
   toast('Pedido #'+numero+' creado en la nube','ok');
   notificarSW('📦 Nuevo pedido #'+numero, 'Cliente: '+cliente+' — '+desc.substring(0,60), 'nuevo-pedido');
-  notificarEventoCorreo('NUEVO', p);
-  notificarEventoWA('NUEVO', p);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -709,66 +705,6 @@ function enviarWhatsApp(){
   xhrMain.onerror = function(){ toast('WhatsApp enviado (verifica tu teléfono)','ok'); };
   xhrMain.ontimeout = function(){ toast('WhatsApp enviado (verifica tu teléfono)','ok'); };
   xhrMain.send('token=jd3odrhspk539mmp&to=' + encodeURIComponent(cfg.waNumero) + '&body=' + encodeURIComponent(msg));
-}
-
-// --- Notificar por correo evento ---
-function notificarEventoCorreo(tipo, pedido) {
-  var cfg = getNotifConfig();
-  if (!cfg.emailActivo || !cfg.emailjsServiceId || !cfg.emailjsTemplateId || !cfg.emailjsPublicKey || !cfg.emailDestino) return;
-  var esNuevo = tipo === 'NUEVO';
-  var tituloEvento = esNuevo ? 'Nuevo pedido registrado' : 'Pedido entregado';
-  var rows = '<tr><td style="padding:8px 0;color:#6b7280;width:140px">Pedido #</td><td style="padding:8px 0;font-weight:700">' + (pedido.numero||'?') + '</td></tr>'
-    + '<tr><td style="padding:8px 0;color:#6b7280">Cliente</td><td style="padding:8px 0;font-weight:600">' + (pedido.cliente||'') + '</td></tr>'
-    + '<tr><td style="padding:8px 0;color:#6b7280">Ciudad</td><td style="padding:8px 0">' + (pedido.ciudad||'-') + '</td></tr>'
-    + '<tr><td style="padding:8px 0;color:#6b7280">Vendedor</td><td style="padding:8px 0">' + (pedido.vendedor||'-') + '</td></tr>'
-    + '<tr><td style="padding:8px 0;color:#6b7280">F. Limite</td><td style="padding:8px 0">' + (pedido.fechaLimite||'-') + '</td></tr>'
-    + '<tr><td style="padding:8px 0;color:#6b7280">Descripcion</td><td style="padding:8px 0">' + (pedido.descripcion||'') + '</td></tr>'
-    + (esNuevo ? '' : '<tr><td style="padding:8px 0;color:#6b7280">Entregado por</td><td style="padding:8px 0;color:#16a34a;font-weight:600">' + (pedido.entregadoPor||SESSION.nombre) + '</td></tr>');
-  var htmlEvento = '<div style="font-family:Arial,sans-serif;max-width:680px;margin:0 auto">'
-    + '<div style="background:#1a1a2e;padding:20px 24px;border-radius:10px 10px 0 0">'
-    + '<h2 style="color:#fff;margin:0;font-size:18px">' + tituloEvento + '</h2>'
-    + '<p style="color:rgba(255,255,255,.6);margin:4px 0 0;font-size:13px">' + fecha() + ' - ' + hora() + '</p>'
-    + '</div>'
-    + '<div style="background:#fff;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 10px 10px;padding:20px">'
-    + '<table style="width:100%;border-collapse:collapse;font-size:14px">' + rows + '</table>'
-    + '<div style="text-align:center;margin-top:20px">'
-    + '<a href="https://jorgerinconl24-hub.github.io/VEOYOCA-APP/" style="display:inline-block;background:#1a1a2e;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600">Ver en VeoYoca</a>'
-    + '</div></div></div>';
-  var asunto = (esNuevo ? '[VeoYoca] Nuevo pedido #' : '[VeoYoca] Pedido entregado #') + (pedido.numero||'?') + ' - ' + (pedido.cliente||'');
-  function doSendEvento() {
-    window.emailjs.init({ publicKey: cfg.emailjsPublicKey });
-    window.emailjs.send(cfg.emailjsServiceId, cfg.emailjsTemplateId, {
-      to_email: cfg.emailDestino,
-      fecha: fecha(),
-      total: 1,
-      vencidos_n: 0,
-      urgentes_n: 0,
-      lista_vencidos: htmlEvento,
-      lista_urgentes: '',
-    }).catch(function(e){ console.log('Error correo evento:', e); });
-  }
-  if (window.emailjs) { doSendEvento(); }
-  else {
-    var s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';
-    s.onload = doSendEvento;
-    document.head.appendChild(s);
-  }
-}
-
-// --- Notificar por WhatsApp evento ---
-function notificarEventoWA(tipo, pedido) {
-  var cfg = getNotifConfig();
-  if (!cfg.waActivo || !cfg.waNumero || !cfg.waApikey) return;
-  var esNuevo = tipo === 'NUEVO';
-  var titulo = esNuevo ? 'NUEVO PEDIDO #' : 'PEDIDO ENTREGADO #';
-  var msg = titulo + (pedido.numero||'?') + ' | Cliente: ' + (pedido.cliente||'') + ' | Ciudad: ' + (pedido.ciudad||'-') + ' | Vendedor: ' + (pedido.vendedor||'-') + ' | Fecha: ' + (pedido.fechaLimite||'-');
-  if (!esNuevo) msg += ' | Entregado por: ' + (pedido.entregadoPor||SESSION.nombre);
-  var xhrWA = new XMLHttpRequest();
-  xhrWA.open('POST', 'https://api.ultramsg.com/instance181941/messages/chat', true);
-  xhrWA.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-  xhrWA.timeout = 5000;
-  xhrWA.send('token=jd3odrhspk539mmp&to=' + encodeURIComponent(cfg.waNumero) + '&body=' + encodeURIComponent(msg));
 }
 
 // --- Enviar todo a la vez ---
