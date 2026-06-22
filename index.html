@@ -770,32 +770,10 @@ function notificarEventoCorreo(tipo, pedido) {
 function notificarEventoWA(tipo, pedido) {
   var cfg = getNotifConfig();
   if (!cfg.waActivo || !cfg.waNumero || !cfg.waApikey) return;
-
   var esNuevo = tipo === 'NUEVO';
-  var emoji   = esNuevo ? '📦' : '✅';
-  var titulo  = esNuevo ? 'NUEVO PEDIDO REGISTRADO' : 'PEDIDO ENTREGADO';
-
-  var msg = emoji + ' *VeoYoca — ' + titulo + '*
-
-'
-    + '• Pedido #: *' + (pedido.numero||'?') + '*
-'
-    + '• Cliente: *' + (pedido.cliente||'') + '*
-'
-    + '• Ciudad: ' + (pedido.ciudad||'—') + '
-'
-    + '• Vendedor: ' + (pedido.vendedor||'—') + '
-'
-    + '• F. Límite: ' + (pedido.fechaLimite||'—') + '
-'
-    + '• Descripción: ' + (pedido.descripcion||'').substring(0,80) + '
-'
-    + (esNuevo ? '' : '• Entregado por: *' + (pedido.entregadoPor||SESSION.nombre) + '*
-')
-    + '
-📦 https://jorgerinconl24-hub.github.io/VEOYOCA-APP/';
-
-  // Usar UltraMsg con no-cors para evitar bloqueo
+  var titulo = esNuevo ? 'NUEVO PEDIDO #' : 'PEDIDO ENTREGADO #';
+  var msg = titulo + (pedido.numero||'?') + ' | Cliente: ' + (pedido.cliente||'') + ' | Ciudad: ' + (pedido.ciudad||'-') + ' | Vendedor: ' + (pedido.vendedor||'-') + ' | Fecha: ' + (pedido.fechaLimite||'-');
+  if (!esNuevo) msg += ' | Entregado por: ' + (pedido.entregadoPor||SESSION.nombre);
   var xhrWA = new XMLHttpRequest();
   xhrWA.open('POST', 'https://api.ultramsg.com/instance181941/messages/chat', true);
   xhrWA.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
