@@ -331,6 +331,7 @@ async function marcarEntregado(id){
   var card=document.getElementById('card-'+id);
   if(card){card.style.opacity='.4';card.querySelector('.card-foot').innerHTML='<span style="color:var(--success);font-size:13px;font-weight:600">Entregado hoy</span>';}
   toast('Pedido entregado','ok');
+  notificarSW('✅ Pedido entregado', 'Cliente: '+(p.cliente||'')+(nota?' — '+nota:''), 'entregado-'+id);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -352,6 +353,7 @@ async function crearPedido(){
   await guardarDB();
   ['n-numero','n-cliente','n-ciudad','n-proveedor','n-oc','n-fecha','n-desc'].forEach(function(id){document.getElementById(id).value='';});
   toast('Pedido #'+numero+' creado en la nube','ok');
+  notificarSW('📦 Nuevo pedido #'+numero, 'Cliente: '+cliente+' — '+desc.substring(0,60), 'nuevo-pedido');
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -882,6 +884,45 @@ async function initFirebase(){
     console.error('Firebase error:',e);
   }
 }
+// ═══════════════════════════════════════════════════════════
+// REGISTRO SERVICE WORKER
+// ═══════════════════════════════════════════════════════════
+var SW_REG = null;
+
+function registrarSW() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('/VEOYOCA-APP/sw.js')
+    .then(function(reg) {
+      SW_REG = reg;
+      console.log('SW registrado OK');
+      // Pedir permiso de notificaciones
+      if (Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
+      // Programar alarma diaria a las 8:45am
+      programarAlarmaSW('08:45');
+    })
+    .catch(function(e) { console.log('SW error:', e); });
+}
+
+function programarAlarmaSW(hora) {
+  if (!SW_REG || !SW_REG.active) {
+    setTimeout(function(){ programarAlarmaSW(hora); }, 1000);
+    return;
+  }
+  SW_REG.active.postMessage({ tipo: 'ALARMA_DIARIA', hora: hora });
+}
+
+function notificarSW(titulo, cuerpo, tag) {
+  if (Notification.permission !== 'granted') return;
+  if (SW_REG && SW_REG.active) {
+    SW_REG.active.postMessage({ tipo: 'NOTIFICAR', titulo: titulo, cuerpo: cuerpo, tag: tag });
+  } else {
+    new Notification(titulo, { body: cuerpo, icon: '/VEOYOCA-APP/icon-192.png' });
+  }
+}
+
+registrarSW();
 initFirebase();
 </script>
 </body>
