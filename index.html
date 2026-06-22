@@ -226,6 +226,7 @@ function mostrarApp(){
   // Verificar pedidos críticos al entrar
   setTimeout(verificarYNotificarAlEntrar, 2000);
   goTab('home',document.getElementById('nb-home'));
+  setTimeout(verificarGoto, 500);
 }
 function mostrarPerfil(){
   var mis=DB.pedidos.filter(function(p){return p.creadoPor===SESSION.username||p.vendedor===SESSION.nombre;});
@@ -922,14 +923,29 @@ function notificarSW(titulo, cuerpo, tag) {
   }
 }
 
-// Escuchar mensajes del Service Worker
+// Escuchar mensajes del SW (app abierta)
 navigator.serviceWorker && navigator.serviceWorker.addEventListener('message', function(e) {
-  if (e.data && e.data.tipo === 'IR_TAB' && SESSION) {
+  if (e.data && e.data.tipo === 'IR_TAB') {
     var tab = e.data.tab || 'home';
-    var btn = document.getElementById('nb-' + tab);
-    goTab(tab, btn);
+    if (SESSION) {
+      goTab(tab, document.getElementById('nb-' + tab));
+    } else {
+      // Guardar para después del login
+      localStorage.setItem('veo_goto', tab);
+    }
   }
 });
+
+// Al abrir la app verificar si hay destino pendiente
+function verificarGoto() {
+  var goto = localStorage.getItem('veo_goto');
+  if (goto && SESSION) {
+    localStorage.removeItem('veo_goto');
+    setTimeout(function() {
+      goTab(goto, document.getElementById('nb-' + goto));
+    }, 300);
+  }
+}
 
 registrarSW();
 initFirebase();
