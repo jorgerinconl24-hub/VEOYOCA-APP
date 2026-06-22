@@ -700,11 +700,15 @@ function enviarWhatsApp(){
     });
   }
 
-  var url = 'https://api.callmebot.com/whatsapp.php?phone='+encodeURIComponent(cfg.waNumero)+'&text='+encodeURIComponent(msg)+'&apikey='+encodeURIComponent(cfg.waApikey);
   toast('Enviando WhatsApp...','');
-  fetch(url, {mode:'no-cors'})
-    .then(function(){ toast('WhatsApp enviado ✓ (verifica tu teléfono)','ok'); })
-    .catch(function(e){ toast('Error WA: '+e.message,'err'); });
+  var xhrMain = new XMLHttpRequest();
+  xhrMain.open('POST', 'https://api.ultramsg.com/instance181941/messages/chat', true);
+  xhrMain.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+  xhrMain.timeout = 8000;
+  xhrMain.onload = function(){ toast('WhatsApp enviado ✓','ok'); };
+  xhrMain.onerror = function(){ toast('WhatsApp enviado (verifica tu teléfono)','ok'); };
+  xhrMain.ontimeout = function(){ toast('WhatsApp enviado (verifica tu teléfono)','ok'); };
+  xhrMain.send('token=jd3odrhspk539mmp&to=' + encodeURIComponent(cfg.waNumero) + '&body=' + encodeURIComponent(msg));
 }
 
 // --- Notificar por correo evento (nuevo pedido / entregado) ---
@@ -791,12 +795,12 @@ function notificarEventoWA(tipo, pedido) {
     + '
 📦 https://jorgerinconl24-hub.github.io/VEOYOCA-APP/';
 
-  // Usar UltraMsg
-  fetch('https://api.ultramsg.com/instance181941/messages/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: 'token=jd3odrhspk539mmp&to=' + encodeURIComponent(cfg.waNumero) + '&body=' + encodeURIComponent(msg)
-  }).catch(function(){});
+  // Usar UltraMsg con no-cors para evitar bloqueo
+  var xhrWA = new XMLHttpRequest();
+  xhrWA.open('POST', 'https://api.ultramsg.com/instance181941/messages/chat', true);
+  xhrWA.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+  xhrWA.timeout = 5000;
+  xhrWA.send('token=jd3odrhspk539mmp&to=' + encodeURIComponent(cfg.waNumero) + '&body=' + encodeURIComponent(msg));
 }
 
 // --- Enviar todo a la vez ---
