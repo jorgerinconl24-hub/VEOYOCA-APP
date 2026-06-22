@@ -659,7 +659,6 @@ function enviarCorreo(){
 
   toast('Enviando correo...','');
   function doSend(){
-    if (!_ejsInited) { window.emailjs.init({ publicKey: cfg.emailjsPublicKey }); _ejsInited = true; }
     window.emailjs.send(cfg.emailjsServiceId, cfg.emailjsTemplateId, templateParams)
       .then(function(){ toast('Correo enviado ✓','ok'); })
       .catch(function(e){ toast('Error correo: '+(e.text||e.message||JSON.stringify(e)),'err'); });
@@ -953,6 +952,22 @@ function verificarGoto() {
   }
 }
 
+// Inicializar EmailJS una sola vez
+(function() {
+  var s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';
+  s.onload = function() {
+    var cfg = getNotifConfig();
+    if (cfg.emailjsPublicKey) {
+      window.emailjs.init({ publicKey: cfg.emailjsPublicKey });
+    } else {
+      window.emailjs.init({ publicKey: 'Hn3mgOJeQOhzZBhNw' });
+    }
+    window._ejsReady = true;
+  };
+  document.head.appendChild(s);
+})();
+
 registrarSW();
 initFirebase();
 
@@ -981,10 +996,6 @@ function notificarEvento(tipo, pedido) {
       + '</div></div></div>';
 
     function doMail() {
-      if (!_ejsInited) {
-        window.emailjs.init({ publicKey: cfg.emailjsPublicKey });
-        _ejsInited = true;
-      }
       window.emailjs.send(cfg.emailjsServiceId, cfg.emailjsTemplateId, {
         to_email: cfg.emailDestino,
         fecha: fecha(),
@@ -996,13 +1007,8 @@ function notificarEvento(tipo, pedido) {
       }).then(function(){ console.log('mail ok'); })
         .catch(function(e){ console.log('mail err:', JSON.stringify(e)); });
     }
-    if (window.emailjs) { doMail(); }
-    else {
-      var s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';
-      s.onload = doMail;
-      document.head.appendChild(s);
-    }
+    if (window._ejsReady) { doMail(); }
+    else { setTimeout(doMail, 1500); }
   }
 
   // WhatsApp via UltraMsg
