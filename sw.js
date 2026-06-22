@@ -68,21 +68,26 @@ function programarAlarmaDiaria(horaStr) {
   }, ms);
 }
 
-// Click en la notificación — abre la app en la sección de pedidos
+// Click en la notificación
 self.addEventListener('notificationclick', function(e) {
   e.notification.close();
-  var url = '/VEOYOCA-APP/?tab=home';
+  var tag = e.notification.tag || '';
+  var tab = tag.indexOf('entregado') >= 0 ? 'reportes' : 'home';
 
   e.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(lista) {
-      for (var i = 0; i < lista.length; i++) {
-        if (lista[i].url.indexOf('VEOYOCA-APP') >= 0) {
-          lista[i].focus();
-          lista[i].postMessage({ tipo: 'IR_TAB', tab: 'home' });
-          return;
-        }
+      // Guardar en todos los clientes abiertos
+      lista.forEach(function(c) {
+        c.postMessage({ tipo: 'IR_TAB', tab: tab });
+      });
+      if (lista.length > 0) {
+        return lista[0].focus();
       }
-      return clients.openWindow(url);
+      // App cerrada — abrir y el index.html leerá veo_goto al iniciar
+      return self.clients.openWindow('https://jorgerinconl24-hub.github.io/VEOYOCA-APP/');
     })
   );
 });
+
+// Guardar destino en cache para cuando la app abra desde cero
+self.addEventListener('notificationclick', function(e){}, true);
