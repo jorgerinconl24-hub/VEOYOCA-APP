@@ -332,6 +332,7 @@ async function marcarEntregado(id){
   var card=document.getElementById('card-'+id);
   if(card){card.style.opacity='.4';card.querySelector('.card-foot').innerHTML='<span style="color:var(--success);font-size:13px;font-weight:600">Entregado hoy</span>';}
   toast('Pedido entregado','ok');
+  notificarEvento('ENTREGADO', p);
   notificarSW('✅ Pedido entregado', 'Cliente: '+(p.cliente||'')+(nota?' — '+nota:''), 'entregado-'+id);
 }
 
@@ -354,6 +355,7 @@ async function crearPedido(){
   await guardarDB();
   ['n-numero','n-cliente','n-ciudad','n-proveedor','n-oc','n-fecha','n-desc'].forEach(function(id){document.getElementById(id).value='';});
   toast('Pedido #'+numero+' creado en la nube','ok');
+  notificarEvento('NUEVO', p);
   notificarSW('📦 Nuevo pedido #'+numero, 'Cliente: '+cliente+' — '+desc.substring(0,60), 'nuevo-pedido');
 }
 
@@ -953,6 +955,68 @@ function verificarGoto() {
 
 registrarSW();
 initFirebase();
+
+// ═══════════════════════════════════════════════════════════
+// NOTIFICACIONES DE EVENTOS (correo + WA)
+// ═══════════════════════════════════════════════════════════
+function notificarEvento(tipo, pedido) {
+  var cfg = getNotifConfig();
+  var esNuevo = tipo === 'NUEVO';
+  var titulo = esNuevo ? 'Nuevo pedido #' : 'Pedido entregado #';
+  titulo += (pedido.numero||'?') + ' - ' + (pedido.cliente||'');
+
+  // Correo
+  if (cfg.emailActivo && cfg.emailjsServiceId && cfg.emailjsTemplateId && cfg.emailjsPublicKey && cfg.emailDestino) {
+    var filas = 'Pedido: #' + (pedido.numero||'?')
+      + ' | Cliente: ' + (pedido.cliente||'')
+      + ' | Ciudad: ' + (pedido.ciudad||'-')
+      + ' | Vendedor: ' + (pedido.vendedor||'-')
+      + ' | Fecha limite: ' + (pedido.fechaLimite||'-')
+      + ' | Estado: ' + tipo
+      + (esNuevo ? '' : ' | Entregado por: ' + (pedido.entregadoPor||SESSION.nombre));
+
+    var htmlMail = '<div style="font-family:Arial,sans-serif;padding:20px;max-width:600px">'
+      + '<div style="background:#1a1a2e;padding:16px;border-radius:8px 8px 0 0">'
+      + '<h2 style="color:#fff;margin:0;font-size:16px">' + titulo + '</h2>'
+      + '<p style="color:rgba(255,255,255,.6);margin:4px 0 0;font-size:12px">' + fecha() + ' - ' + hora() + '</p>'
+      + '</div>'
+      + '<div style="background:#f9fafb;border:1px solid #e5e7eb;border-top:none;padding:16px;border-radius:0 0 8px 8px">'
+      + '<p style="font-size:14px;color:#374151;line-height:1.8">' + filas.replace(/\|/g,'<br>') + '</p>'
+      + '<div style="text-align:center;margin-top:16px">'
+      + '<a href="https://jorgerinconl24-hub.github.io/VEOYOCA-APP/" style="background:#1a1a2e;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:13px">Ver en VeoYoca</a>'
+      + '</div></div></div>';
+
+    function enviarMailEvento() {
+      window.emailjs.init({ publicKey: cfg.emailjsPublicKey });
+      window.emailjs.send(cfg.emailjsServiceId, cfg.emailjsTemplateId, {
+        to_email: cfg.emailDestino,
+        fecha: fecha(),
+        total: '1',
+        vencidos_n: '0',
+        urgentes_n: '0',
+        lista_vencidos: htmlMail,
+        lista_urgentes: ''
+      }).catch(function(err){ console.log('mail evento err:', err); });
+    }
+    if (window.emailjs) { enviarMailEvento(); }
+    else {
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';
+      s.onload = enviarMailEvento;
+      document.head.appendChild(s);
+    }
+  }
+
+  // WhatsApp via UltraMsg
+  if (cfg.waActivo && cfg.waNumero) {
+    var msgWA = titulo + ' | ' + (pedido.ciudad||'-') + ' | Vendedor: ' + (pedido.vendedor||'-') + ' | ' + (pedido.fechaLimite||'sin fecha');
+    var xhrEv = new XMLHttpRequest();
+    xhrEv.open('POST', 'https://api.ultramsg.com/instance181941/messages/chat', true);
+    xhrEv.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    xhrEv.timeout = 6000;
+    xhrEv.send('token=jd3odrhspk539mmp&to=' + encodeURIComponent(cfg.waNumero) + '&body=' + encodeURIComponent(msgWA));
+  }
+}
 </script>
 </body>
 </html>
