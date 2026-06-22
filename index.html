@@ -922,6 +922,15 @@ function notificarSW(titulo, cuerpo, tag) {
   }
 }
 
+// Escuchar mensajes del Service Worker
+navigator.serviceWorker && navigator.serviceWorker.addEventListener('message', function(e) {
+  if (e.data && e.data.tipo === 'IR_TAB' && SESSION) {
+    var tab = e.data.tab || 'home';
+    var btn = document.getElementById('nb-' + tab);
+    goTab(tab, btn);
+  }
+});
+
 registrarSW();
 initFirebase();
 </script>
