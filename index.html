@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <meta name="theme-color" content="#1a1a2e">
-  <link rel="manifest" href="/VEOYOCA-APP/manifest.json">
+<link rel="manifest" href="/VEOYOCA-APP/manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="VeoYoca">
@@ -86,6 +86,29 @@ button{cursor:pointer;font-family:inherit}input,select,textarea{font-family:inhe
 .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;padding:11px 20px;border-radius:10px;font-size:14px;z-index:200;opacity:0;transition:opacity .25s;pointer-events:none;max-width:88vw;text-align:center;font-weight:500}
 .toast.show{opacity:1}.toast.t-ok{background:var(--success)}.toast.t-err{background:var(--danger)}.toast.t-warn{background:var(--warning)}
 .empty{text-align:center;padding:48px 20px;color:var(--muted);font-size:14px}.empty-icon{font-size:40px;margin-bottom:10px}
+/* NOTIFICACIONES */
+.notif-banner{background:linear-gradient(135deg,#1a1a2e,#2d2d5e);border-radius:14px;padding:16px;margin:14px;color:#fff}
+.notif-banner h3{font-size:14px;font-weight:700;margin-bottom:4px}
+.notif-banner p{font-size:12px;opacity:.7;margin-bottom:12px}
+.notif-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.1)}
+.notif-row:last-child{border:none}
+.notif-icon{font-size:22px;width:36px;text-align:center;flex-shrink:0}
+.notif-info{flex:1;min-width:0}
+.notif-label{font-size:13px;font-weight:600}
+.notif-sub{font-size:11px;opacity:.6;margin-top:2px}
+.notif-toggle{position:relative;width:44px;height:24px;flex-shrink:0}
+.notif-toggle input{opacity:0;width:0;height:0}
+.notif-slider{position:absolute;inset:0;background:rgba(255,255,255,.2);border-radius:99px;cursor:pointer;transition:.3s}
+.notif-slider:before{content:'';position:absolute;width:18px;height:18px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.3s}
+.notif-toggle input:checked+.notif-slider{background:#16a34a}
+.notif-toggle input:checked+.notif-slider:before{transform:translateX(20px)}
+.notif-config{background:rgba(255,255,255,.08);border-radius:10px;padding:12px;margin-top:8px}
+.notif-config label{font-size:11px;opacity:.7;display:block;margin-bottom:4px}
+.notif-config input{width:100%;padding:8px 10px;border-radius:8px;border:none;font-size:13px;background:rgba(255,255,255,.15);color:#fff;margin-bottom:8px}
+.notif-config input::placeholder{color:rgba(255,255,255,.4)}
+.btn-notif-test{background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;width:100%;margin-top:4px}
+.btn-notif-test:hover{background:rgba(255,255,255,.25)}
+.notif-dot{width:8px;height:8px;border-radius:50%;background:#dc2626;position:absolute;top:2px;right:2px}
 </style>
 </head>
 <body>
@@ -105,9 +128,12 @@ button{cursor:pointer;font-family:inherit}input,select,textarea{font-family:inhe
 <button class="nav-btn" onclick="goTab('reportes',this)" id="nb-reportes"><div class="nav-icon">&#x1F4CA;</div><div>Reportes</div></button>
 <button class="nav-btn" onclick="goTab('ia',this)" id="nb-ia"><div class="nav-icon">&#x1F916;</div><div>IA</div></button>
 <button class="nav-btn" onclick="goTab('plan',this)" id="nb-plan"><div class="nav-icon">&#x1F5FA;</div><div>Rutas</div></button>
+<button class="nav-btn" onclick="goTab('notif',this)" id="nb-notif" style="position:relative"><div class="nav-icon">&#x1F514;</div><div>Alertas</div></button>
 <button class="nav-btn" id="nb-admin" onclick="goTab('admin',this)" style="display:none"><div class="nav-icon">&#x2699;&#xFE0F;</div><div>Admin</div></button>
 </div></div>
 <div class="sync-badge" id="sync-badge">&#x2713; Guardado</div>
+
+<!-- MODALES -->
 <div class="overlay" id="modal-edit"><div class="sheet"><div class="sheet-handle"></div>
 <div class="sheet-head"><h2 id="modal-titulo">Editar pedido</h2><button class="sheet-close" onclick="cerrarModal('modal-edit')">&#x2715;</button></div>
 <div class="sheet-body"><input type="hidden" id="e-id">
@@ -121,10 +147,12 @@ button{cursor:pointer;font-family:inherit}input,select,textarea{font-family:inhe
 <div class="sfield"><label># Orden de compra</label><input type="text" id="e-oc" placeholder="Ej: OC-2026-045"></div></div>
 <div class="sfield"><label>Nota / Observaci&#xF3;n</label><input type="text" id="e-nota" placeholder="Observaci&#xF3;n adicional"></div></div>
 <div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal('modal-edit')">Cancelar</button><button class="btn btn-blue" onclick="guardarEdicion()">Guardar cambios</button></div></div></div>
+
 <div class="overlay" id="modal-perfil"><div class="sheet"><div class="sheet-handle"></div>
 <div class="sheet-head"><h2>Mi perfil</h2><button class="sheet-close" onclick="cerrarModal('modal-perfil')">&#x2715;</button></div>
 <div class="sheet-body" id="perfil-body"></div>
 <div class="sheet-foot"><button class="btn btn-red" onclick="logout()">Cerrar sesi&#xF3;n</button></div></div></div>
+
 <div class="overlay" id="modal-usuario"><div class="sheet"><div class="sheet-handle"></div>
 <div class="sheet-head"><h2 id="u-titulo">Nuevo usuario</h2><button class="sheet-close" onclick="cerrarModal('modal-usuario')">&#x2715;</button></div>
 <div class="sheet-body"><input type="hidden" id="u-id">
@@ -133,9 +161,13 @@ button{cursor:pointer;font-family:inherit}input,select,textarea{font-family:inhe
 <div class="sfield"><label>Contrase&#xF1;a</label><input type="password" id="u-pass" placeholder="&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;"></div></div>
 <div class="sfield"><label>Rol</label><select id="u-rol"><option value="empleado">Empleado</option><option value="admin">Administrador</option></select></div></div>
 <div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal('modal-usuario')">Cancelar</button><button class="btn btn-dark" onclick="guardarUsuario()">Guardar</button></div></div></div>
+
 <div class="toast" id="toast"></div>
+
 <script>
-// VeoYoca con Firebase — variables globales
+// ═══════════════════════════════════════════════════════════
+// VARIABLES GLOBALES
+// ═══════════════════════════════════════════════════════════
 var DB = {usuarios:[],pedidos:[],bitacora:[]};
 var SESSION = null;
 var TAB = 'home';
@@ -143,7 +175,9 @@ var PEDIDO_EDIT_ID = null;
 var SAVING = false;
 var _db = null;
 
-// Helpers
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
 function fecha(){return new Date().toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'});}
 function hora(){return new Date().toLocaleTimeString('es-VE',{hour:'2-digit',minute:'2-digit'});}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).substr(2,5);}
@@ -157,7 +191,9 @@ function fechaInput(f){if(!f)return '';var p=f.split('/');if(p.length!==3)return
 function inputFecha(f){if(!f)return '';var p=f.split('-');if(p.length!==3)return '';return p[2]+'/'+p[1]+'/'+p[0];}
 function registrarBitacora(id,accion){DB.bitacora.push({pedidoId:id,accion:accion,usuario:SESSION.nombre,fecha:fecha(),hora:hora()});if(DB.bitacora.length>500)DB.bitacora=DB.bitacora.slice(-500);}
 
-// Firebase guardar
+// ═══════════════════════════════════════════════════════════
+// FIREBASE
+// ═══════════════════════════════════════════════════════════
 async function guardarDB(){
   if(SAVING||!_db)return;
   SAVING=true;mostrarBadge('syncing');
@@ -169,7 +205,9 @@ async function guardarDB(){
   SAVING=false;
 }
 
-// Auth
+// ═══════════════════════════════════════════════════════════
+// AUTH
+// ═══════════════════════════════════════════════════════════
 function login(){
   var u=document.getElementById('l-user').value.trim().toLowerCase();
   var p=document.getElementById('l-pass').value;
@@ -185,6 +223,8 @@ function mostrarApp(){
   document.getElementById('user-avatar').textContent=SESSION.nombre.substring(0,2).toUpperCase();
   document.getElementById('topbar-sub').textContent=SESSION.nombre;
   if(SESSION.rol==='admin')document.getElementById('nb-admin').style.display='flex';
+  // Verificar pedidos críticos al entrar
+  setTimeout(verificarYNotificarAlEntrar, 2000);
   goTab('home',document.getElementById('nb-home'));
 }
 function mostrarPerfil(){
@@ -194,10 +234,12 @@ function mostrarPerfil(){
   document.getElementById('modal-perfil').classList.add('open');
 }
 
-// Tabs
+// ═══════════════════════════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════════════════════════
 function goTab(tab,btn){
   TAB=tab;document.querySelectorAll('.nav-btn').forEach(function(b){b.classList.remove('on');});if(btn)btn.classList.add('on');
-  var titulos={home:'Pedidos',entregar:'Despacho',nuevo:'Nuevo pedido',reportes:'Reportes',admin:'Administracion',plan:'Rutas',ia:'Plan IA'};
+  var titulos={home:'Pedidos',entregar:'Despacho',nuevo:'Nuevo pedido',reportes:'Reportes',admin:'Administracion',plan:'Rutas',ia:'Plan IA',notif:'Alertas y Notificaciones'};
   document.getElementById('topbar-sub').textContent=titulos[tab]||SESSION.nombre;
   var c=document.getElementById('content');
   c.onclick=function(e){
@@ -206,10 +248,19 @@ function goTab(tab,btn){
     if(ed)abrirEditar(ed);
     if(en)marcarEntregado(en);
   };
-  if(tab==='home')renderHome(c);else if(tab==='entregar')renderEntregar(c);else if(tab==='nuevo')renderNuevo(c);else if(tab==='reportes')renderReportes(c);else if(tab==='admin')renderAdmin(c);else if(tab==='plan')renderPlanificacion(c);else if(tab==='ia')renderPlanIA(c);
+  if(tab==='home')renderHome(c);
+  else if(tab==='entregar')renderEntregar(c);
+  else if(tab==='nuevo')renderNuevo(c);
+  else if(tab==='reportes')renderReportes(c);
+  else if(tab==='admin')renderAdmin(c);
+  else if(tab==='plan')renderPlanificacion(c);
+  else if(tab==='ia')renderPlanIA(c);
+  else if(tab==='notif')renderNotificaciones(c);
 }
 
-// Home
+// ═══════════════════════════════════════════════════════════
+// HOME
+// ═══════════════════════════════════════════════════════════
 function renderHome(c){
   var pends=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';});
   var venc=pends.filter(function(p){return clasif(p)==='vencido';}).length;
@@ -256,16 +307,20 @@ function cardHTML(p,conEntregar){
   return h;
 }
 
-// Despacho
+// ═══════════════════════════════════════════════════════════
+// DESPACHO
+// ═══════════════════════════════════════════════════════════
 function renderEntregar(c){
   var listos=DB.pedidos.filter(function(p){return p.estatus==='LISTO';});
   var urgentes=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&clasif(p)==='urgente';});
   var vencidos=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&clasif(p)==='vencido';});
   var html='<div class="section-pad">';
   if(!listos.length&&!urgentes.length&&!vencidos.length){html+='<div class="empty"><div class="empty-icon">OK</div>No hay pedidos urgentes ni listos</div>';}
-  else{if(listos.length){html+='<div class="sec-label">Listos ('+listos.length+')</div>';listos.forEach(function(p){html+=cardHTML(p,true);});}
-  var un=urgentes.filter(function(p){return p.estatus!=='LISTO';});if(un.length){html+='<div class="sec-label">Urgentes</div>';un.forEach(function(p){html+=cardHTML(p,true);});}
-  var vn=vencidos.filter(function(p){return p.estatus!=='LISTO'&&clasif(p)!=='urgente';});if(vn.length){html+='<div class="sec-label">Vencidos</div>';vn.forEach(function(p){html+=cardHTML(p,true);});}}
+  else{
+    if(listos.length){html+='<div class="sec-label">Listos ('+listos.length+')</div>';listos.forEach(function(p){html+=cardHTML(p,true);});}
+    var un=urgentes.filter(function(p){return p.estatus!=='LISTO';});if(un.length){html+='<div class="sec-label">Urgentes</div>';un.forEach(function(p){html+=cardHTML(p,true);});}
+    var vn=vencidos.filter(function(p){return p.estatus!=='LISTO'&&clasif(p)!=='urgente';});if(vn.length){html+='<div class="sec-label">Vencidos</div>';vn.forEach(function(p){html+=cardHTML(p,true);});}
+  }
   c.innerHTML=html+'</div>';
 }
 async function marcarEntregado(id){
@@ -278,7 +333,9 @@ async function marcarEntregado(id){
   toast('Pedido entregado','ok');
 }
 
-// Nuevo
+// ═══════════════════════════════════════════════════════════
+// NUEVO PEDIDO
+// ═══════════════════════════════════════════════════════════
 function renderNuevo(c){
   var vends=DB.usuarios.map(function(u){return '<option value="'+u.nombre+'">'+u.nombre+'</option>';}).join('');
   c.innerHTML='<div class="section-pad"><div class="card" style="padding:16px"><div class="sfield-row"><div class="sfield"><label># Pedido</label><input type="text" id="n-numero" placeholder="Ej: 432"></div><div class="sfield"><label>Cliente *</label><input type="text" id="n-cliente" placeholder="Nombre del cliente"></div></div><div class="sfield-row"><div class="sfield"><label>Ciudad</label><input type="text" id="n-ciudad" placeholder="Ciudad"></div><div class="sfield"><label>Vendedor</label><select id="n-vendedor"><option value="">Seleccionar</option>'+vends+'</select></div></div><div class="sfield-row"><div class="sfield"><label>Proveedor</label><input type="text" id="n-proveedor" placeholder="Ej: ORION..."></div><div class="sfield"><label># OC</label><input type="text" id="n-oc" placeholder="Ej: OC-2026-045"></div></div><div class="sfield-row"><div class="sfield"><label>Fecha limite</label><input type="date" id="n-fecha"></div><div class="sfield"><label>Estado</label><select id="n-estado"><option value="PENDIENTE">Pendiente</option><option value="EN PROCESO">En proceso</option><option value="LISTO">Listo</option></select></div></div><div class="sfield"><label>Descripcion *</label><textarea id="n-desc" placeholder="Productos, medidas, colores, cantidades..."></textarea></div><button class="btn btn-dark" style="width:100%;padding:13px;font-size:15px;margin-top:4px" onclick="crearPedido()">Crear pedido</button></div></div>';
@@ -297,7 +354,9 @@ async function crearPedido(){
   toast('Pedido #'+numero+' creado en la nube','ok');
 }
 
-// Editar
+// ═══════════════════════════════════════════════════════════
+// EDITAR
+// ═══════════════════════════════════════════════════════════
 function abrirEditar(id){
   var p=DB.pedidos.find(function(x){return x.id===id;});if(!p)return;
   PEDIDO_EDIT_ID=id;
@@ -323,7 +382,9 @@ async function guardarEdicion(){
   await guardarDB();cerrarModal('modal-edit');goTab(TAB,document.getElementById('nb-'+TAB));toast('Pedido actualizado','ok');
 }
 
-// Reportes
+// ═══════════════════════════════════════════════════════════
+// REPORTES
+// ═══════════════════════════════════════════════════════════
 function renderReportes(c){
   var total=DB.pedidos.length,ent=DB.pedidos.filter(function(p){return p.estatus==='ENTREGADO';}).length;
   var pend=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';}).length;
@@ -340,7 +401,9 @@ function renderReportes(c){
   c.innerHTML=html;
 }
 
-// Admin
+// ═══════════════════════════════════════════════════════════
+// ADMIN
+// ═══════════════════════════════════════════════════════════
 function renderAdmin(c){
   if(SESSION.rol!=='admin'){c.innerHTML='<div class="empty">Acceso denegado</div>';return;}
   var html='<div class="section-pad"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="sec-label" style="margin:0">Usuarios ('+DB.usuarios.length+')</div><button class="btn btn-dark btn-sm" data-nuevo-usuario="1">+ Agregar</button></div><div class="admin-section">';
@@ -348,7 +411,7 @@ function renderAdmin(c){
     html+='<div class="admin-row"><div class="admin-info"><div class="admin-name">'+u.nombre+'</div><div class="admin-meta">@'+u.username+' - '+u.creado+'</div></div>';
     html+='<span class="role-badge '+(u.rol==='admin'?'role-admin':'role-emp')+'">'+u.rol+'</span>';
     if(u.id!==SESSION.id){html+='<button class="btn btn-ghost btn-sm" data-edit-user="'+u.id+'">Editar</button><button class="btn btn-red btn-sm" data-del-user="'+u.id+'">Eliminar</button>';}
-    else{html+='<span style="font-size:11px;color:var(--muted)">Tu</span>';}
+    else{html+='<span style="font-size:11px;color:var(--muted)">Tú</span>';}
     html+='</div>';
   });
   html+='</div><div class="sec-label" style="margin-top:20px">Sistema</div><div class="admin-section">';
@@ -382,7 +445,9 @@ async function borrarPedidos(){if(!confirm('Borrar TODOS los pedidos?'))return;D
 function exportarJSON(){var a=document.createElement('a');a.href='data:application/json;charset=utf-8,'+encodeURIComponent(JSON.stringify({pedidos:DB.pedidos,bitacora:DB.bitacora},null,2));a.download='veoyoca_'+fecha().replace(/\//g,'-')+'.json';a.click();}
 function exportarCSV(){var rows=[['ID','Numero','Cliente','Ciudad','Vendedor','Estado','Fecha limite','Descripcion']];DB.pedidos.forEach(function(p){rows.push([p.id,p.numero||'',p.cliente||'',p.ciudad||'',p.vendedor||'',p.estatus||'',p.fechaLimite||'',p.descripcion||'']);});var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download='pedidos_'+fecha().replace(/\//g,'-')+'.csv';a.click();}
 
-// Rutas/Plan
+// ═══════════════════════════════════════════════════════════
+// RUTAS
+// ═══════════════════════════════════════════════════════════
 var ZONAS=[{nombre:'Maracaibo',ciudades:['MARACAIBO','NORTE','SUR','CENTRO','AMPARO','COROMOTO','HATICOS','DELICIAS','SANTA LUCIA','SAN FRANCISCO','SIERRA MAESTRA','ZONA INDUSTRIAL','BELLA VISTA']},{nombre:'Sur del lago',ciudades:['EL MOJAN','MARA','SANTA BARBARA','LOS PUERTOS','ALTAGRACIA']},{nombre:'Cabimas / C. Ojeda',ciudades:['CABIMAS','CIUDAD OJEDA','LAGUNILLAS']},{nombre:'Machiques / Perija',ciudades:['MACHIQUES','PERIJA','VILLA DEL ROSARIO','LA VILLA','CARRASQUERO']},{nombre:'Coro / Falcon',ciudades:['CORO','FALCON','TUCACAS','DABAJURO','PUNTO FIJO']},{nombre:'Barquisimeto',ciudades:['BARQUISIMETO','CARORA','YARACUY']},{nombre:'San Cristobal',ciudades:['SAN CRISTOBAL','TACHIRA']},{nombre:'Merida / Los Andes',ciudades:['MERIDA','VALERA','TRUJILLO']},{nombre:'Barinas / Llanos',ciudades:['BARINAS','ACARIGUA','GUASDUALITO','APURE']},{nombre:'Caracas / Centro',ciudades:['CARACAS','PETARE','LOS TEQUES','MIRANDA']},{nombre:'Valencia / Carabobo',ciudades:['VALENCIA','CARABOBO','MARACAY','ARAGUA','TURMERO']},{nombre:'Oriente',ciudades:['MATURIN','EL TIGRE','BARCELONA','CIUDAD BOLIVAR','ANZOATEGUI','PUERTO ORDAZ']},{nombre:'Otros',ciudades:[]}];
 function getZona(ciudad){if(!ciudad)return 'Sin ciudad';var cu=ciudad.toUpperCase().trim();for(var i=0;i<ZONAS.length-1;i++)for(var j=0;j<ZONAS[i].ciudades.length;j++)if(cu.indexOf(ZONAS[i].ciudades[j])>=0||ZONAS[i].ciudades[j].indexOf(cu)>=0)return ZONAS[i].nombre;return ciudad;}
 function renderPlanificacion(c){
@@ -410,7 +475,9 @@ function exportarPlan(){
   var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download='plan_'+fecha().replace(/\//g,'-')+'.csv';a.click();
 }
 
-// Plan IA
+// ═══════════════════════════════════════════════════════════
+// PLAN IA
+// ═══════════════════════════════════════════════════════════
 var MODELO='claude-sonnet-4-6';
 function renderPlanIA(c){
   var pends=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';});
@@ -438,7 +505,299 @@ function mostrarResultadoIA(texto){
 }
 function copiarPlan(){var el=document.getElementById('ia-texto');if(!el)return;navigator.clipboard.writeText(el.innerText||el.textContent).then(function(){toast('Copiado','ok');}).catch(function(){toast('No se pudo copiar','err');});}
 
-// FIREBASE INIT — usando CDN importmap
+// ═══════════════════════════════════════════════════════════
+// SISTEMA DE NOTIFICACIONES
+// ═══════════════════════════════════════════════════════════
+
+// --- Config guardada localmente ---
+function getNotifConfig(){
+  try{ return JSON.parse(localStorage.getItem('veo_notif')||'{}'); }catch(e){ return {}; }
+}
+function setNotifConfig(cfg){
+  localStorage.setItem('veo_notif', JSON.stringify(cfg));
+}
+
+// --- Construir reporte de pedidos críticos ---
+function buildReporte(){
+  var vencidos = DB.pedidos.filter(function(p){ return p.estatus!=='ENTREGADO' && clasif(p)==='vencido'; });
+  var urgentes = DB.pedidos.filter(function(p){ return p.estatus!=='ENTREGADO' && clasif(p)==='urgente'; });
+  return { vencidos: vencidos, urgentes: urgentes };
+}
+
+// --- 1. NOTIFICACIÓN EN LA APP (Web Push nativo del navegador) ---
+function solicitarPermisoNotificaciones(){
+  if(!('Notification' in window)){ toast('Este navegador no soporta notificaciones','err'); return; }
+  Notification.requestPermission().then(function(perm){
+    var cfg = getNotifConfig();
+    cfg.pushActivo = (perm === 'granted');
+    setNotifConfig(cfg);
+    if(perm === 'granted'){
+      toast('Notificaciones activadas ✓','ok');
+      new Notification('VeoYoca activado', { body: 'Recibirás alertas de pedidos críticos', icon: '/VEOYOCA-APP/icon-192.png' });
+      renderNotificaciones(document.getElementById('content'));
+    } else {
+      toast('Permiso denegado. Actívalo en configuración del navegador.','err');
+    }
+  });
+}
+
+function enviarNotifApp(){
+  if(Notification.permission !== 'granted'){ toast('Activa las notificaciones primero','warn'); return; }
+  var r = buildReporte();
+  var total = r.vencidos.length + r.urgentes.length;
+  if(total === 0){ toast('No hay pedidos críticos en este momento','ok'); return; }
+  var cuerpo = '';
+  if(r.vencidos.length) cuerpo += '🔴 '+r.vencidos.length+' vencidos: '+r.vencidos.slice(0,2).map(function(p){return p.cliente;}).join(', ')+(r.vencidos.length>2?'...':'')+'\n';
+  if(r.urgentes.length) cuerpo += '🟡 '+r.urgentes.length+' urgentes próximos a vencer';
+  new Notification('⚠ VeoYoca — '+total+' pedidos críticos', {
+    body: cuerpo,
+    icon: '/VEOYOCA-APP/icon-192.png',
+    badge: '/VEOYOCA-APP/icon-192.png',
+    tag: 'veoyoca-alerta',
+    requireInteraction: true
+  });
+  toast('Notificación enviada','ok');
+}
+
+// Verificar al entrar a la app
+function verificarYNotificarAlEntrar(){
+  var cfg = getNotifConfig();
+  if(!cfg.pushActivo || Notification.permission !== 'granted') return;
+  var r = buildReporte();
+  if(r.vencidos.length + r.urgentes.length === 0) return;
+  // Solo notificar una vez por día
+  var hoyStr = new Date().toDateString();
+  if(cfg.ultimaNotifPush === hoyStr) return;
+  cfg.ultimaNotifPush = hoyStr;
+  setNotifConfig(cfg);
+  enviarNotifApp();
+}
+
+// --- 2. CORREO con EmailJS ---
+function enviarCorreo(){
+  var cfg = getNotifConfig();
+  if(!cfg.emailjsServiceId || !cfg.emailjsTemplateId || !cfg.emailjsPublicKey || !cfg.emailDestino){
+    toast('Configura el correo primero','err'); return;
+  }
+  var r = buildReporte();
+  var total = r.vencidos.length + r.urgentes.length;
+  if(total === 0){ toast('No hay pedidos críticos para reportar','ok'); return; }
+
+  var listaVenc = r.vencidos.map(function(p){
+    return '#'+(p.numero||'?')+' '+p.cliente+' ('+p.ciudad+') — Vencido '+ Math.abs(diasRestantes(p.fechaLimite))+'d';
+  }).join('\n');
+  var listaUrg = r.urgentes.map(function(p){
+    return '#'+(p.numero||'?')+' '+p.cliente+' ('+p.ciudad+') — Vence en '+diasRestantes(p.fechaLimite)+'d';
+  }).join('\n');
+
+  var templateParams = {
+    to_email:    cfg.emailDestino,
+    fecha:       fecha(),
+    total:       total,
+    vencidos_n:  r.vencidos.length,
+    urgentes_n:  r.urgentes.length,
+    lista_vencidos:  listaVenc || 'Ninguno',
+    lista_urgentes:  listaUrg || 'Ninguno',
+  };
+
+  toast('Enviando correo...','');
+  // Cargar EmailJS dinámicamente si no está cargado
+  function doSend(){
+    window.emailjs.send(cfg.emailjsServiceId, cfg.emailjsTemplateId, templateParams, cfg.emailjsPublicKey)
+      .then(function(){ toast('Correo enviado ✓','ok'); })
+      .catch(function(e){ toast('Error correo: '+(e.text||e.message||JSON.stringify(e)),'err'); });
+  }
+  if(window.emailjs){ doSend(); }
+  else{
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';
+    s.onload = function(){ window.emailjs.init(cfg.emailjsPublicKey); doSend(); };
+    document.head.appendChild(s);
+  }
+}
+
+// --- 3. WHATSAPP con CallMeBot ---
+function enviarWhatsApp(){
+  var cfg = getNotifConfig();
+  if(!cfg.waNumero || !cfg.waApikey){
+    toast('Configura WhatsApp primero','err'); return;
+  }
+  var r = buildReporte();
+  var total = r.vencidos.length + r.urgentes.length;
+  if(total === 0){ toast('No hay pedidos críticos para reportar','ok'); return; }
+
+  var msg = '🚨 *VeoYoca — Reporte '+fecha()+'*\n\n';
+  if(r.vencidos.length){
+    msg += '🔴 *VENCIDOS ('+r.vencidos.length+')*\n';
+    r.vencidos.forEach(function(p){
+      msg += '• #'+(p.numero||'?')+' '+p.cliente+' ('+p.ciudad+') — '+Math.abs(diasRestantes(p.fechaLimite))+'d vencido\n';
+    });
+    msg += '\n';
+  }
+  if(r.urgentes.length){
+    msg += '🟡 *URGENTES ('+r.urgentes.length+')*\n';
+    r.urgentes.forEach(function(p){
+      msg += '• #'+(p.numero||'?')+' '+p.cliente+' ('+p.ciudad+') — vence en '+diasRestantes(p.fechaLimite)+'d\n';
+    });
+  }
+
+  var url = 'https://api.callmebot.com/whatsapp.php?phone='+encodeURIComponent(cfg.waNumero)+'&text='+encodeURIComponent(msg)+'&apikey='+encodeURIComponent(cfg.waApikey);
+  toast('Enviando WhatsApp...','');
+  fetch(url, {mode:'no-cors'})
+    .then(function(){ toast('WhatsApp enviado ✓ (verifica tu teléfono)','ok'); })
+    .catch(function(e){ toast('Error WA: '+e.message,'err'); });
+}
+
+// --- Enviar todo a la vez ---
+function enviarTodo(){
+  var cfg = getNotifConfig();
+  if(cfg.pushActivo) enviarNotifApp();
+  if(cfg.emailActivo) enviarCorreo();
+  if(cfg.waActivo) enviarWhatsApp();
+  if(!cfg.pushActivo && !cfg.emailActivo && !cfg.waActivo){
+    toast('Activa al menos un canal de notificación','warn');
+  }
+}
+
+// --- RENDER PANTALLA NOTIFICACIONES ---
+function renderNotificaciones(c){
+  var cfg = getNotifConfig();
+  var r = buildReporte();
+  var pushOk = ('Notification' in window) && Notification.permission === 'granted';
+
+  var html = '<div style="padding:14px">';
+
+  // Banner estado crítico
+  var critTotal = r.vencidos.length + r.urgentes.length;
+  if(critTotal > 0){
+    html += '<div style="background:#dc2626;border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px">';
+    html += '<div style="font-size:28px">🚨</div>';
+    html += '<div><div style="color:#fff;font-weight:700;font-size:14px">'+critTotal+' pedidos requieren atención</div>';
+    html += '<div style="color:rgba(255,255,255,.8);font-size:12px">'+r.vencidos.length+' vencidos · '+r.urgentes.length+' urgentes</div></div>';
+    html += '<button onclick="enviarTodo()" class="btn btn-sm" style="margin-left:auto;background:#fff;color:#dc2626;white-space:nowrap">Enviar alerta</button>';
+    html += '</div>';
+  } else {
+    html += '<div style="background:#16a34a;border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px">';
+    html += '<div style="font-size:28px">✅</div>';
+    html += '<div style="color:#fff;font-weight:700;font-size:14px">Todo bajo control<br><span style="font-size:12px;font-weight:400;opacity:.8">No hay pedidos críticos ahora mismo</span></div>';
+    html += '</div>';
+  }
+
+  // Panel de canales
+  html += '<div class="notif-banner">';
+  html += '<h3>🔔 Canales de notificación</h3>';
+  html += '<p>Configura cómo quieres recibir las alertas de pedidos vencidos y urgentes</p>';
+
+  // --- Canal 1: App ---
+  html += '<div class="notif-row">';
+  html += '<div class="notif-icon">📱</div>';
+  html += '<div class="notif-info"><div class="notif-label">Notificación en la app</div>';
+  html += '<div class="notif-sub">'+(pushOk ? '✓ Activado — aparece en tu celular' : 'Toca para activar')+'</div></div>';
+  if(pushOk){
+    html += '<button onclick="enviarNotifApp()" class="btn-notif-test" style="width:auto;padding:5px 12px;margin-top:0">Probar</button>';
+  } else {
+    html += '<button onclick="solicitarPermisoNotificaciones()" style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer">Activar</button>';
+  }
+  html += '</div>';
+
+  // --- Canal 2: Correo EmailJS ---
+  var emailOk = cfg.emailjsServiceId && cfg.emailjsTemplateId && cfg.emailjsPublicKey && cfg.emailDestino;
+  html += '<div class="notif-row">';
+  html += '<div class="notif-icon">📧</div>';
+  html += '<div class="notif-info"><div class="notif-label">Correo electrónico</div>';
+  html += '<div class="notif-sub">'+(emailOk ? '✓ Configurado: '+cfg.emailDestino : 'Requiere cuenta EmailJS gratuita')+'</div></div>';
+  html += '<label class="notif-toggle"><input type="checkbox" id="tog-email" '+(cfg.emailActivo?'checked':'')+' onchange="toggleCanal(\'email\',this.checked)"><span class="notif-slider"></span></label>';
+  html += '</div>';
+
+  if(!emailOk || document.getElementById && false){
+    html += '<div class="notif-config" id="email-config-panel">';
+    html += '<label>Correo destino</label><input type="email" id="cfg-email-destino" placeholder="tu@correo.com" value="'+(cfg.emailDestino||'')+'"><br>';
+    html += '<label>EmailJS Service ID</label><input type="text" id="cfg-emailjs-sid" placeholder="service_xxxxxxx" value="'+(cfg.emailjsServiceId||'')+'"><br>';
+    html += '<label>EmailJS Template ID</label><input type="text" id="cfg-emailjs-tid" placeholder="template_xxxxxxx" value="'+(cfg.emailjsTemplateId||'')+'"><br>';
+    html += '<label>EmailJS Public Key</label><input type="text" id="cfg-emailjs-key" placeholder="xxxxxxxxxxxx" value="'+(cfg.emailjsPublicKey||'')+'"><br>';
+    html += '<button class="btn-notif-test" onclick="guardarConfigEmail()">Guardar configuración</button>';
+    html += '</div>';
+  }
+
+  // --- Canal 3: WhatsApp CallMeBot ---
+  var waOk = cfg.waNumero && cfg.waApikey;
+  html += '<div class="notif-row">';
+  html += '<div class="notif-icon">💬</div>';
+  html += '<div class="notif-info"><div class="notif-label">WhatsApp</div>';
+  html += '<div class="notif-sub">'+(waOk ? '✓ Configurado: '+cfg.waNumero : 'Requiere registro en CallMeBot (gratis)')+'</div></div>';
+  html += '<label class="notif-toggle"><input type="checkbox" id="tog-wa" '+(cfg.waActivo?'checked':'')+' onchange="toggleCanal(\'wa\',this.checked)"><span class="notif-slider"></span></label>';
+  html += '</div>';
+
+  html += '</div>'; // fin notif-banner
+
+  // Formulario de configuración expandido
+  html += '<div style="background:#fff;border:1px solid var(--border);border-radius:12px;margin-top:14px;overflow:hidden">';
+
+  // Config EmailJS
+  html += '<div style="padding:14px;border-bottom:1px solid var(--border)">';
+  html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:6px">📧 Configurar correo <span style="font-size:10px;background:#e0e7ff;color:#3730a3;padding:2px 6px;border-radius:99px;font-weight:600">EmailJS — gratis</span></div>';
+  html += '<div style="font-size:11px;color:var(--muted);margin-bottom:10px">1. Crea cuenta gratis en <strong>emailjs.com</strong> → 2. Crea un "Email Service" y un "Template" → 3. Pega los IDs aquí</div>';
+  html += '<div class="sfield-row" style="margin-bottom:8px"><div class="sfield" style="margin-bottom:0"><label>Correo destino</label><input type="email" id="cfg-email-destino" placeholder="tu@correo.com" value="'+(cfg.emailDestino||'')+'"></div><div class="sfield" style="margin-bottom:0"><label>Service ID</label><input type="text" id="cfg-emailjs-sid" placeholder="service_xxx" value="'+(cfg.emailjsServiceId||'')+'"></div></div>';
+  html += '<div class="sfield-row" style="margin-bottom:8px"><div class="sfield" style="margin-bottom:0"><label>Template ID</label><input type="text" id="cfg-emailjs-tid" placeholder="template_xxx" value="'+(cfg.emailjsTemplateId||'')+'"></div><div class="sfield" style="margin-bottom:0"><label>Public Key</label><input type="text" id="cfg-emailjs-key" placeholder="xxxxxxxxxxxx" value="'+(cfg.emailjsPublicKey||'')+'"></div></div>';
+  html += '<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-dark btn-sm" onclick="guardarConfigEmail()">Guardar</button>';
+  if(emailOk) html += '<button class="btn btn-green btn-sm" onclick="enviarCorreo()">Probar envío</button>';
+  html += '</div></div>';
+
+  // Config WhatsApp
+  html += '<div style="padding:14px">';
+  html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:6px">💬 Configurar WhatsApp <span style="font-size:10px;background:#dcfce7;color:#166534;padding:2px 6px;border-radius:99px;font-weight:600">CallMeBot — gratis</span></div>';
+  html += '<div style="font-size:11px;color:var(--muted);margin-bottom:10px">1. Agrega a WhatsApp el número <strong>+34 644 82 95 42</strong> → 2. Envíales: <strong>I allow callmebot to send me messages</strong> → 3. Te responden con tu apikey</div>';
+  html += '<div class="sfield-row" style="margin-bottom:8px"><div class="sfield" style="margin-bottom:0"><label>Tu número (con código país)</label><input type="text" id="cfg-wa-numero" placeholder="+58 414 123 4567" value="'+(cfg.waNumero||'')+'"></div><div class="sfield" style="margin-bottom:0"><label>API Key de CallMeBot</label><input type="text" id="cfg-wa-apikey" placeholder="1234567" value="'+(cfg.waApikey||'')+'"></div></div>';
+  html += '<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-dark btn-sm" onclick="guardarConfigWA()">Guardar</button>';
+  if(waOk) html += '<button class="btn btn-green btn-sm" onclick="enviarWhatsApp()">Probar envío</button>';
+  html += '</div></div>';
+
+  html += '</div>'; // fin panel config
+
+  // Botón enviar todo
+  html += '<button onclick="enviarTodo()" class="btn btn-dark" style="width:100%;padding:13px;font-size:15px;margin-top:14px">🔔 Enviar reporte ahora a todos los canales</button>';
+
+  html += '</div>'; // fin padding
+  c.innerHTML = html;
+}
+
+function toggleCanal(canal, activo){
+  var cfg = getNotifConfig();
+  if(canal === 'email') cfg.emailActivo = activo;
+  if(canal === 'wa') cfg.waActivo = activo;
+  setNotifConfig(cfg);
+  toast(activo ? 'Canal activado' : 'Canal desactivado', 'ok');
+}
+
+function guardarConfigEmail(){
+  var cfg = getNotifConfig();
+  cfg.emailDestino     = (document.getElementById('cfg-email-destino')||{value:''}).value.trim();
+  cfg.emailjsServiceId = (document.getElementById('cfg-emailjs-sid')||{value:''}).value.trim();
+  cfg.emailjsTemplateId= (document.getElementById('cfg-emailjs-tid')||{value:''}).value.trim();
+  cfg.emailjsPublicKey = (document.getElementById('cfg-emailjs-key')||{value:''}).value.trim();
+  if(!cfg.emailDestino || !cfg.emailjsServiceId || !cfg.emailjsTemplateId || !cfg.emailjsPublicKey){
+    toast('Completa todos los campos de correo','err'); return;
+  }
+  cfg.emailActivo = true;
+  setNotifConfig(cfg);
+  toast('Configuración de correo guardada ✓','ok');
+  renderNotificaciones(document.getElementById('content'));
+}
+
+function guardarConfigWA(){
+  var cfg = getNotifConfig();
+  cfg.waNumero = (document.getElementById('cfg-wa-numero')||{value:''}).value.trim().replace(/\s/g,'');
+  cfg.waApikey = (document.getElementById('cfg-wa-apikey')||{value:''}).value.trim();
+  if(!cfg.waNumero || !cfg.waApikey){ toast('Completa número y apikey de WhatsApp','err'); return; }
+  cfg.waActivo = true;
+  setNotifConfig(cfg);
+  toast('Configuración de WhatsApp guardada ✓','ok');
+  renderNotificaciones(document.getElementById('content'));
+}
+
+// ═══════════════════════════════════════════════════════════
+// FIREBASE INIT
+// ═══════════════════════════════════════════════════════════
 async function initFirebase(){
   try{
     document.getElementById('splash-msg').textContent='Conectando con Firebase...';
@@ -453,14 +812,12 @@ async function initFirebase(){
     if(snap.exists()){var d=snap.data();DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];}
     else{DB.usuarios=[{id:'admin',nombre:'Administrador',username:'admin',password:'admin123',rol:'admin',creado:fecha()}];await guardarDB();}
 
-    // Tiempo real
     fs.onSnapshot(fs.doc(_db,'veoyoca','data'),function(snap){
       if(!snap.exists()||SAVING)return;
       var d=snap.data();DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];
       if(SESSION&&TAB){var nb=document.getElementById('nb-'+TAB);if(nb)goTab(TAB,nb);}
     });
 
-    // Sesion local
     var sess=null;try{sess=JSON.parse(localStorage.getItem('veo_session')||'null');}catch(e){}
     if(sess){var u=DB.usuarios.find(function(x){return x.id===sess.id;});if(u){SESSION=u;mostrarApp();return;}}
     document.getElementById('splash').style.display='none';
