@@ -659,7 +659,7 @@ function enviarCorreo(){
 
   toast('Enviando correo...','');
   function doSend(){
-    window.emailjs.init({ publicKey: cfg.emailjsPublicKey });
+    if (!_ejsInited) { window.emailjs.init({ publicKey: cfg.emailjsPublicKey }); _ejsInited = true; }
     window.emailjs.send(cfg.emailjsServiceId, cfg.emailjsTemplateId, templateParams)
       .then(function(){ toast('Correo enviado ✓','ok'); })
       .catch(function(e){ toast('Error correo: '+(e.text||e.message||JSON.stringify(e)),'err'); });
@@ -959,35 +959,32 @@ initFirebase();
 // ═══════════════════════════════════════════════════════════
 // NOTIFICACIONES DE EVENTOS (correo + WA)
 // ═══════════════════════════════════════════════════════════
+var _ejsInited = false;
 function notificarEvento(tipo, pedido) {
   var cfg = getNotifConfig();
   var esNuevo = tipo === 'NUEVO';
-  var titulo = esNuevo ? 'Nuevo pedido #' : 'Pedido entregado #';
-  titulo += (pedido.numero||'?') + ' - ' + (pedido.cliente||'');
+  var titulo = (esNuevo ? 'Nuevo pedido #' : 'Pedido entregado #') + (pedido.numero||'?') + ' - ' + (pedido.cliente||'');
+  var detalle = 'Ciudad: ' + (pedido.ciudad||'-') + ' | Vendedor: ' + (pedido.vendedor||'-') + ' | Fecha: ' + (pedido.fechaLimite||'-');
+  if (!esNuevo) detalle += ' | Por: ' + (pedido.entregadoPor||SESSION.nombre);
 
   // Correo
   if (cfg.emailActivo && cfg.emailjsServiceId && cfg.emailjsTemplateId && cfg.emailjsPublicKey && cfg.emailDestino) {
-    var filas = 'Pedido: #' + (pedido.numero||'?')
-      + ' | Cliente: ' + (pedido.cliente||'')
-      + ' | Ciudad: ' + (pedido.ciudad||'-')
-      + ' | Vendedor: ' + (pedido.vendedor||'-')
-      + ' | Fecha limite: ' + (pedido.fechaLimite||'-')
-      + ' | Estado: ' + tipo
-      + (esNuevo ? '' : ' | Entregado por: ' + (pedido.entregadoPor||SESSION.nombre));
-
-    var htmlMail = '<div style="font-family:Arial,sans-serif;padding:20px;max-width:600px">'
+    var htmlMail = '<div style="font-family:Arial,sans-serif;max-width:600px;padding:20px">'
       + '<div style="background:#1a1a2e;padding:16px;border-radius:8px 8px 0 0">'
       + '<h2 style="color:#fff;margin:0;font-size:16px">' + titulo + '</h2>'
       + '<p style="color:rgba(255,255,255,.6);margin:4px 0 0;font-size:12px">' + fecha() + ' - ' + hora() + '</p>'
       + '</div>'
-      + '<div style="background:#f9fafb;border:1px solid #e5e7eb;border-top:none;padding:16px;border-radius:0 0 8px 8px">'
-      + '<p style="font-size:14px;color:#374151;line-height:1.8">' + filas.replace(/\|/g,'<br>') + '</p>'
+      + '<div style="background:#f9fafb;border:1px solid #e5e7eb;padding:16px;border-radius:0 0 8px 8px">'
+      + '<p style="font-size:14px;color:#374151">' + detalle + '</p>'
       + '<div style="text-align:center;margin-top:16px">'
       + '<a href="https://jorgerinconl24-hub.github.io/VEOYOCA-APP/" style="background:#1a1a2e;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:13px">Ver en VeoYoca</a>'
       + '</div></div></div>';
 
-    function enviarMailEvento() {
-      window.emailjs.init({ publicKey: cfg.emailjsPublicKey });
+    function doMail() {
+      if (!_ejsInited) {
+        window.emailjs.init({ publicKey: cfg.emailjsPublicKey });
+        _ejsInited = true;
+      }
       window.emailjs.send(cfg.emailjsServiceId, cfg.emailjsTemplateId, {
         to_email: cfg.emailDestino,
         fecha: fecha(),
@@ -996,20 +993,21 @@ function notificarEvento(tipo, pedido) {
         urgentes_n: '0',
         lista_vencidos: htmlMail,
         lista_urgentes: ''
-      }).catch(function(err){ console.log('mail evento err:', err); });
+      }).then(function(){ console.log('mail ok'); })
+        .catch(function(e){ console.log('mail err:', JSON.stringify(e)); });
     }
-    if (window.emailjs) { enviarMailEvento(); }
+    if (window.emailjs) { doMail(); }
     else {
       var s = document.createElement('script');
       s.src = 'https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';
-      s.onload = enviarMailEvento;
+      s.onload = doMail;
       document.head.appendChild(s);
     }
   }
 
   // WhatsApp via UltraMsg
   if (cfg.waActivo && cfg.waNumero) {
-    var msgWA = titulo + ' | ' + (pedido.ciudad||'-') + ' | Vendedor: ' + (pedido.vendedor||'-') + ' | ' + (pedido.fechaLimite||'sin fecha');
+    var msgWA = titulo + ' - ' + detalle;
     var xhrEv = new XMLHttpRequest();
     xhrEv.open('POST', 'https://api.ultramsg.com/instance181941/messages/chat', true);
     xhrEv.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
