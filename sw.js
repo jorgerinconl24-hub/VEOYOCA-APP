@@ -68,22 +68,20 @@ function programarAlarmaDiaria(horaStr) {
   }, ms);
 }
 
-// Click en la notificación — abre la app
+// Click en la notificación — abre la app en la sección de pedidos
 self.addEventListener('notificationclick', function(e) {
   e.notification.close();
-  var url = e.notification.data && e.notification.data.url
-    ? e.notification.data.url
-    : '/VEOYOCA-APP/';
+  var url = '/VEOYOCA-APP/?tab=home';
 
   e.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(lista) {
-      // Si la app ya está abierta, enfócarla
       for (var i = 0; i < lista.length; i++) {
         if (lista[i].url.indexOf('VEOYOCA-APP') >= 0) {
-          return lista[i].focus();
+          lista[i].focus();
+          lista[i].postMessage({ tipo: 'IR_TAB', tab: 'home' });
+          return;
         }
       }
-      // Si no, abrirla
       return clients.openWindow(url);
     })
   );
