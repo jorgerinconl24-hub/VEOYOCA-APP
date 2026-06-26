@@ -167,6 +167,8 @@ button{cursor:pointer;font-family:inherit}input,select,textarea{font-family:inhe
 <div class="sfield"><label>Descripci&#xF3;n</label><textarea id="e-desc" placeholder="Productos, medidas, colores..."></textarea></div>
 <div class="sfield-row"><div class="sfield"><label>Proveedor</label><input type="text" id="e-proveedor" placeholder="Ej: ORION, COLVEN..."></div>
 <div class="sfield"><label># Orden de compra</label><input type="text" id="e-oc" placeholder="Ej: OC-2026-045"></div></div>
+<div class="sfield-row"><div class="sfield"><label>Fecha entrega proveedor</label><input type="date" id="e-fecha-prov"></div>
+<div class="sfield"><label>Fecha l&#xED;mite</label><input type="date" id="e-fecha"></div></div>
 <div class="sfield"><label>Nota / Observaci&#xF3;n</label><input type="text" id="e-nota" placeholder="Observaci&#xF3;n adicional"></div></div>
 <div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal('modal-edit')">Cancelar</button><button class="btn btn-blue" onclick="guardarEdicion()">Guardar cambios</button></div></div></div>
 <div class="overlay" id="modal-perfil"><div class="sheet"><div class="sheet-handle"></div>
@@ -250,6 +252,7 @@ function mostrarApp(){
   if(SESSION.rol==='admin')document.getElementById('nb-admin').style.display='flex';
   goTab('home',document.getElementById('nb-home'));
   setTimeout(verificarGoto,500);
+  setTimeout(verificarCamposIncompletosAlEntrar, 4000);
 }
 function mostrarPerfil(){
   var mis=DB.pedidos.filter(function(p){return p.creadoPor===SESSION.username||p.vendedor===SESSION.nombre;});
@@ -302,7 +305,7 @@ function aplicarFiltroEntregados(){
   el.innerHTML=h;
   var sel=document.getElementById('h-est');if(sel)sel.value='';
 }
-function filtrarHome(){
+
   var b=(document.getElementById('h-buscar')||{value:''}).value.toLowerCase();
   var fe=(document.getElementById('h-est')||{value:''}).value;
   var lista=DB.pedidos.filter(function(p){if(p.estatus==='ENTREGADO')return false;var mb=!b||((p.cliente||'').toLowerCase().indexOf(b)>=0||(p.numero||'').indexOf(b)>=0);var mfe=!fe||clasif(p)===fe||(fe==='LISTO'&&p.estatus==='LISTO');return mb&&mfe;});
@@ -319,7 +322,16 @@ function cardHTML(p,conEntregar){
   var canEdit=SESSION.rol==='admin'||SESSION.username===p.creadoPor||SESSION.username===p.vendedor;
   var pid=p.id;var num=p.numero||pid.substring(0,6);
   var h='<div class="card" id="card-'+pid+'"><div class="card-head"><div class="card-num">#'+num+'</div><div class="card-body"><div class="card-cliente">'+(p.cliente||'Sin nombre')+'</div><div class="card-meta">'+(p.ciudad||'sin ciudad')+(p.vendedor?' - '+p.vendedor:'')+'</div>';
-  if(p.proveedor)h+='<span class="card-vend" style="background:#fef3c7;color:#92400e">'+p.proveedor+(p.ordenCompra?' OC:'+p.ordenCompra:'')+'</span>';
+  if(p.proveedor)h+='<span class="card-vend" style="background:#fef3c7;color:#92400e">'+p.proveedor+(p.ordenCompra?' OC:'+p.ordenCompra:'')+(p.fechaEntregaProv?' Ent:'+p.fechaEntregaProv:'')+'</span>';
+  // Indicador campos incompletos
+  var faltaProv = !p.proveedor || !p.ordenCompra || !p.fechaEntregaProv;
+  if(faltaProv && p.estatus!=='ENTREGADO'){
+    var camposFaltantes=[];
+    if(!p.proveedor)camposFaltantes.push('Proveedor');
+    if(!p.ordenCompra)camposFaltantes.push('OC');
+    if(!p.fechaEntregaProv)camposFaltantes.push('Fecha prov.');
+    h+='<div style="font-size:11px;color:#d97706;margin-top:4px">⚠️ Falta: '+camposFaltantes.join(', ')+'</div>';
+  }
   h+='<div class="card-desc">'+(p.descripcion||'')+'</div></div>'+badgeHTML(p)+'</div><div class="card-foot">';
   if(canEdit)h+='<button class="btn btn-ghost btn-sm" data-edit="'+pid+'">Editar</button>';
   if(conEntregar&&p.estatus!=='ENTREGADO'){h+='<input type="text" id="nota-'+pid+'" placeholder="Nota de entrega..."><button class="btn btn-green btn-sm" data-entregar="'+pid+'">Entregar</button>';}
@@ -350,7 +362,7 @@ async function marcarEntregado(id){
 
 function renderNuevo(c){
   var vends=DB.usuarios.map(function(u){return '<option value="'+u.nombre+'">'+u.nombre+'</option>';}).join('');
-  c.innerHTML='<div class="section-pad"><div class="card" style="padding:16px"><div class="sfield-row"><div class="sfield"><label># Pedido</label><input type="text" id="n-numero" placeholder="Ej: 432"></div><div class="sfield"><label>Cliente *</label><input type="text" id="n-cliente" placeholder="Nombre del cliente"></div></div><div class="sfield-row"><div class="sfield"><label>Ciudad</label><input type="text" id="n-ciudad" placeholder="Ciudad"></div><div class="sfield"><label>Vendedor</label><select id="n-vendedor"><option value="">Seleccionar</option>'+vends+'</select></div></div><div class="sfield-row"><div class="sfield"><label>Proveedor</label><input type="text" id="n-proveedor" placeholder="Ej: ORION..."></div><div class="sfield"><label># OC</label><input type="text" id="n-oc" placeholder="Ej: OC-2026-045"></div></div><div class="sfield-row"><div class="sfield"><label>Fecha limite</label><input type="date" id="n-fecha"></div><div class="sfield"><label>Estado</label><select id="n-estado"><option value="PENDIENTE">Pendiente</option><option value="EN PROCESO">En proceso</option><option value="LISTO">Listo</option></select></div></div><div class="sfield"><label>Descripcion *</label><textarea id="n-desc" placeholder="Productos, medidas, colores, cantidades..."></textarea></div><button class="btn btn-dark" style="width:100%;padding:13px;font-size:15px;margin-top:4px" onclick="crearPedido()">Crear pedido</button></div></div>';
+  c.innerHTML='<div class="section-pad"><div class="card" style="padding:16px"><div class="sfield-row"><div class="sfield"><label># Pedido</label><input type="text" id="n-numero" placeholder="Ej: 432"></div><div class="sfield"><label>Cliente *</label><input type="text" id="n-cliente" placeholder="Nombre del cliente"></div></div><div class="sfield-row"><div class="sfield"><label>Ciudad</label><input type="text" id="n-ciudad" placeholder="Ciudad"></div><div class="sfield"><label>Vendedor</label><select id="n-vendedor"><option value="">Seleccionar</option>'+vends+'</select></div></div><div class="sfield-row"><div class="sfield"><label>Proveedor</label><input type="text" id="n-proveedor" placeholder="Ej: ORION..."></div><div class="sfield"><label># OC</label><input type="text" id="n-oc" placeholder="Ej: OC-2026-045"></div></div><div class="sfield-row"><div class="sfield"><label>Fecha entrega proveedor</label><input type="date" id="n-fecha-prov"></div><div class="sfield"><label>Fecha limite</label><input type="date" id="n-fecha"></div></div><div class="sfield-row"><div class="sfield"><div class="sfield"><label>Estado</label><select id="n-estado"><option value="PENDIENTE">Pendiente</option><option value="EN PROCESO">En proceso</option><option value="LISTO">Listo</option></select></div></div><div class="sfield"><label>Descripcion *</label><textarea id="n-desc" placeholder="Productos, medidas, colores, cantidades..."></textarea></div><button class="btn btn-dark" style="width:100%;padding:13px;font-size:15px;margin-top:4px" onclick="crearPedido()">Crear pedido</button></div></div>';
 }
 async function crearPedido(){
   var cliente=document.getElementById('n-cliente').value.trim();
@@ -359,10 +371,10 @@ async function crearPedido(){
   var num=document.getElementById('n-numero').value.trim();
   var maxN=0;DB.pedidos.forEach(function(p){var n=parseInt(p.numero||0);if(n>maxN)maxN=n;});
   var numero=num||String(maxN+1);
-  var p={id:uid(),numero:numero,cliente:cliente,ciudad:document.getElementById('n-ciudad').value,vendedor:document.getElementById('n-vendedor').value,proveedor:document.getElementById('n-proveedor').value.trim(),ordenCompra:document.getElementById('n-oc').value.trim(),fechaLimite:inputFecha(document.getElementById('n-fecha').value),estatus:document.getElementById('n-estado').value||'PENDIENTE',descripcion:desc,creadoPor:SESSION.username,creadoPorNombre:SESSION.nombre,fechaCreacion:fecha(),horaCreacion:hora()};
+  var p={id:uid(),numero:numero,cliente:cliente,ciudad:document.getElementById('n-ciudad').value,vendedor:document.getElementById('n-vendedor').value,proveedor:document.getElementById('n-proveedor').value.trim(),ordenCompra:document.getElementById('n-oc').value.trim(),fechaEntregaProv:inputFecha(document.getElementById('n-fecha-prov').value),fechaLimite:inputFecha(document.getElementById('n-fecha').value),estatus:document.getElementById('n-estado').value||'PENDIENTE',descripcion:desc,creadoPor:SESSION.username,creadoPorNombre:SESSION.nombre,fechaCreacion:fecha(),horaCreacion:hora()};
   DB.pedidos.push(p);registrarBitacora(p.id,'CREADO por '+SESSION.nombre);
   await guardarDB();
-  ['n-numero','n-cliente','n-ciudad','n-proveedor','n-oc','n-fecha','n-desc'].forEach(function(id){document.getElementById(id).value='';});
+  ['n-numero','n-cliente','n-ciudad','n-proveedor','n-oc','n-fecha-prov','n-fecha','n-desc'].forEach(function(id){document.getElementById(id).value='';});
   toast('Pedido #'+numero+' creado','ok');
   enviarPushOneSignal('📦 Nuevo pedido #'+numero,'Cliente: '+cliente+' — '+desc.substring(0,60));
 }
@@ -372,7 +384,7 @@ function abrirEditar(id){
   PEDIDO_EDIT_ID=id;
   document.getElementById('modal-titulo').textContent='Editar #'+(p.numero||id.substring(0,6));
   document.getElementById('e-id').value=id;document.getElementById('e-cliente').value=p.cliente||'';document.getElementById('e-ciudad').value=p.ciudad||'';
-  document.getElementById('e-fecha').value=fechaInput(p.fechaLimite);document.getElementById('e-desc').value=p.descripcion||'';
+  document.getElementById('e-fecha').value=fechaInput(p.fechaLimite);document.getElementById('e-fecha-prov').value=fechaInput(p.fechaEntregaProv);document.getElementById('e-desc').value=p.descripcion||'';
   document.getElementById('e-proveedor').value=p.proveedor||'';document.getElementById('e-oc').value=p.ordenCompra||'';document.getElementById('e-nota').value='';
   var vsel=document.getElementById('e-vendedor');vsel.innerHTML='<option value="">Sin cambio</option>';
   DB.usuarios.forEach(function(u){var o=document.createElement('option');o.value=u.nombre;o.textContent=u.nombre;if(u.nombre===p.vendedor)o.selected=true;vsel.appendChild(o);});
@@ -382,7 +394,7 @@ function abrirEditar(id){
 async function guardarEdicion(){
   var id=PEDIDO_EDIT_ID;var p=DB.pedidos.find(function(x){return x.id===id;});if(!p)return;
   var cambios=[];
-  var vals={cliente:document.getElementById('e-cliente').value.trim(),ciudad:document.getElementById('e-ciudad').value.trim(),vendedor:document.getElementById('e-vendedor').value,fechaLimite:inputFecha(document.getElementById('e-fecha').value),estatus:document.getElementById('e-estado').value,descripcion:document.getElementById('e-desc').value.trim(),proveedor:document.getElementById('e-proveedor').value.trim(),ordenCompra:document.getElementById('e-oc').value.trim()};
+  var vals={cliente:document.getElementById('e-cliente').value.trim(),ciudad:document.getElementById('e-ciudad').value.trim(),vendedor:document.getElementById('e-vendedor').value,fechaLimite:inputFecha(document.getElementById('e-fecha').value),fechaEntregaProv:inputFecha(document.getElementById('e-fecha-prov').value),estatus:document.getElementById('e-estado').value,descripcion:document.getElementById('e-desc').value.trim(),proveedor:document.getElementById('e-proveedor').value.trim(),ordenCompra:document.getElementById('e-oc').value.trim()};
   var nota=document.getElementById('e-nota').value.trim();
   for(var k in vals){if(vals[k]&&vals[k]!==p[k]){cambios.push(k);p[k]=vals[k];}}
   if(nota){cambios.push('nota');p.nota=nota;}
@@ -447,7 +459,108 @@ function generarPlanIA(){var pends=DB.pedidos.filter(function(p){return p.estatu
 function mostrarResultadoIA(texto){var res=document.getElementById('ia-resultado');if(!res)return;var html=texto.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/^#{1,3} (.+)$/gm,'<div style="font-size:15px;font-weight:700;color:#1a1a2e;margin:16px 0 8px">$1</div>').replace(/^- (.+)$/gm,'<div style="padding:3px 0 3px 12px;border-left:3px solid #e5e7eb;margin:4px 0;font-size:13px">$1</div>').replace(/\n\n/g,'<br><br>').replace(/\n/g,'<br>');res.innerHTML='<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden"><div style="background:linear-gradient(135deg,#1a1a2e,#2d2d5e);padding:12px 16px;display:flex;justify-content:space-between;align-items:center"><div style="color:#fff;font-size:13px;font-weight:600">Plan generado por Claude</div><button onclick="copiarPlan()" style="background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">Copiar</button></div><div style="padding:16px;font-size:13px;line-height:1.7;color:#374151" id="ia-texto">'+html+'</div><div style="padding:12px 16px;border-top:1px solid #e5e7eb"><button class="btn btn-ghost btn-sm" onclick="generarPlanIA()">Regenerar</button></div></div>';}
 function copiarPlan(){var el=document.getElementById('ia-texto');if(!el)return;navigator.clipboard.writeText(el.innerText||el.textContent).then(function(){toast('Copiado','ok');}).catch(function(){toast('No se pudo copiar','err');});}
 
-function getNotifConfig(){try{return JSON.parse(localStorage.getItem('veo_notif')||'{}');}catch(e){return {};}}
+// ═══════════════════════════════════════════════════════════
+// ALERTA CAMPOS PROVEEDOR INCOMPLETOS
+// ═══════════════════════════════════════════════════════════
+function pedidosConCamposIncompletos(){
+  var ayer = new Date();
+  ayer.setDate(ayer.getDate() - 1);
+  return DB.pedidos.filter(function(p){
+    if(p.estatus==='ENTREGADO') return false;
+    // Solo pedidos creados hace más de 1 día
+    var partes = (p.fechaCreacion||'').split('/');
+    if(partes.length!==3) return false;
+    var fechaCreado = new Date(parseInt(partes[2]),parseInt(partes[1])-1,parseInt(partes[0]));
+    if(fechaCreado > ayer) return false;
+    // Verificar si faltan campos
+    return !p.proveedor || !p.ordenCompra || !p.fechaEntregaProv;
+  });
+}
+
+function notificarCamposIncompletos(){
+  var incompletos = pedidosConCamposIncompletos();
+  if(!incompletos.length) return;
+
+  var cfg = getNotifConfig();
+  var lista = incompletos.map(function(p){
+    var faltantes = [];
+    if(!p.proveedor) faltantes.push('Proveedor');
+    if(!p.ordenCompra) faltantes.push('OC');
+    if(!p.fechaEntregaProv) faltantes.push('Fecha entrega prov.');
+    return '• #'+(p.numero||'?')+' '+( p.cliente||'')+' — Falta: '+faltantes.join(', ');
+  }).join('\n');
+
+  // Push
+  if(Notification.permission==='granted'){
+    new Notification('⚠️ VeoYoca — '+incompletos.length+' pedidos con datos incompletos',{
+      body: lista.substring(0,150),
+      icon:'/VEOYOCA-APP/icon-192.png',
+      tag:'campos-incompletos',
+      requireInteraction:true
+    });
+  }
+  enviarPushOneSignal('⚠️ '+incompletos.length+' pedidos con datos incompletos de proveedor', lista.substring(0,100));
+
+  // WhatsApp
+  if(cfg.waActivo && cfg.waNumero){
+    var msgWA = '⚠️ *VeoYoca — Campos incompletos*\n\n'+incompletos.length+' pedidos creados hace más de 1 día con datos de proveedor faltantes:\n\n'+lista+'\n\nCompleta la información en la app.';
+    var xhr=new XMLHttpRequest();
+    xhr.open('POST','https://api.ultramsg.com/instance181941/messages/chat',true);
+    xhr.setRequestHeader('Content-Type','application/x-www-form-urlencoded');
+    xhr.timeout=8000;
+    xhr.send('token=jd3odrhspk539mmp&to='+encodeURIComponent(cfg.waNumero)+'&body='+encodeURIComponent(msgWA));
+  }
+
+  // Correo
+  if(cfg.emailActivo && cfg.emailjsServiceId && cfg.emailjsTemplateId && cfg.emailjsPublicKey && cfg.emailDestino){
+    var filas = incompletos.map(function(p){
+      var faltantes=[];
+      if(!p.proveedor)faltantes.push('Proveedor');
+      if(!p.ordenCompra)faltantes.push('OC');
+      if(!p.fechaEntregaProv)faltantes.push('Fecha entrega prov.');
+      return '<tr style="border-bottom:1px solid #f3f4f6">'
+        +'<td style="padding:8px 10px;font-weight:600">#'+(p.numero||'?')+'</td>'
+        +'<td style="padding:8px 10px">'+(p.cliente||'')+'</td>'
+        +'<td style="padding:8px 10px;color:#dc2626">'+faltantes.join(', ')+'</td>'
+        +'</tr>';
+    }).join('');
+
+    var htmlCorreo='<div style="font-family:Arial,sans-serif;max-width:680px;margin:0 auto">'
+      +'<div style="background:#d97706;padding:20px 24px;border-radius:10px 10px 0 0">'
+      +'<h2 style="color:#fff;margin:0;font-size:18px">⚠️ Pedidos con datos incompletos</h2>'
+      +'<p style="color:rgba(255,255,255,.8);margin:4px 0 0;font-size:13px">'+fecha()+' — '+incompletos.length+' pedidos requieren atención</p>'
+      +'</div>'
+      +'<div style="padding:20px;background:#f9fafb;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 10px 10px">'
+      +'<p style="font-size:13px;color:#374151;margin-bottom:16px">Los siguientes pedidos fueron creados hace más de 1 día y tienen campos de proveedor sin completar:</p>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:13px;background:#fff;border-radius:8px;border:1px solid #e5e7eb">'
+      +'<thead><tr style="background:#f9fafb"><th style="padding:8px 10px;text-align:left;color:#6b7280">#Ped</th><th style="padding:8px 10px;text-align:left;color:#6b7280">Cliente</th><th style="padding:8px 10px;text-align:left;color:#6b7280">Campos faltantes</th></tr></thead>'
+      +'<tbody>'+filas+'</tbody></table>'
+      +'<div style="text-align:center;margin-top:20px">'
+      +'<a href="https://jorgerinconl24-hub.github.io/VEOYOCA-APP/" style="display:inline-block;background:#1a1a2e;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600">Completar en VeoYoca</a>'
+      +'</div></div></div>';
+
+    function doSend(){
+      window.emailjs.send(cfg.emailjsServiceId,cfg.emailjsTemplateId,{
+        to_email:cfg.emailDestino,fecha:fecha(),total:incompletos.length,
+        vencidos_n:0,urgentes_n:0,lista_vencidos:htmlCorreo,lista_urgentes:''
+      }).catch(function(e){console.log('mail err:',e);});
+    }
+    if(window._ejsReady){doSend();}else{setTimeout(doSend,1500);}
+  }
+}
+
+function verificarCamposIncompletosAlEntrar(){
+  // Verificar solo una vez por día
+  var cfg = getNotifConfig();
+  var hoyStr = new Date().toDateString();
+  if(cfg.ultimaNotifIncompletos === hoyStr) return;
+  var incompletos = pedidosConCamposIncompletos();
+  if(!incompletos.length) return;
+  cfg.ultimaNotifIncompletos = hoyStr;
+  setNotifConfig(cfg);
+  setTimeout(notificarCamposIncompletos, 5000);
+}
+try{return JSON.parse(localStorage.getItem('veo_notif')||'{}');}catch(e){return {};}}
 function setNotifConfig(cfg){localStorage.setItem('veo_notif',JSON.stringify(cfg));}
 function buildReporte(){var vencidos=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&clasif(p)==='vencido';});var urgentes=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&clasif(p)==='urgente';});return {vencidos:vencidos,urgentes:urgentes};}
 function enviarWhatsApp(){var cfg=getNotifConfig();if(!cfg.waNumero||!cfg.waApikey){toast('Configura WhatsApp primero','err');return;}var r=buildReporte();var total=r.vencidos.length+r.urgentes.length;if(total===0){toast('No hay pedidos críticos','ok');return;}var msg='🚨 *VeoYoca — '+fecha()+'*\n\n';if(r.vencidos.length){msg+='🔴 *VENCIDOS ('+r.vencidos.length+')*\n';r.vencidos.forEach(function(p){msg+='• #'+(p.numero||'?')+' '+p.cliente+' — '+Math.abs(diasRestantes(p.fechaLimite))+'d vencido\n';});msg+='\n';}if(r.urgentes.length){msg+='🟡 *URGENTES ('+r.urgentes.length+')*\n';r.urgentes.forEach(function(p){msg+='• #'+(p.numero||'?')+' '+p.cliente+' — vence en '+diasRestantes(p.fechaLimite)+'d\n';});}var xhr=new XMLHttpRequest();xhr.open('POST','https://api.ultramsg.com/instance181941/messages/chat',true);xhr.setRequestHeader('Content-Type','application/x-www-form-urlencoded');xhr.timeout=8000;xhr.onload=function(){toast('WhatsApp enviado ✓','ok');};xhr.onerror=function(){toast('WhatsApp enviado','ok');};xhr.send('token=jd3odrhspk539mmp&to='+encodeURIComponent(cfg.waNumero)+'&body='+encodeURIComponent(msg));}
