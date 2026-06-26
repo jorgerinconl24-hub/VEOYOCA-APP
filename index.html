@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="VeoYoca">
 <title>VeoYoca — Sistema de Pedidos</title>
 
-<!-- OneSignal SDK -->
+<!-- OneSignal -->
 <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 <script>
   window.OneSignalDeferred = window.OneSignalDeferred || [];
@@ -18,12 +18,15 @@
     await OneSignal.init({
       appId: "f2baf005-ca28-4491-a772-eca363f6f142",
       serviceWorkerPath: "/OneSignalSDKWorker.js",
+      serviceWorkerParam: { scope: "/" },
       notifyButton: { enable: false },
       promptOptions: {
         slidedown: {
           prompts: [{
             type: "push",
-            autoPrompt: false,
+            autoPrompt: true,
+            timeDelay: 3,
+            pageViews: 1,
             text: {
               actionMessage: "VeoYoca quiere enviarte alertas de pedidos nuevos y urgentes",
               acceptButton: "Activar",
@@ -129,13 +132,7 @@ button{cursor:pointer;font-family:inherit}input,select,textarea{font-family:inhe
 .notif-slider:before{content:'';position:absolute;width:18px;height:18px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.3s}
 .notif-toggle input:checked+.notif-slider{background:#16a34a}
 .notif-toggle input:checked+.notif-slider:before{transform:translateX(20px)}
-.notif-config{background:rgba(255,255,255,.08);border-radius:10px;padding:12px;margin-top:8px}
-.notif-config label{font-size:11px;opacity:.7;display:block;margin-bottom:4px}
-.notif-config input{width:100%;padding:8px 10px;border-radius:8px;border:none;font-size:13px;background:rgba(255,255,255,.15);color:#fff;margin-bottom:8px}
-.notif-config input::placeholder{color:rgba(255,255,255,.4)}
 .btn-notif-test{background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;width:100%;margin-top:4px}
-.btn-notif-test:hover{background:rgba(255,255,255,.25)}
-.notif-dot{width:8px;height:8px;border-radius:50%;background:#dc2626;position:absolute;top:2px;right:2px}
 </style>
 </head>
 <body>
@@ -159,7 +156,6 @@ button{cursor:pointer;font-family:inherit}input,select,textarea{font-family:inhe
 <button class="nav-btn" id="nb-admin" onclick="goTab('admin',this)" style="display:none"><div class="nav-icon">&#x2699;&#xFE0F;</div><div>Admin</div></button>
 </div></div>
 <div class="sync-badge" id="sync-badge">&#x2713; Guardado</div>
-
 <div class="overlay" id="modal-edit"><div class="sheet"><div class="sheet-handle"></div>
 <div class="sheet-head"><h2 id="modal-titulo">Editar pedido</h2><button class="sheet-close" onclick="cerrarModal('modal-edit')">&#x2715;</button></div>
 <div class="sheet-body"><input type="hidden" id="e-id">
@@ -173,12 +169,10 @@ button{cursor:pointer;font-family:inherit}input,select,textarea{font-family:inhe
 <div class="sfield"><label># Orden de compra</label><input type="text" id="e-oc" placeholder="Ej: OC-2026-045"></div></div>
 <div class="sfield"><label>Nota / Observaci&#xF3;n</label><input type="text" id="e-nota" placeholder="Observaci&#xF3;n adicional"></div></div>
 <div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal('modal-edit')">Cancelar</button><button class="btn btn-blue" onclick="guardarEdicion()">Guardar cambios</button></div></div></div>
-
 <div class="overlay" id="modal-perfil"><div class="sheet"><div class="sheet-handle"></div>
 <div class="sheet-head"><h2>Mi perfil</h2><button class="sheet-close" onclick="cerrarModal('modal-perfil')">&#x2715;</button></div>
 <div class="sheet-body" id="perfil-body"></div>
 <div class="sheet-foot"><button class="btn btn-red" onclick="logout()">Cerrar sesi&#xF3;n</button></div></div></div>
-
 <div class="overlay" id="modal-usuario"><div class="sheet"><div class="sheet-handle"></div>
 <div class="sheet-head"><h2 id="u-titulo">Nuevo usuario</h2><button class="sheet-close" onclick="cerrarModal('modal-usuario')">&#x2715;</button></div>
 <div class="sheet-body"><input type="hidden" id="u-id">
@@ -187,20 +181,13 @@ button{cursor:pointer;font-family:inherit}input,select,textarea{font-family:inhe
 <div class="sfield"><label>Contrase&#xF1;a</label><input type="password" id="u-pass" placeholder="&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;"></div></div>
 <div class="sfield"><label>Rol</label><select id="u-rol"><option value="empleado">Empleado</option><option value="admin">Administrador</option></select></div></div>
 <div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal('modal-usuario')">Cancelar</button><button class="btn btn-dark" onclick="guardarUsuario()">Guardar</button></div></div></div>
-
 <div class="toast" id="toast"></div>
-
 <script>
 // ═══════════════════════════════════════════════════════════
 // ONESIGNAL
 // ═══════════════════════════════════════════════════════════
 var OS_APP_ID  = 'f2baf005-ca28-4491-a772-eca363f6f142';
 var OS_API_KEY = 'os_v2_app_6k5pabokfbcjdj3s5srwh5xrikmqkjompbiegtmvzstbmuwyrmmbg43dgpebq4qvxtathkixulolqpm7nyp66zmp43ds2wtv2sv5u4i';
-
-function pedirPermisoOneSignal() {
-  if (!window._OneSignal) { setTimeout(pedirPermisoOneSignal, 1000); return; }
-  window._OneSignal.Slidedown.promptPush();
-}
 
 function enviarPushOneSignal(titulo, cuerpo) {
   fetch('https://onesignal.com/api/v1/notifications', {
@@ -213,27 +200,20 @@ function enviarPushOneSignal(titulo, cuerpo) {
       app_id: OS_APP_ID,
       included_segments: ['All'],
       headings: { es: titulo, en: titulo },
-      contents: { es: cuerpo,  en: cuerpo  },
+      contents: { es: cuerpo, en: cuerpo },
       url: 'https://jorgerinconl24-hub.github.io/VEOYOCA-APP/'
     })
   }).then(function(r){ return r.json(); })
-    .then(function(d){ console.log('Push OK:', d.id || d); })
+    .then(function(d){ console.log('Push:', JSON.stringify(d)); })
     .catch(function(e){ console.log('Push err:', e); });
 }
 
 // ═══════════════════════════════════════════════════════════
 // VARIABLES GLOBALES
 // ═══════════════════════════════════════════════════════════
-var DB = {usuarios:[],pedidos:[],bitacora:[]};
-var SESSION = null;
-var TAB = 'home';
-var PEDIDO_EDIT_ID = null;
-var SAVING = false;
-var _db = null;
+var DB={usuarios:[],pedidos:[],bitacora:[]};
+var SESSION=null,TAB='home',PEDIDO_EDIT_ID=null,SAVING=false,_db=null;
 
-// ═══════════════════════════════════════════════════════════
-// HELPERS
-// ═══════════════════════════════════════════════════════════
 function fecha(){return new Date().toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'});}
 function hora(){return new Date().toLocaleTimeString('es-VE',{hour:'2-digit',minute:'2-digit'});}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).substr(2,5);}
@@ -247,23 +227,12 @@ function fechaInput(f){if(!f)return '';var p=f.split('/');if(p.length!==3)return
 function inputFecha(f){if(!f)return '';var p=f.split('-');if(p.length!==3)return '';return p[2]+'/'+p[1]+'/'+p[0];}
 function registrarBitacora(id,accion){DB.bitacora.push({pedidoId:id,accion:accion,usuario:SESSION.nombre,fecha:fecha(),hora:hora()});if(DB.bitacora.length>500)DB.bitacora=DB.bitacora.slice(-500);}
 
-// ═══════════════════════════════════════════════════════════
-// FIREBASE
-// ═══════════════════════════════════════════════════════════
 async function guardarDB(){
-  if(SAVING||!_db)return;
-  SAVING=true;mostrarBadge('syncing');
-  try{
-    var {setDoc,doc}=window._firestore;
-    await setDoc(doc(_db,'veoyoca','data'),{usuarios:DB.usuarios,pedidos:DB.pedidos,bitacora:DB.bitacora.slice(-500),updatedAt:Date.now()});
-    mostrarBadge('ok');
-  }catch(e){mostrarBadge('err');toast('Error: '+e.message,'err');}
-  SAVING=false;
+  if(SAVING||!_db)return;SAVING=true;mostrarBadge('syncing');
+  try{var {setDoc,doc}=window._firestore;await setDoc(doc(_db,'veoyoca','data'),{usuarios:DB.usuarios,pedidos:DB.pedidos,bitacora:DB.bitacora.slice(-500),updatedAt:Date.now()});mostrarBadge('ok');}
+  catch(e){mostrarBadge('err');toast('Error: '+e.message,'err');}SAVING=false;
 }
 
-// ═══════════════════════════════════════════════════════════
-// AUTH
-// ═══════════════════════════════════════════════════════════
 function login(){
   var u=document.getElementById('l-user').value.trim().toLowerCase();
   var p=document.getElementById('l-pass').value;
@@ -279,11 +248,8 @@ function mostrarApp(){
   document.getElementById('user-avatar').textContent=SESSION.nombre.substring(0,2).toUpperCase();
   document.getElementById('topbar-sub').textContent=SESSION.nombre;
   if(SESSION.rol==='admin')document.getElementById('nb-admin').style.display='flex';
-  // Pedir permiso OneSignal 3 segundos después de entrar
-  setTimeout(pedirPermisoOneSignal, 3000);
-  setTimeout(verificarYNotificarAlEntrar, 2000);
   goTab('home',document.getElementById('nb-home'));
-  setTimeout(verificarGoto, 500);
+  setTimeout(verificarGoto,500);
 }
 function mostrarPerfil(){
   var mis=DB.pedidos.filter(function(p){return p.creadoPor===SESSION.username||p.vendedor===SESSION.nombre;});
@@ -292,33 +258,17 @@ function mostrarPerfil(){
   document.getElementById('modal-perfil').classList.add('open');
 }
 
-// ═══════════════════════════════════════════════════════════
-// TABS
-// ═══════════════════════════════════════════════════════════
 function goTab(tab,btn){
   TAB=tab;document.querySelectorAll('.nav-btn').forEach(function(b){b.classList.remove('on');});if(btn)btn.classList.add('on');
   var titulos={home:'Pedidos',entregar:'Despacho',nuevo:'Nuevo pedido',reportes:'Reportes',admin:'Administracion',plan:'Rutas',ia:'Plan IA',notif:'Alertas y Notificaciones'};
   document.getElementById('topbar-sub').textContent=titulos[tab]||SESSION.nombre;
   var c=document.getElementById('content');
-  c.onclick=function(e){
-    var ed=e.target.getAttribute('data-edit');
-    var en=e.target.getAttribute('data-entregar');
-    if(ed)abrirEditar(ed);
-    if(en)marcarEntregado(en);
-  };
-  if(tab==='home')renderHome(c);
-  else if(tab==='entregar')renderEntregar(c);
-  else if(tab==='nuevo')renderNuevo(c);
-  else if(tab==='reportes')renderReportes(c);
-  else if(tab==='admin')renderAdmin(c);
-  else if(tab==='plan')renderPlanificacion(c);
-  else if(tab==='ia')renderPlanIA(c);
-  else if(tab==='notif')renderNotificaciones(c);
+  c.onclick=function(e){var ed=e.target.getAttribute('data-edit');var en=e.target.getAttribute('data-entregar');if(ed)abrirEditar(ed);if(en)marcarEntregado(en);};
+  if(tab==='home')renderHome(c);else if(tab==='entregar')renderEntregar(c);else if(tab==='nuevo')renderNuevo(c);
+  else if(tab==='reportes')renderReportes(c);else if(tab==='admin')renderAdmin(c);
+  else if(tab==='plan')renderPlanificacion(c);else if(tab==='ia')renderPlanIA(c);else if(tab==='notif')renderNotificaciones(c);
 }
 
-// ═══════════════════════════════════════════════════════════
-// HOME
-// ═══════════════════════════════════════════════════════════
 function renderHome(c){
   var pends=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';});
   var venc=pends.filter(function(p){return clasif(p)==='vencido';}).length;
@@ -338,46 +288,29 @@ function filtrarHome(){
   var g={vencido:[],urgente:[],sf:[],ok:[],LISTO:[]};
   lista.forEach(function(p){var cc=p.estatus==='LISTO'?'LISTO':clasif(p);if(g[cc])g[cc].push(p);else g.ok.push(p);});
   var etq={vencido:'Vencidos',urgente:'Urgentes',sf:'Sin fecha',ok:'Con tiempo',LISTO:'Listos para entregar'};
-  var h='';
-  ['vencido','urgente','LISTO','sf','ok'].forEach(function(t){if(!g[t]||!g[t].length)return;h+='<div class="sec-label">'+etq[t]+' ('+g[t].length+')</div>';g[t].forEach(function(p){h+=cardHTML(p,false);});});
+  var h='';['vencido','urgente','LISTO','sf','ok'].forEach(function(t){if(!g[t]||!g[t].length)return;h+='<div class="sec-label">'+etq[t]+' ('+g[t].length+')</div>';g[t].forEach(function(p){h+=cardHTML(p,false);});});
   el.innerHTML=h;
 }
 function cardHTML(p,conEntregar){
   var canEdit=SESSION.rol==='admin'||SESSION.username===p.creadoPor||SESSION.username===p.vendedor;
   var pid=p.id;var num=p.numero||pid.substring(0,6);
-  var h='<div class="card" id="card-'+pid+'">';
-  h+='<div class="card-head">';
-  h+='<div class="card-num">#'+num+'</div>';
-  h+='<div class="card-body">';
-  h+='<div class="card-cliente">'+(p.cliente||'Sin nombre')+'</div>';
-  h+='<div class="card-meta">'+(p.ciudad||'sin ciudad')+(p.vendedor?' - '+p.vendedor:'')+'</div>';
+  var h='<div class="card" id="card-'+pid+'"><div class="card-head"><div class="card-num">#'+num+'</div><div class="card-body"><div class="card-cliente">'+(p.cliente||'Sin nombre')+'</div><div class="card-meta">'+(p.ciudad||'sin ciudad')+(p.vendedor?' - '+p.vendedor:'')+'</div>';
   if(p.proveedor)h+='<span class="card-vend" style="background:#fef3c7;color:#92400e">'+p.proveedor+(p.ordenCompra?' OC:'+p.ordenCompra:'')+'</span>';
-  h+='<div class="card-desc">'+(p.descripcion||'')+'</div>';
-  h+='</div>'+badgeHTML(p)+'</div>';
-  h+='<div class="card-foot">';
+  h+='<div class="card-desc">'+(p.descripcion||'')+'</div></div>'+badgeHTML(p)+'</div><div class="card-foot">';
   if(canEdit)h+='<button class="btn btn-ghost btn-sm" data-edit="'+pid+'">Editar</button>';
-  if(conEntregar&&p.estatus!=='ENTREGADO'){
-    h+='<input type="text" id="nota-'+pid+'" placeholder="Nota de entrega...">';
-    h+='<button class="btn btn-green btn-sm" data-entregar="'+pid+'">Entregar</button>';
-  }
-  h+='</div></div>';
-  return h;
+  if(conEntregar&&p.estatus!=='ENTREGADO'){h+='<input type="text" id="nota-'+pid+'" placeholder="Nota de entrega..."><button class="btn btn-green btn-sm" data-entregar="'+pid+'">Entregar</button>';}
+  h+='</div></div>';return h;
 }
 
-// ═══════════════════════════════════════════════════════════
-// DESPACHO
-// ═══════════════════════════════════════════════════════════
 function renderEntregar(c){
   var listos=DB.pedidos.filter(function(p){return p.estatus==='LISTO';});
   var urgentes=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&clasif(p)==='urgente';});
   var vencidos=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&clasif(p)==='vencido';});
   var html='<div class="section-pad">';
   if(!listos.length&&!urgentes.length&&!vencidos.length){html+='<div class="empty"><div class="empty-icon">OK</div>No hay pedidos urgentes ni listos</div>';}
-  else{
-    if(listos.length){html+='<div class="sec-label">Listos ('+listos.length+')</div>';listos.forEach(function(p){html+=cardHTML(p,true);});}
-    var un=urgentes.filter(function(p){return p.estatus!=='LISTO';});if(un.length){html+='<div class="sec-label">Urgentes</div>';un.forEach(function(p){html+=cardHTML(p,true);});}
-    var vn=vencidos.filter(function(p){return p.estatus!=='LISTO'&&clasif(p)!=='urgente';});if(vn.length){html+='<div class="sec-label">Vencidos</div>';vn.forEach(function(p){html+=cardHTML(p,true);});}
-  }
+  else{if(listos.length){html+='<div class="sec-label">Listos ('+listos.length+')</div>';listos.forEach(function(p){html+=cardHTML(p,true);});}
+  var un=urgentes.filter(function(p){return p.estatus!=='LISTO';});if(un.length){html+='<div class="sec-label">Urgentes</div>';un.forEach(function(p){html+=cardHTML(p,true);});}
+  var vn=vencidos.filter(function(p){return p.estatus!=='LISTO'&&clasif(p)!=='urgente';});if(vn.length){html+='<div class="sec-label">Vencidos</div>';vn.forEach(function(p){html+=cardHTML(p,true);});}}
   c.innerHTML=html+'</div>';
 }
 async function marcarEntregado(id){
@@ -388,15 +321,9 @@ async function marcarEntregado(id){
   var card=document.getElementById('card-'+id);
   if(card){card.style.opacity='.4';card.querySelector('.card-foot').innerHTML='<span style="color:var(--success);font-size:13px;font-weight:600">Entregado hoy</span>';}
   toast('Pedido entregado','ok');
-  enviarPushOneSignal(
-    '✅ Pedido entregado #'+(p.numero||''),
-    'Cliente: '+(p.cliente||'')+(nota?' — '+nota:'')
-  );
+  enviarPushOneSignal('✅ Pedido entregado #'+(p.numero||''),'Cliente: '+(p.cliente||'')+(nota?' — '+nota:''));
 }
 
-// ═══════════════════════════════════════════════════════════
-// NUEVO PEDIDO
-// ═══════════════════════════════════════════════════════════
 function renderNuevo(c){
   var vends=DB.usuarios.map(function(u){return '<option value="'+u.nombre+'">'+u.nombre+'</option>';}).join('');
   c.innerHTML='<div class="section-pad"><div class="card" style="padding:16px"><div class="sfield-row"><div class="sfield"><label># Pedido</label><input type="text" id="n-numero" placeholder="Ej: 432"></div><div class="sfield"><label>Cliente *</label><input type="text" id="n-cliente" placeholder="Nombre del cliente"></div></div><div class="sfield-row"><div class="sfield"><label>Ciudad</label><input type="text" id="n-ciudad" placeholder="Ciudad"></div><div class="sfield"><label>Vendedor</label><select id="n-vendedor"><option value="">Seleccionar</option>'+vends+'</select></div></div><div class="sfield-row"><div class="sfield"><label>Proveedor</label><input type="text" id="n-proveedor" placeholder="Ej: ORION..."></div><div class="sfield"><label># OC</label><input type="text" id="n-oc" placeholder="Ej: OC-2026-045"></div></div><div class="sfield-row"><div class="sfield"><label>Fecha limite</label><input type="date" id="n-fecha"></div><div class="sfield"><label>Estado</label><select id="n-estado"><option value="PENDIENTE">Pendiente</option><option value="EN PROCESO">En proceso</option><option value="LISTO">Listo</option></select></div></div><div class="sfield"><label>Descripcion *</label><textarea id="n-desc" placeholder="Productos, medidas, colores, cantidades..."></textarea></div><button class="btn btn-dark" style="width:100%;padding:13px;font-size:15px;margin-top:4px" onclick="crearPedido()">Crear pedido</button></div></div>';
@@ -413,16 +340,9 @@ async function crearPedido(){
   await guardarDB();
   ['n-numero','n-cliente','n-ciudad','n-proveedor','n-oc','n-fecha','n-desc'].forEach(function(id){document.getElementById(id).value='';});
   toast('Pedido #'+numero+' creado','ok');
-  // Push a todos los usuarios
-  enviarPushOneSignal(
-    '📦 Nuevo pedido #'+numero,
-    'Cliente: '+cliente+' — '+desc.substring(0,60)
-  );
+  enviarPushOneSignal('📦 Nuevo pedido #'+numero,'Cliente: '+cliente+' — '+desc.substring(0,60));
 }
 
-// ═══════════════════════════════════════════════════════════
-// EDITAR
-// ═══════════════════════════════════════════════════════════
 function abrirEditar(id){
   var p=DB.pedidos.find(function(x){return x.id===id;});if(!p)return;
   PEDIDO_EDIT_ID=id;
@@ -448,9 +368,6 @@ async function guardarEdicion(){
   await guardarDB();cerrarModal('modal-edit');goTab(TAB,document.getElementById('nb-'+TAB));toast('Pedido actualizado','ok');
 }
 
-// ═══════════════════════════════════════════════════════════
-// REPORTES
-// ═══════════════════════════════════════════════════════════
 function renderReportes(c){
   var total=DB.pedidos.length,ent=DB.pedidos.filter(function(p){return p.estatus==='ENTREGADO';}).length;
   var pend=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';}).length;
@@ -467,53 +384,22 @@ function renderReportes(c){
   c.innerHTML=html;
 }
 
-// ═══════════════════════════════════════════════════════════
-// ADMIN
-// ═══════════════════════════════════════════════════════════
 function renderAdmin(c){
   if(SESSION.rol!=='admin'){c.innerHTML='<div class="empty">Acceso denegado</div>';return;}
   var html='<div class="section-pad"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="sec-label" style="margin:0">Usuarios ('+DB.usuarios.length+')</div><button class="btn btn-dark btn-sm" data-nuevo-usuario="1">+ Agregar</button></div><div class="admin-section">';
-  DB.usuarios.forEach(function(u){
-    html+='<div class="admin-row"><div class="admin-info"><div class="admin-name">'+u.nombre+'</div><div class="admin-meta">@'+u.username+' - '+u.creado+'</div></div>';
-    html+='<span class="role-badge '+(u.rol==='admin'?'role-admin':'role-emp')+'">'+u.rol+'</span>';
-    if(u.id!==SESSION.id){html+='<button class="btn btn-ghost btn-sm" data-edit-user="'+u.id+'">Editar</button><button class="btn btn-red btn-sm" data-del-user="'+u.id+'">Eliminar</button>';}
-    else{html+='<span style="font-size:11px;color:var(--muted)">Tú</span>';}
-    html+='</div>';
-  });
-  html+='</div><div class="sec-label" style="margin-top:20px">Sistema</div><div class="admin-section">';
-  html+='<div class="admin-row"><div class="admin-info"><div class="admin-name">Total pedidos</div></div><strong>'+DB.pedidos.length+'</strong></div>';
-  html+='<div class="admin-row"><div class="admin-info"><div class="admin-name">Base de datos</div></div><span style="color:var(--success);font-weight:600">Firebase activo</span></div>';
-  html+='<div class="admin-row"><div class="admin-info"><div class="admin-name">Exportar</div></div><button class="btn btn-ghost btn-sm" data-exportar="json">JSON</button><button class="btn btn-ghost btn-sm" data-exportar="csv" style="margin-left:6px">CSV</button></div>';
-  html+='<div class="admin-row"><div class="admin-info"><div class="admin-name" style="color:var(--danger)">Borrar todos los pedidos</div><div class="admin-meta">No se puede deshacer</div></div><button class="btn btn-red btn-sm" data-borrar-pedidos="1">Borrar</button></div>';
-  html+='</div></div>';
+  DB.usuarios.forEach(function(u){html+='<div class="admin-row"><div class="admin-info"><div class="admin-name">'+u.nombre+'</div><div class="admin-meta">@'+u.username+' - '+u.creado+'</div></div><span class="role-badge '+(u.rol==='admin'?'role-admin':'role-emp')+'">'+u.rol+'</span>';if(u.id!==SESSION.id){html+='<button class="btn btn-ghost btn-sm" data-edit-user="'+u.id+'">Editar</button><button class="btn btn-red btn-sm" data-del-user="'+u.id+'">Eliminar</button>';}else{html+='<span style="font-size:11px;color:var(--muted)">Tú</span>';}html+='</div>';});
+  html+='</div><div class="sec-label" style="margin-top:20px">Sistema</div><div class="admin-section"><div class="admin-row"><div class="admin-info"><div class="admin-name">Total pedidos</div></div><strong>'+DB.pedidos.length+'</strong></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Base de datos</div></div><span style="color:var(--success);font-weight:600">Firebase activo</span></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Exportar</div></div><button class="btn btn-ghost btn-sm" data-exportar="json">JSON</button><button class="btn btn-ghost btn-sm" data-exportar="csv" style="margin-left:6px">CSV</button></div><div class="admin-row"><div class="admin-info"><div class="admin-name" style="color:var(--danger)">Borrar todos los pedidos</div><div class="admin-meta">No se puede deshacer</div></div><button class="btn btn-red btn-sm" data-borrar-pedidos="1">Borrar</button></div></div></div>';
   c.innerHTML=html;
-  c.onclick=function(e){
-    var t=e.target;
-    if(t.getAttribute('data-nuevo-usuario'))abrirNuevoUsuario();
-    var eu=t.getAttribute('data-edit-user');if(eu)editarUsuario(eu);
-    var du=t.getAttribute('data-del-user');if(du)eliminarUsuario(du);
-    var ex=t.getAttribute('data-exportar');if(ex==='json')exportarJSON();if(ex==='csv')exportarCSV();
-    if(t.getAttribute('data-borrar-pedidos'))borrarPedidos();
-  };
+  c.onclick=function(e){var t=e.target;if(t.getAttribute('data-nuevo-usuario'))abrirNuevoUsuario();var eu=t.getAttribute('data-edit-user');if(eu)editarUsuario(eu);var du=t.getAttribute('data-del-user');if(du)eliminarUsuario(du);var ex=t.getAttribute('data-exportar');if(ex==='json')exportarJSON();if(ex==='csv')exportarCSV();if(t.getAttribute('data-borrar-pedidos'))borrarPedidos();};
 }
 function abrirNuevoUsuario(){document.getElementById('u-titulo').textContent='Nuevo usuario';['u-id','u-nombre','u-user','u-pass'].forEach(function(id){document.getElementById(id).value='';});document.getElementById('u-rol').value='empleado';document.getElementById('modal-usuario').classList.add('open');}
 function editarUsuario(id){var u=DB.usuarios.find(function(x){return x.id===id;});if(!u)return;document.getElementById('u-titulo').textContent='Editar usuario';document.getElementById('u-id').value=id;document.getElementById('u-nombre').value=u.nombre;document.getElementById('u-user').value=u.username;document.getElementById('u-pass').value=u.password;document.getElementById('u-rol').value=u.rol;document.getElementById('modal-usuario').classList.add('open');}
-async function guardarUsuario(){
-  var nombre=document.getElementById('u-nombre').value.trim();var user=document.getElementById('u-user').value.trim().toLowerCase();var pass=document.getElementById('u-pass').value;var rol=document.getElementById('u-rol').value;var eid=document.getElementById('u-id').value;
-  if(!nombre||!user||!pass){toast('Todos los campos son obligatorios','err');return;}
-  if(DB.usuarios.find(function(x){return x.username===user&&x.id!==eid;})){toast('El usuario ya existe','err');return;}
-  if(eid){var u=DB.usuarios.find(function(x){return x.id===eid;});if(u){u.nombre=nombre;u.username=user;u.password=pass;u.rol=rol;}}
-  else{DB.usuarios.push({id:uid(),nombre:nombre,username:user,password:pass,rol:rol,creado:fecha()});}
-  await guardarDB();cerrarModal('modal-usuario');goTab('admin',document.getElementById('nb-admin'));toast('Usuario guardado','ok');
-}
+async function guardarUsuario(){var nombre=document.getElementById('u-nombre').value.trim();var user=document.getElementById('u-user').value.trim().toLowerCase();var pass=document.getElementById('u-pass').value;var rol=document.getElementById('u-rol').value;var eid=document.getElementById('u-id').value;if(!nombre||!user||!pass){toast('Todos los campos son obligatorios','err');return;}if(DB.usuarios.find(function(x){return x.username===user&&x.id!==eid;})){toast('El usuario ya existe','err');return;}if(eid){var u=DB.usuarios.find(function(x){return x.id===eid;});if(u){u.nombre=nombre;u.username=user;u.password=pass;u.rol=rol;}}else{DB.usuarios.push({id:uid(),nombre:nombre,username:user,password:pass,rol:rol,creado:fecha()});}await guardarDB();cerrarModal('modal-usuario');goTab('admin',document.getElementById('nb-admin'));toast('Usuario guardado','ok');}
 async function eliminarUsuario(id){if(!confirm('Eliminar este usuario?'))return;DB.usuarios=DB.usuarios.filter(function(x){return x.id!==id;});await guardarDB();goTab('admin',document.getElementById('nb-admin'));toast('Usuario eliminado','warn');}
 async function borrarPedidos(){if(!confirm('Borrar TODOS los pedidos?'))return;DB.pedidos=[];await guardarDB();goTab('admin',document.getElementById('nb-admin'));toast('Pedidos eliminados','warn');}
 function exportarJSON(){var a=document.createElement('a');a.href='data:application/json;charset=utf-8,'+encodeURIComponent(JSON.stringify({pedidos:DB.pedidos,bitacora:DB.bitacora},null,2));a.download='veoyoca_'+fecha().replace(/\//g,'-')+'.json';a.click();}
 function exportarCSV(){var rows=[['ID','Numero','Cliente','Ciudad','Vendedor','Estado','Fecha limite','Descripcion']];DB.pedidos.forEach(function(p){rows.push([p.id,p.numero||'',p.cliente||'',p.ciudad||'',p.vendedor||'',p.estatus||'',p.fechaLimite||'',p.descripcion||'']);});var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download='pedidos_'+fecha().replace(/\//g,'-')+'.csv';a.click();}
 
-// ═══════════════════════════════════════════════════════════
-// RUTAS
-// ═══════════════════════════════════════════════════════════
 var ZONAS=[{nombre:'Maracaibo',ciudades:['MARACAIBO','NORTE','SUR','CENTRO','AMPARO','COROMOTO','HATICOS','DELICIAS','SANTA LUCIA','SAN FRANCISCO','SIERRA MAESTRA','ZONA INDUSTRIAL','BELLA VISTA']},{nombre:'Sur del lago',ciudades:['EL MOJAN','MARA','SANTA BARBARA','LOS PUERTOS','ALTAGRACIA']},{nombre:'Cabimas / C. Ojeda',ciudades:['CABIMAS','CIUDAD OJEDA','LAGUNILLAS']},{nombre:'Machiques / Perija',ciudades:['MACHIQUES','PERIJA','VILLA DEL ROSARIO','LA VILLA','CARRASQUERO']},{nombre:'Coro / Falcon',ciudades:['CORO','FALCON','TUCACAS','DABAJURO','PUNTO FIJO']},{nombre:'Barquisimeto',ciudades:['BARQUISIMETO','CARORA','YARACUY']},{nombre:'San Cristobal',ciudades:['SAN CRISTOBAL','TACHIRA']},{nombre:'Merida / Los Andes',ciudades:['MERIDA','VALERA','TRUJILLO']},{nombre:'Barinas / Llanos',ciudades:['BARINAS','ACARIGUA','GUASDUALITO','APURE']},{nombre:'Caracas / Centro',ciudades:['CARACAS','PETARE','LOS TEQUES','MIRANDA']},{nombre:'Valencia / Carabobo',ciudades:['VALENCIA','CARABOBO','MARACAY','ARAGUA','TURMERO']},{nombre:'Oriente',ciudades:['MATURIN','EL TIGRE','BARCELONA','CIUDAD BOLIVAR','ANZOATEGUI','PUERTO ORDAZ']},{nombre:'Otros',ciudades:[]}];
 function getZona(ciudad){if(!ciudad)return 'Sin ciudad';var cu=ciudad.toUpperCase().trim();for(var i=0;i<ZONAS.length-1;i++)for(var j=0;j<ZONAS[i].ciudades.length;j++)if(cu.indexOf(ZONAS[i].ciudades[j])>=0||ZONAS[i].ciudades[j].indexOf(cu)>=0)return ZONAS[i].nombre;return ciudad;}
 function renderPlanificacion(c){
@@ -524,160 +410,67 @@ function renderPlanificacion(c){
   var zo=Object.keys(grupos).sort(function(a,b){var ma=9999,mb=9999;grupos[a].forEach(function(p){var d=diasRestantes(p.fechaLimite);if(d!==null&&d<ma)ma=d;});grupos[b].forEach(function(p){var d=diasRestantes(p.fechaLimite);if(d!==null&&d<mb)mb=d;});return ma-mb;});
   var tv=pends.filter(function(p){return clasif(p)==='vencido';}).length,tu=pends.filter(function(p){return clasif(p)==='urgente';}).length;
   var html='<div class="stats-bar"><div class="stat"><div class="stat-v">'+pends.length+'</div><div class="stat-l">pedidos</div></div><div class="stat"><div class="stat-v" style="color:#fca5a5">'+tv+'</div><div class="stat-l">vencidos</div></div><div class="stat"><div class="stat-v" style="color:#fcd34d">'+tu+'</div><div class="stat-l">urgentes</div></div><div class="stat"><div class="stat-v">'+zo.length+'</div><div class="stat-l">zonas</div></div></div><div style="padding:10px 14px 0"><div class="sec-label">Plan de entregas</div><button class="btn btn-ghost btn-sm" style="margin-bottom:10px;width:100%" onclick="exportarPlan()">Exportar CSV</button>';
-  zo.forEach(function(zona){
-    var pedidos=grupos[zona];var urgV=pedidos.filter(function(p){return clasif(p)==='vencido';}).length;var urgU=pedidos.filter(function(p){return clasif(p)==='urgente';}).length;var ch=urgV?'#dc2626':urgU?'#d97706':'#1a1a2e';
-    html+='<div class="card" style="margin-bottom:12px"><div style="background:'+ch+';padding:10px 14px"><div style="color:#fff;font-size:13px;font-weight:700">'+zona+' ('+pedidos.length+' pedidos)</div>'+(urgV?'<div style="color:#fca5a5;font-size:11px">'+urgV+' vencido'+(urgV>1?'s':'')+'</div>':urgU?'<div style="color:#fcd34d;font-size:11px">'+urgU+' urgente'+(urgU>1?'s':'')+'</div>':'')+'</div><div style="padding:6px 0">';
-    pedidos.forEach(function(p,pi){var d=diasRestantes(p.fechaLimite);var col=!p.fechaLimite?'#6b7280':d<0?'#dc2626':d<=7?'#d97706':'#16a34a';html+='<div style="padding:8px 14px;border-bottom:1px solid #f3f4f6;display:flex;gap:10px;align-items:center"><div style="min-width:22px;height:22px;border-radius:50%;background:'+col+';color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+(pi+1)+'</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+(p.cliente||'Sin nombre')+'</div><div style="font-size:11px;color:#6b7280">#'+(p.numero||p.id.substring(0,6))+(p.vendedor?' - '+p.vendedor:'')+'</div></div>'+badgeHTML(p)+'</div>';});
-    html+='</div></div>';
-  });
+  zo.forEach(function(zona){var pedidos=grupos[zona];var urgV=pedidos.filter(function(p){return clasif(p)==='vencido';}).length;var urgU=pedidos.filter(function(p){return clasif(p)==='urgente';}).length;var ch=urgV?'#dc2626':urgU?'#d97706':'#1a1a2e';html+='<div class="card" style="margin-bottom:12px"><div style="background:'+ch+';padding:10px 14px"><div style="color:#fff;font-size:13px;font-weight:700">'+zona+' ('+pedidos.length+' pedidos)</div>'+(urgV?'<div style="color:#fca5a5;font-size:11px">'+urgV+' vencido'+(urgV>1?'s':'')+'</div>':urgU?'<div style="color:#fcd34d;font-size:11px">'+urgU+' urgente'+(urgU>1?'s':'')+'</div>':'')+'</div><div style="padding:6px 0">';pedidos.forEach(function(p,pi){var d=diasRestantes(p.fechaLimite);var col=!p.fechaLimite?'#6b7280':d<0?'#dc2626':d<=7?'#d97706':'#16a34a';html+='<div style="padding:8px 14px;border-bottom:1px solid #f3f4f6;display:flex;gap:10px;align-items:center"><div style="min-width:22px;height:22px;border-radius:50%;background:'+col+';color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+(pi+1)+'</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+(p.cliente||'Sin nombre')+'</div><div style="font-size:11px;color:#6b7280">#'+(p.numero||p.id.substring(0,6))+(p.vendedor?' - '+p.vendedor:'')+'</div></div>'+badgeHTML(p)+'</div>';});html+='</div></div>';});
   c.innerHTML=html+'</div>';
 }
-function exportarPlan(){
-  var pends=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';});
-  pends.sort(function(a,b){var da=diasRestantes(a.fechaLimite),db=diasRestantes(b.fechaLimite);if(da===null&&db===null)return 0;if(da===null)return 1;if(db===null)return -1;return da-db;});
-  var rows=[['#','Pedido','Cliente','Ciudad','Zona','Vendedor','Fecha limite','Dias','Estado','Descripcion']];
-  pends.forEach(function(p,i){var d=diasRestantes(p.fechaLimite);rows.push([i+1,p.numero||p.id.substring(0,6),p.cliente||'',p.ciudad||'',getZona(p.ciudad),p.vendedor||'',p.fechaLimite||'',d!==null?d:'',p.estatus||'',(p.descripcion||'').substring(0,80)]);});
-  var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
-  var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download='plan_'+fecha().replace(/\//g,'-')+'.csv';a.click();
-}
+function exportarPlan(){var pends=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';});pends.sort(function(a,b){var da=diasRestantes(a.fechaLimite),db=diasRestantes(b.fechaLimite);if(da===null&&db===null)return 0;if(da===null)return 1;if(db===null)return -1;return da-db;});var rows=[['#','Pedido','Cliente','Ciudad','Zona','Vendedor','Fecha limite','Dias','Estado','Descripcion']];pends.forEach(function(p,i){var d=diasRestantes(p.fechaLimite);rows.push([i+1,p.numero||p.id.substring(0,6),p.cliente||'',p.ciudad||'',getZona(p.ciudad),p.vendedor||'',p.fechaLimite||'',d!==null?d:'',p.estatus||'',(p.descripcion||'').substring(0,80)]);});var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download='plan_'+fecha().replace(/\//g,'-')+'.csv';a.click();}
 
-// ═══════════════════════════════════════════════════════════
-// PLAN IA
-// ═══════════════════════════════════════════════════════════
 var MODELO='claude-sonnet-4-6';
-function renderPlanIA(c){
-  var pends=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';});
-  var apikey=localStorage.getItem('veo_apikey')||'';
-  c.innerHTML='<div class="stats-bar"><div class="stat"><div class="stat-v">'+pends.length+'</div><div class="stat-l">pendientes</div></div><div class="stat"><div class="stat-v" style="color:#fca5a5">'+pends.filter(function(p){return clasif(p)==='vencido';}).length+'</div><div class="stat-l">vencidos</div></div><div class="stat"><div class="stat-v" style="color:#fcd34d">'+pends.filter(function(p){return clasif(p)==='urgente';}).length+'</div><div class="stat-l">urgentes</div></div><div class="stat"><div class="stat-v">'+ [...new Set(pends.map(function(p){return p.ciudad||'?';}))].length+'</div><div class="stat-l">ciudades</div></div></div><div style="padding:14px">'+(!apikey?'<div style="background:#fff;border:2px solid #f59e0b;border-radius:12px;padding:16px;margin-bottom:14px"><div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px">CONFIGURAR API KEY</div><div style="font-size:12px;color:#6b7280;margin-bottom:10px">Ingresa tu clave de Anthropic (sk-ant-...). Se guarda solo en este dispositivo.</div><input type="password" id="ia-keyinput" placeholder="sk-ant-api03-..." style="width:100%;padding:10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;margin-bottom:8px"><button class="btn btn-dark" style="width:100%" onclick="guardarAPIKey()">Guardar clave</button></div>':'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:12px;color:#16a34a;font-weight:600">API Key configurada</div><button onclick="cambiarAPIKey()" style="background:none;border:none;font-size:11px;color:#6b7280;cursor:pointer;text-decoration:underline">Cambiar</button></div>')+'<div style="background:linear-gradient(135deg,#1a1a2e,#2d2d5e);border-radius:14px;padding:20px;margin-bottom:14px;text-align:center"><div style="font-size:28px;margin-bottom:8px">IA</div><div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:4px">Plan de Entregas con IA</div><div style="color:rgba(255,255,255,.6);font-size:12px;margin-bottom:16px">Claude analiza tus '+pends.length+' pedidos y arma el plan optimo</div><button class="btn btn-green" style="width:100%;padding:13px;font-size:15px;font-weight:700" onclick="generarPlanIA()" id="btn-ia"'+(!apikey?' disabled':'')+'>'+(apikey?'Generar plan inteligente':'Configura tu API Key primero')+'</button></div><div id="ia-resultado"></div></div>';
-}
+function renderPlanIA(c){var pends=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';});var apikey=localStorage.getItem('veo_apikey')||'';c.innerHTML='<div class="stats-bar"><div class="stat"><div class="stat-v">'+pends.length+'</div><div class="stat-l">pendientes</div></div><div class="stat"><div class="stat-v" style="color:#fca5a5">'+pends.filter(function(p){return clasif(p)==='vencido';}).length+'</div><div class="stat-l">vencidos</div></div><div class="stat"><div class="stat-v" style="color:#fcd34d">'+pends.filter(function(p){return clasif(p)==='urgente';}).length+'</div><div class="stat-l">urgentes</div></div><div class="stat"><div class="stat-v">'+ [...new Set(pends.map(function(p){return p.ciudad||'?';}))].length+'</div><div class="stat-l">ciudades</div></div></div><div style="padding:14px">'+(!apikey?'<div style="background:#fff;border:2px solid #f59e0b;border-radius:12px;padding:16px;margin-bottom:14px"><div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px">CONFIGURAR API KEY</div><input type="password" id="ia-keyinput" placeholder="sk-ant-api03-..." style="width:100%;padding:10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;margin-bottom:8px"><button class="btn btn-dark" style="width:100%" onclick="guardarAPIKey()">Guardar clave</button></div>':'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:12px;color:#16a34a;font-weight:600">API Key configurada</div><button onclick="cambiarAPIKey()" style="background:none;border:none;font-size:11px;color:#6b7280;cursor:pointer;text-decoration:underline">Cambiar</button></div>')+'<div style="background:linear-gradient(135deg,#1a1a2e,#2d2d5e);border-radius:14px;padding:20px;margin-bottom:14px;text-align:center"><div style="font-size:28px;margin-bottom:8px">IA</div><div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:4px">Plan de Entregas con IA</div><div style="color:rgba(255,255,255,.6);font-size:12px;margin-bottom:16px">Claude analiza tus '+pends.length+' pedidos y arma el plan optimo</div><button class="btn btn-green" style="width:100%;padding:13px;font-size:15px;font-weight:700" onclick="generarPlanIA()" id="btn-ia"'+(!apikey?' disabled':'')+'>'+(apikey?'Generar plan inteligente':'Configura tu API Key primero')+'</button></div><div id="ia-resultado"></div></div>';}
 function guardarAPIKey(){var k=(document.getElementById('ia-keyinput')||{}).value||'';if(!k||!k.startsWith('sk-ant')){toast('Clave invalida','err');return;}localStorage.setItem('veo_apikey',k);toast('Clave guardada','ok');renderPlanIA(document.getElementById('content'));}
 function cambiarAPIKey(){localStorage.removeItem('veo_apikey');renderPlanIA(document.getElementById('content'));}
-function generarPlanIA(){
-  var pends=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';});
-  if(!pends.length){toast('No hay pedidos pendientes','warn');return;}
-  var API_KEY=localStorage.getItem('veo_apikey')||'';if(!API_KEY){toast('Configura tu API Key primero','err');return;}
-  var btn=document.getElementById('btn-ia');if(btn){btn.disabled=true;btn.textContent='Analizando...';}
-  var res=document.getElementById('ia-resultado');if(res)res.innerHTML='<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:20px;text-align:center"><div style="font-size:14px;font-weight:600;color:#1a1a2e">Claude analizando pedidos...</div></div>';
-  var hoy=new Date().toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'});
-  var lista=pends.map(function(p){var d=diasRestantes(p.fechaLimite);return '- Pedido #'+(p.numero||p.id.substring(0,6))+' | Cliente: '+(p.cliente||'?')+' | Ciudad: '+(p.ciudad||'Sin ciudad')+' | Dias restantes: '+(d!==null?d:'Sin fecha')+' | Estado: '+(p.estatus||'PENDIENTE')+' | Desc: '+(p.descripcion||'').substring(0,60);}).join('\n');
-  var prompt='Eres el asistente de logistica de una empresa venezolana de equipos comerciales. Hoy es '+hoy+'.\n\nTengo '+pends.length+' pedidos pendientes:\n\n'+lista+'\n\nGenera:\n1. PLAN DE RUTAS: Agrupa por zona geografica de Venezuela, orden optimo de paradas.\n2. ALERTAS CRITICAS: Pedidos que necesitan atencion inmediata.\n3. CONSOLIDADOS DE CARGA: Que pedidos meter en cada camion.\n4. DIVISION DE COSTOS: Como dividir el flete.\n\nResponde en espanol con emojis para identificar secciones.';
-  fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:MODELO,max_tokens:4000,messages:[{role:'user',content:prompt}]})})
-  .then(function(r){return r.json();}).then(function(data){var texto='';if(data.content&&data.content[0]&&data.content[0].text)texto=data.content[0].text;else if(data.error)texto='Error: '+data.error.message;mostrarResultadoIA(texto);if(btn){btn.disabled=false;btn.textContent='Generar nuevo plan';}}).catch(function(err){mostrarResultadoIA('Error: '+err.message);if(btn){btn.disabled=false;btn.textContent='Reintentar';}});
-}
-function mostrarResultadoIA(texto){
-  var res=document.getElementById('ia-resultado');if(!res)return;
-  var html=texto.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/^#{1,3} (.+)$/gm,'<div style="font-size:15px;font-weight:700;color:#1a1a2e;margin:16px 0 8px">$1</div>').replace(/^- (.+)$/gm,'<div style="padding:3px 0 3px 12px;border-left:3px solid #e5e7eb;margin:4px 0;font-size:13px">$1</div>').replace(/\n\n/g,'<br><br>').replace(/\n/g,'<br>');
-  res.innerHTML='<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden"><div style="background:linear-gradient(135deg,#1a1a2e,#2d2d5e);padding:12px 16px;display:flex;justify-content:space-between;align-items:center"><div style="color:#fff;font-size:13px;font-weight:600">Plan generado por Claude</div><button onclick="copiarPlan()" style="background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">Copiar</button></div><div style="padding:16px;font-size:13px;line-height:1.7;color:#374151" id="ia-texto">'+html+'</div><div style="padding:12px 16px;border-top:1px solid #e5e7eb"><button class="btn btn-ghost btn-sm" onclick="generarPlanIA()">Regenerar</button></div></div>';
-}
+function generarPlanIA(){var pends=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';});if(!pends.length){toast('No hay pedidos pendientes','warn');return;}var API_KEY=localStorage.getItem('veo_apikey')||'';if(!API_KEY){toast('Configura tu API Key primero','err');return;}var btn=document.getElementById('btn-ia');if(btn){btn.disabled=true;btn.textContent='Analizando...';}var res=document.getElementById('ia-resultado');if(res)res.innerHTML='<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:20px;text-align:center"><div style="font-size:14px;font-weight:600;color:#1a1a2e">Claude analizando pedidos...</div></div>';var hoy=new Date().toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'});var lista=pends.map(function(p){var d=diasRestantes(p.fechaLimite);return '- Pedido #'+(p.numero||p.id.substring(0,6))+' | Cliente: '+(p.cliente||'?')+' | Ciudad: '+(p.ciudad||'Sin ciudad')+' | Dias restantes: '+(d!==null?d:'Sin fecha')+' | Estado: '+(p.estatus||'PENDIENTE')+' | Desc: '+(p.descripcion||'').substring(0,60);}).join('\n');var prompt='Eres el asistente de logistica de una empresa venezolana de equipos comerciales. Hoy es '+hoy+'.\n\nTengo '+pends.length+' pedidos pendientes:\n\n'+lista+'\n\nGenera:\n1. PLAN DE RUTAS: Agrupa por zona geografica de Venezuela, orden optimo de paradas.\n2. ALERTAS CRITICAS: Pedidos que necesitan atencion inmediata.\n3. CONSOLIDADOS DE CARGA: Que pedidos meter en cada camion.\n4. DIVISION DE COSTOS: Como dividir el flete.\n\nResponde en espanol con emojis para identificar secciones.';fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:MODELO,max_tokens:4000,messages:[{role:'user',content:prompt}]})}).then(function(r){return r.json();}).then(function(data){var texto='';if(data.content&&data.content[0]&&data.content[0].text)texto=data.content[0].text;else if(data.error)texto='Error: '+data.error.message;mostrarResultadoIA(texto);if(btn){btn.disabled=false;btn.textContent='Generar nuevo plan';}}).catch(function(err){mostrarResultadoIA('Error: '+err.message);if(btn){btn.disabled=false;btn.textContent='Reintentar';}});}
+function mostrarResultadoIA(texto){var res=document.getElementById('ia-resultado');if(!res)return;var html=texto.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/^#{1,3} (.+)$/gm,'<div style="font-size:15px;font-weight:700;color:#1a1a2e;margin:16px 0 8px">$1</div>').replace(/^- (.+)$/gm,'<div style="padding:3px 0 3px 12px;border-left:3px solid #e5e7eb;margin:4px 0;font-size:13px">$1</div>').replace(/\n\n/g,'<br><br>').replace(/\n/g,'<br>');res.innerHTML='<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden"><div style="background:linear-gradient(135deg,#1a1a2e,#2d2d5e);padding:12px 16px;display:flex;justify-content:space-between;align-items:center"><div style="color:#fff;font-size:13px;font-weight:600">Plan generado por Claude</div><button onclick="copiarPlan()" style="background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">Copiar</button></div><div style="padding:16px;font-size:13px;line-height:1.7;color:#374151" id="ia-texto">'+html+'</div><div style="padding:12px 16px;border-top:1px solid #e5e7eb"><button class="btn btn-ghost btn-sm" onclick="generarPlanIA()">Regenerar</button></div></div>';}
 function copiarPlan(){var el=document.getElementById('ia-texto');if(!el)return;navigator.clipboard.writeText(el.innerText||el.textContent).then(function(){toast('Copiado','ok');}).catch(function(){toast('No se pudo copiar','err');});}
 
-// ═══════════════════════════════════════════════════════════
-// NOTIFICACIONES (WhatsApp + Correo)
-// ═══════════════════════════════════════════════════════════
 function getNotifConfig(){try{return JSON.parse(localStorage.getItem('veo_notif')||'{}');}catch(e){return {};}}
 function setNotifConfig(cfg){localStorage.setItem('veo_notif',JSON.stringify(cfg));}
-function buildReporte(){
-  var vencidos=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&clasif(p)==='vencido';});
-  var urgentes=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&clasif(p)==='urgente';});
-  return {vencidos:vencidos,urgentes:urgentes};
-}
-function verificarYNotificarAlEntrar(){
-  var cfg=getNotifConfig();
-  if(!cfg.pushActivo||Notification.permission!=='granted')return;
-  var r=buildReporte();
-  if(r.vencidos.length+r.urgentes.length===0)return;
-  var hoyStr=new Date().toDateString();
-  if(cfg.ultimaNotifPush===hoyStr)return;
-  cfg.ultimaNotifPush=hoyStr;setNotifConfig(cfg);
-}
-function enviarCorreo(){
-  var cfg=getNotifConfig();
-  if(!cfg.emailjsServiceId||!cfg.emailjsTemplateId||!cfg.emailjsPublicKey||!cfg.emailDestino){toast('Configura el correo primero','err');return;}
-  var r=buildReporte();var total=r.vencidos.length+r.urgentes.length;
-  if(total===0){toast('No hay pedidos críticos','ok');return;}
-  var htmlCorreo='<div style="font-family:Arial,sans-serif"><h2>Reporte VeoYoca — '+fecha()+'</h2><p>'+total+' pedidos críticos: '+r.vencidos.length+' vencidos, '+r.urgentes.length+' urgentes</p></div>';
-  function doSend(){window.emailjs.send(cfg.emailjsServiceId,cfg.emailjsTemplateId,{to_email:cfg.emailDestino,fecha:fecha(),total:total,vencidos_n:r.vencidos.length,urgentes_n:r.urgentes.length,lista_vencidos:htmlCorreo,lista_urgentes:''}).then(function(){toast('Correo enviado ✓','ok');}).catch(function(e){toast('Error correo: '+(e.text||e.message),'err');});}
-  if(window.emailjs){doSend();}else{var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';s.onload=function(){doSend();};document.head.appendChild(s);}
-}
-function enviarWhatsApp(){
-  var cfg=getNotifConfig();
-  if(!cfg.waNumero||!cfg.waApikey){toast('Configura WhatsApp primero','err');return;}
-  var r=buildReporte();var total=r.vencidos.length+r.urgentes.length;
-  if(total===0){toast('No hay pedidos críticos','ok');return;}
-  var msg='🚨 *VeoYoca — '+fecha()+'*\n\n';
-  if(r.vencidos.length){msg+='🔴 *VENCIDOS ('+r.vencidos.length+')*\n';r.vencidos.forEach(function(p){msg+='• #'+(p.numero||'?')+' '+p.cliente+' — '+Math.abs(diasRestantes(p.fechaLimite))+'d vencido\n';});msg+='\n';}
-  if(r.urgentes.length){msg+='🟡 *URGENTES ('+r.urgentes.length+')*\n';r.urgentes.forEach(function(p){msg+='• #'+(p.numero||'?')+' '+p.cliente+' — vence en '+diasRestantes(p.fechaLimite)+'d\n';});}
-  var xhr=new XMLHttpRequest();xhr.open('POST','https://api.ultramsg.com/instance181941/messages/chat',true);xhr.setRequestHeader('Content-Type','application/x-www-form-urlencoded');xhr.timeout=8000;xhr.onload=function(){toast('WhatsApp enviado ✓','ok');};xhr.onerror=function(){toast('WhatsApp enviado','ok');};xhr.send('token=jd3odrhspk539mmp&to='+encodeURIComponent(cfg.waNumero)+'&body='+encodeURIComponent(msg));
-}
-function enviarTodo(){
-  var cfg=getNotifConfig();
-  enviarPushOneSignal('🚨 VeoYoca — Reporte de pedidos','Revisa los pedidos vencidos y urgentes');
-  if(cfg.emailActivo)enviarCorreo();
-  if(cfg.waActivo)enviarWhatsApp();
-}
+function buildReporte(){var vencidos=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&clasif(p)==='vencido';});var urgentes=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&clasif(p)==='urgente';});return {vencidos:vencidos,urgentes:urgentes};}
+function enviarWhatsApp(){var cfg=getNotifConfig();if(!cfg.waNumero||!cfg.waApikey){toast('Configura WhatsApp primero','err');return;}var r=buildReporte();var total=r.vencidos.length+r.urgentes.length;if(total===0){toast('No hay pedidos críticos','ok');return;}var msg='🚨 *VeoYoca — '+fecha()+'*\n\n';if(r.vencidos.length){msg+='🔴 *VENCIDOS ('+r.vencidos.length+')*\n';r.vencidos.forEach(function(p){msg+='• #'+(p.numero||'?')+' '+p.cliente+' — '+Math.abs(diasRestantes(p.fechaLimite))+'d vencido\n';});msg+='\n';}if(r.urgentes.length){msg+='🟡 *URGENTES ('+r.urgentes.length+')*\n';r.urgentes.forEach(function(p){msg+='• #'+(p.numero||'?')+' '+p.cliente+' — vence en '+diasRestantes(p.fechaLimite)+'d\n';});}var xhr=new XMLHttpRequest();xhr.open('POST','https://api.ultramsg.com/instance181941/messages/chat',true);xhr.setRequestHeader('Content-Type','application/x-www-form-urlencoded');xhr.timeout=8000;xhr.onload=function(){toast('WhatsApp enviado ✓','ok');};xhr.onerror=function(){toast('WhatsApp enviado','ok');};xhr.send('token=jd3odrhspk539mmp&to='+encodeURIComponent(cfg.waNumero)+'&body='+encodeURIComponent(msg));}
+function enviarTodo(){var cfg=getNotifConfig();enviarPushOneSignal('🚨 VeoYoca — Reporte de pedidos','Revisa los pedidos vencidos y urgentes');if(cfg.emailActivo)enviarCorreo();if(cfg.waActivo)enviarWhatsApp();}
+function enviarCorreo(){var cfg=getNotifConfig();if(!cfg.emailjsServiceId||!cfg.emailjsTemplateId||!cfg.emailjsPublicKey||!cfg.emailDestino){toast('Configura el correo primero','err');return;}var r=buildReporte();var total=r.vencidos.length+r.urgentes.length;if(total===0){toast('No hay pedidos críticos','ok');return;}function doSend(){window.emailjs.send(cfg.emailjsServiceId,cfg.emailjsTemplateId,{to_email:cfg.emailDestino,fecha:fecha(),total:total,vencidos_n:r.vencidos.length,urgentes_n:r.urgentes.length,lista_vencidos:'Reporte VeoYoca '+fecha(),lista_urgentes:''}).then(function(){toast('Correo enviado ✓','ok');}).catch(function(e){toast('Error: '+(e.text||e.message),'err');});}if(window.emailjs){doSend();}else{var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';s.onload=function(){doSend();};document.head.appendChild(s);}}
 function renderNotificaciones(c){
-  var cfg=getNotifConfig();var r=buildReporte();
-  var critTotal=r.vencidos.length+r.urgentes.length;
+  var cfg=getNotifConfig();var r=buildReporte();var critTotal=r.vencidos.length+r.urgentes.length;
   var html='<div style="padding:14px">';
-  if(critTotal>0){
-    html+='<div style="background:#dc2626;border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px">';
-    html+='<div style="font-size:28px">🚨</div>';
-    html+='<div><div style="color:#fff;font-weight:700;font-size:14px">'+critTotal+' pedidos requieren atención</div>';
-    html+='<div style="color:rgba(255,255,255,.8);font-size:12px">'+r.vencidos.length+' vencidos · '+r.urgentes.length+' urgentes</div></div>';
-    html+='<button onclick="enviarTodo()" class="btn btn-sm" style="margin-left:auto;background:#fff;color:#dc2626;white-space:nowrap">Enviar alerta</button>';
-    html+='</div>';
-  }else{
-    html+='<div style="background:#16a34a;border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px">';
-    html+='<div style="font-size:28px">✅</div>';
-    html+='<div style="color:#fff;font-weight:700;font-size:14px">Todo bajo control<br><span style="font-size:12px;font-weight:400;opacity:.8">No hay pedidos críticos</span></div>';
-    html+='</div>';
-  }
-  html+='<div class="notif-banner">';
-  html+='<h3>🔔 Canales de notificación</h3>';
-  html+='<p>Las notificaciones push llegan aunque la app esté cerrada</p>';
-  html+='<div class="notif-row"><div class="notif-icon">📱</div><div class="notif-info"><div class="notif-label">Push (OneSignal)</div><div class="notif-sub">Notificaciones en el celular con app cerrada ✓</div></div><button onclick="pedirPermisoOneSignal()" style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer">Activar</button></div>';
+  if(critTotal>0){html+='<div style="background:#dc2626;border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px"><div style="font-size:28px">🚨</div><div><div style="color:#fff;font-weight:700;font-size:14px">'+critTotal+' pedidos requieren atención</div><div style="color:rgba(255,255,255,.8);font-size:12px">'+r.vencidos.length+' vencidos · '+r.urgentes.length+' urgentes</div></div><button onclick="enviarTodo()" class="btn btn-sm" style="margin-left:auto;background:#fff;color:#dc2626;white-space:nowrap">Enviar alerta</button></div>';}
+  else{html+='<div style="background:#16a34a;border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px"><div style="font-size:28px">✅</div><div style="color:#fff;font-weight:700;font-size:14px">Todo bajo control<br><span style="font-size:12px;font-weight:400;opacity:.8">No hay pedidos críticos</span></div></div>';}
+  html+='<div class="notif-banner"><h3>🔔 Canales de notificación</h3><p>Las notificaciones push llegan aunque la app esté cerrada</p>';
+  html+='<div class="notif-row"><div class="notif-icon">📱</div><div class="notif-info"><div class="notif-label">Push (OneSignal)</div><div class="notif-sub">Notificación en el celular con app cerrada</div></div><button onclick="activarPush()" style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer" id="btn-activar-push">Activar</button></div>';
   var emailOk=cfg.emailjsServiceId&&cfg.emailjsTemplateId&&cfg.emailjsPublicKey&&cfg.emailDestino;
   html+='<div class="notif-row"><div class="notif-icon">📧</div><div class="notif-info"><div class="notif-label">Correo electrónico</div><div class="notif-sub">'+(emailOk?'✓ '+cfg.emailDestino:'Configura abajo')+'</div></div><label class="notif-toggle"><input type="checkbox" '+(cfg.emailActivo?'checked':'')+' onchange="toggleCanal(\'email\',this.checked)"><span class="notif-slider"></span></label></div>';
   var waOk=cfg.waNumero&&cfg.waApikey;
   html+='<div class="notif-row"><div class="notif-icon">💬</div><div class="notif-info"><div class="notif-label">WhatsApp</div><div class="notif-sub">'+(waOk?'✓ '+cfg.waNumero:'Configura abajo')+'</div></div><label class="notif-toggle"><input type="checkbox" '+(cfg.waActivo?'checked':'')+' onchange="toggleCanal(\'wa\',this.checked)"><span class="notif-slider"></span></label></div>';
   html+='</div>';
   html+='<div style="background:#fff;border:1px solid var(--border);border-radius:12px;margin-top:14px;overflow:hidden">';
-  html+='<div style="padding:14px;border-bottom:1px solid var(--border)"><div style="font-size:13px;font-weight:700;margin-bottom:10px">📧 Configurar correo</div>';
-  html+='<div class="sfield-row" style="margin-bottom:8px"><div class="sfield" style="margin-bottom:0"><label>Correo destino</label><input type="email" id="cfg-email-destino" placeholder="tu@correo.com" value="'+(cfg.emailDestino||'')+'"></div><div class="sfield" style="margin-bottom:0"><label>Service ID</label><input type="text" id="cfg-emailjs-sid" placeholder="service_xxx" value="'+(cfg.emailjsServiceId||'')+'"></div></div>';
-  html+='<div class="sfield-row" style="margin-bottom:8px"><div class="sfield" style="margin-bottom:0"><label>Template ID</label><input type="text" id="cfg-emailjs-tid" placeholder="template_xxx" value="'+(cfg.emailjsTemplateId||'')+'"></div><div class="sfield" style="margin-bottom:0"><label>Public Key</label><input type="text" id="cfg-emailjs-key" placeholder="xxxx" value="'+(cfg.emailjsPublicKey||'')+'"></div></div>';
-  html+='<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-dark btn-sm" onclick="guardarConfigEmail()">Guardar</button>'+(emailOk?'<button class="btn btn-green btn-sm" onclick="enviarCorreo()">Probar</button>':'')+'</div></div>';
-  html+='<div style="padding:14px"><div style="font-size:13px;font-weight:700;margin-bottom:10px">💬 Configurar WhatsApp</div>';
-  html+='<div class="sfield-row" style="margin-bottom:8px"><div class="sfield" style="margin-bottom:0"><label>Número (con código país)</label><input type="text" id="cfg-wa-numero" placeholder="+58 414 123 4567" value="'+(cfg.waNumero||'')+'"></div><div class="sfield" style="margin-bottom:0"><label>API Key CallMeBot</label><input type="text" id="cfg-wa-apikey" placeholder="1234567" value="'+(cfg.waApikey||'')+'"></div></div>';
-  html+='<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-dark btn-sm" onclick="guardarConfigWA()">Guardar</button>'+(waOk?'<button class="btn btn-green btn-sm" onclick="enviarWhatsApp()">Probar</button>':'')+'</div></div>';
-  html+='</div>';
-  html+='<button onclick="enviarTodo()" class="btn btn-dark" style="width:100%;padding:13px;font-size:15px;margin-top:14px">🔔 Enviar reporte ahora</button>';
-  html+='</div>';
+  html+='<div style="padding:14px;border-bottom:1px solid var(--border)"><div style="font-size:13px;font-weight:700;margin-bottom:10px">📧 Configurar correo</div><div class="sfield-row" style="margin-bottom:8px"><div class="sfield" style="margin-bottom:0"><label>Correo destino</label><input type="email" id="cfg-email-destino" placeholder="tu@correo.com" value="'+(cfg.emailDestino||'')+'"></div><div class="sfield" style="margin-bottom:0"><label>Service ID</label><input type="text" id="cfg-emailjs-sid" placeholder="service_xxx" value="'+(cfg.emailjsServiceId||'')+'"></div></div><div class="sfield-row" style="margin-bottom:8px"><div class="sfield" style="margin-bottom:0"><label>Template ID</label><input type="text" id="cfg-emailjs-tid" placeholder="template_xxx" value="'+(cfg.emailjsTemplateId||'')+'"></div><div class="sfield" style="margin-bottom:0"><label>Public Key</label><input type="text" id="cfg-emailjs-key" placeholder="xxxx" value="'+(cfg.emailjsPublicKey||'')+'"></div></div><div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-dark btn-sm" onclick="guardarConfigEmail()">Guardar</button>'+(emailOk?'<button class="btn btn-green btn-sm" onclick="enviarCorreo()">Probar</button>':'')+'</div></div>';
+  html+='<div style="padding:14px"><div style="font-size:13px;font-weight:700;margin-bottom:10px">💬 Configurar WhatsApp</div><div class="sfield-row" style="margin-bottom:8px"><div class="sfield" style="margin-bottom:0"><label>Número (con código país)</label><input type="text" id="cfg-wa-numero" placeholder="+58 414 123 4567" value="'+(cfg.waNumero||'')+'"></div><div class="sfield" style="margin-bottom:0"><label>API Key CallMeBot</label><input type="text" id="cfg-wa-apikey" placeholder="1234567" value="'+(cfg.waApikey||'')+'"></div></div><div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-dark btn-sm" onclick="guardarConfigWA()">Guardar</button>'+(waOk?'<button class="btn btn-green btn-sm" onclick="enviarWhatsApp()">Probar</button>':'')+'</div></div>';
+  html+='</div><button onclick="enviarTodo()" class="btn btn-dark" style="width:100%;padding:13px;font-size:15px;margin-top:14px">🔔 Enviar reporte ahora</button></div>';
   c.innerHTML=html;
+}
+function activarPush(){
+  if(!window._OneSignal){toast('OneSignal cargando, espera...','warn');setTimeout(activarPush,1500);return;}
+  window._OneSignal.Notifications.requestPermission().then(function(accepted){
+    if(accepted){toast('Push activado ✓','ok');document.getElementById('btn-activar-push').textContent='✓ Activado';document.getElementById('btn-activar-push').style.background='#6b7280';}
+    else{toast('Permiso denegado — actívalo en ajustes del navegador','err');}
+  }).catch(function(){
+    window._OneSignal.Slidedown.promptPush();
+  });
 }
 function toggleCanal(canal,activo){var cfg=getNotifConfig();if(canal==='email')cfg.emailActivo=activo;if(canal==='wa')cfg.waActivo=activo;setNotifConfig(cfg);toast(activo?'Canal activado':'Canal desactivado','ok');}
 function guardarConfigEmail(){var cfg=getNotifConfig();cfg.emailDestino=(document.getElementById('cfg-email-destino')||{value:''}).value.trim();cfg.emailjsServiceId=(document.getElementById('cfg-emailjs-sid')||{value:''}).value.trim();cfg.emailjsTemplateId=(document.getElementById('cfg-emailjs-tid')||{value:''}).value.trim();cfg.emailjsPublicKey=(document.getElementById('cfg-emailjs-key')||{value:''}).value.trim();if(!cfg.emailDestino||!cfg.emailjsServiceId||!cfg.emailjsTemplateId||!cfg.emailjsPublicKey){toast('Completa todos los campos','err');return;}cfg.emailActivo=true;setNotifConfig(cfg);toast('Correo guardado ✓','ok');renderNotificaciones(document.getElementById('content'));}
 function guardarConfigWA(){var cfg=getNotifConfig();cfg.waNumero=(document.getElementById('cfg-wa-numero')||{value:''}).value.trim().replace(/\s/g,'');cfg.waApikey=(document.getElementById('cfg-wa-apikey')||{value:''}).value.trim();if(!cfg.waNumero||!cfg.waApikey){toast('Completa número y apikey','err');return;}cfg.waActivo=true;setNotifConfig(cfg);toast('WhatsApp guardado ✓','ok');renderNotificaciones(document.getElementById('content'));}
 
-// ═══════════════════════════════════════════════════════════
-// FIREBASE INIT
-// ═══════════════════════════════════════════════════════════
 async function initFirebase(){
   try{
     document.getElementById('splash-msg').textContent='Conectando con Firebase...';
     var fb=await import('https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js');
     var fs=await import('https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js');
     var firebaseConfig={apiKey:'AIzaSyD-fyGTFiZgn_FfZN-VC0fS_rFNtVsg5kc',authDomain:'veoyoca-54caf.firebaseapp.com',projectId:'veoyoca-54caf',storageBucket:'veoyoca-54caf.firebasestorage.app',messagingSenderId:'510700319861',appId:'1:510700319861:web:1cc96074cec81134a7f43c'};
-    var app=fb.initializeApp(firebaseConfig);
-    _db=fs.getFirestore(app);
-    window._firestore=fs;
+    var app=fb.initializeApp(firebaseConfig);_db=fs.getFirestore(app);window._firestore=fs;
     var snap=await fs.getDoc(fs.doc(_db,'veoyoca','data'));
     if(snap.exists()){var d=snap.data();DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];}
     else{DB.usuarios=[{id:'admin',nombre:'Administrador',username:'admin',password:'admin123',rol:'admin',creado:fecha()}];await guardarDB();}
-    fs.onSnapshot(fs.doc(_db,'veoyoca','data'),function(snap){
-      if(!snap.exists()||SAVING)return;
-      var d=snap.data();DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];
-      if(SESSION&&TAB){var nb=document.getElementById('nb-'+TAB);if(nb)goTab(TAB,nb);}
-    });
+    fs.onSnapshot(fs.doc(_db,'veoyoca','data'),function(snap){if(!snap.exists()||SAVING)return;var d=snap.data();DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];if(SESSION&&TAB){var nb=document.getElementById('nb-'+TAB);if(nb)goTab(TAB,nb);}});
     var sess=null;try{sess=JSON.parse(localStorage.getItem('veo_session')||'null');}catch(e){}
     if(sess){var u=DB.usuarios.find(function(x){return x.id===sess.id;});if(u){SESSION=u;mostrarApp();return;}}
     document.getElementById('splash').style.display='none';
@@ -685,34 +478,16 @@ async function initFirebase(){
     setTimeout(function(){document.getElementById('l-user').focus();},100);
     document.getElementById('l-user').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('l-pass').focus();});
     document.getElementById('l-pass').addEventListener('keydown',function(e){if(e.key==='Enter')login();});
-  }catch(e){
-    document.getElementById('splash-msg').textContent='Error: '+e.message;
-    console.error('Firebase error:',e);
-  }
+  }catch(e){document.getElementById('splash-msg').textContent='Error: '+e.message;console.error('Firebase error:',e);}
 }
 
-// ═══════════════════════════════════════════════════════════
-// SERVICE WORKER
-// ═══════════════════════════════════════════════════════════
-function verificarGoto(){
-  var goto=localStorage.getItem('veo_goto');
-  if(goto&&SESSION){localStorage.removeItem('veo_goto');setTimeout(function(){goTab(goto,document.getElementById('nb-'+goto));},300);}
-}
+function verificarGoto(){var goto=localStorage.getItem('veo_goto');if(goto&&SESSION){localStorage.removeItem('veo_goto');setTimeout(function(){goTab(goto,document.getElementById('nb-'+goto));},300);}}
+
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('/VEOYOCA-APP/sw.js').catch(function(e){console.log('SW:',e);});
 }
 
-// EmailJS init
-(function(){
-  var s=document.createElement('script');
-  s.src='https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';
-  s.onload=function(){
-    var cfg=getNotifConfig();
-    window.emailjs.init({publicKey:cfg.emailjsPublicKey||'Hn3mgOJeQOhzZBhNw'});
-    window._ejsReady=true;
-  };
-  document.head.appendChild(s);
-})();
+(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';s.onload=function(){var cfg=getNotifConfig();window.emailjs.init({publicKey:cfg.emailjsPublicKey||'Hn3mgOJeQOhzZBhNw'});window._ejsReady=true;};document.head.appendChild(s);})();
 
 initFirebase();
 </script>
