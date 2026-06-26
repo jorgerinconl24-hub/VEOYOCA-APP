@@ -429,16 +429,19 @@ function buildReporte(){var vencidos=DB.pedidos.filter(function(p){return p.esta
 function enviarWhatsApp(){var cfg=getNotifConfig();if(!cfg.waNumero||!cfg.waApikey){toast('Configura WhatsApp primero','err');return;}var r=buildReporte();var total=r.vencidos.length+r.urgentes.length;if(total===0){toast('No hay pedidos críticos','ok');return;}var msg='🚨 *VeoYoca — '+fecha()+'*\n\n';if(r.vencidos.length){msg+='🔴 *VENCIDOS ('+r.vencidos.length+')*\n';r.vencidos.forEach(function(p){msg+='• #'+(p.numero||'?')+' '+p.cliente+' — '+Math.abs(diasRestantes(p.fechaLimite))+'d vencido\n';});msg+='\n';}if(r.urgentes.length){msg+='🟡 *URGENTES ('+r.urgentes.length+')*\n';r.urgentes.forEach(function(p){msg+='• #'+(p.numero||'?')+' '+p.cliente+' — vence en '+diasRestantes(p.fechaLimite)+'d\n';});}var xhr=new XMLHttpRequest();xhr.open('POST','https://api.ultramsg.com/instance181941/messages/chat',true);xhr.setRequestHeader('Content-Type','application/x-www-form-urlencoded');xhr.timeout=8000;xhr.onload=function(){toast('WhatsApp enviado ✓','ok');};xhr.onerror=function(){toast('WhatsApp enviado','ok');};xhr.send('token=jd3odrhspk539mmp&to='+encodeURIComponent(cfg.waNumero)+'&body='+encodeURIComponent(msg));}
 function enviarTodo(){var cfg=getNotifConfig();enviarPushOneSignal('🚨 VeoYoca — Reporte de pedidos','Revisa los pedidos vencidos y urgentes');if(cfg.emailActivo)enviarCorreo();if(cfg.waActivo)enviarWhatsApp();}
 function enviarCorreo(){
-  var cfg=getNotifConfig();
-  if(!cfg.emailjsServiceId||!cfg.emailjsTemplateId||!cfg.emailjsPublicKey||!cfg.emailDestino){toast('Configura el correo primero','err');return;}
-  var r=buildReporte();var total=r.vencidos.length+r.urgentes.length;
-  if(total===0){toast('No hay pedidos críticos','ok');return;}
+  var cfg = getNotifConfig();
+  if(!cfg.emailjsServiceId || !cfg.emailjsTemplateId || !cfg.emailjsPublicKey || !cfg.emailDestino){
+    toast('Configura el correo primero','err'); return;
+  }
+  var r = buildReporte();
+  var total = r.vencidos.length + r.urgentes.length;
+  if(total === 0){ toast('No hay pedidos críticos para reportar','ok'); return; }
 
-  function filasTabla(lista,esVencido){
+  function filasTabla(lista, esVencido){
     return lista.map(function(p){
-      var d=diasRestantes(p.fechaLimite);
-      var diasTxt=esVencido?'Venció hace '+Math.abs(d)+'d':'Vence en '+d+'d';
-      var colorDias=esVencido?'#dc2626':'#d97706';
+      var d = diasRestantes(p.fechaLimite);
+      var diasTxt = esVencido ? 'Venció hace '+Math.abs(d)+'d' : 'Vence en '+d+'d';
+      var colorDias = esVencido ? '#dc2626' : '#d97706';
       return '<tr style="border-bottom:1px solid #f3f4f6">'
         +'<td style="padding:8px 10px;font-weight:600;color:#1a1a2e">#'+(p.numero||'?')+'</td>'
         +'<td style="padding:8px 10px">'+(p.cliente||'')+'</td>'
@@ -450,8 +453,8 @@ function enviarCorreo(){
     }).join('');
   }
 
-  function seccionTabla(lista,titulo,color,esVencido){
-    if(!lista.length)return '';
+  function seccionTabla(lista, titulo, color, esVencido){
+    if(!lista.length) return '';
     return '<div style="margin-bottom:24px">'
       +'<h3 style="color:'+color+';margin:0 0 10px;font-size:15px">'+titulo+' ('+lista.length+')</h3>'
       +'<table style="width:100%;border-collapse:collapse;font-size:13px;background:#fff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb">'
@@ -463,11 +466,12 @@ function enviarCorreo(){
       +'<th style="padding:8px 10px;text-align:left;color:#6b7280;font-size:11px">F. Límite</th>'
       +'<th style="padding:8px 10px;text-align:left;color:#6b7280;font-size:11px">Días</th>'
       +'</tr></thead>'
-      +'<tbody>'+filasTabla(lista,esVencido)+'</tbody>'
+      +'<tbody>'+filasTabla(lista, esVencido)+'</tbody>'
       +'</table></div>';
   }
 
-  var htmlCorreo='<div style="font-family:Arial,sans-serif;max-width:680px;margin:0 auto">'
+  var htmlCorreo =
+    '<div style="font-family:Arial,sans-serif;max-width:680px;margin:0 auto">'
     +'<div style="background:#1a1a2e;padding:20px 24px;border-radius:10px 10px 0 0">'
     +'<h2 style="color:#fff;margin:0;font-size:18px">Reporte diario de pedidos</h2>'
     +'<p style="color:rgba(255,255,255,.6);margin:4px 0 0;font-size:13px">'+fecha()+'</p>'
@@ -484,29 +488,37 @@ function enviarCorreo(){
     +'<div style="font-size:11px;color:#16a34a;font-weight:600">TOTAL ALERTAS</div></div>'
     +'</div>'
     +'<div style="padding:20px;background:#f9fafb;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 10px 10px">'
-    +seccionTabla(r.vencidos,'🔴 VENCIDOS','#dc2626',true)
-    +seccionTabla(r.urgentes,'🟡 URGENTES','#d97706',false)
+    + seccionTabla(r.vencidos, '🔴 VENCIDOS', '#dc2626', true)
+    + seccionTabla(r.urgentes, '🟡 URGENTES', '#d97706', false)
     +'<div style="text-align:center;margin-top:20px;padding-top:16px;border-top:1px solid #e5e7eb">'
     +'<a href="https://jorgerinconl24-hub.github.io/VEOYOCA-APP/" style="display:inline-block;background:#1a1a2e;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600;margin-bottom:12px">📦 Ver pedidos en VeoYoca</a>'
     +'<div style="font-size:11px;color:#9ca3af">VeoYoca — Sistema de Pedidos</div>'
-    +'</div></div></div>';
+    +'</div>'
+    +'</div></div>';
 
+  var templateParams = {
+    to_email:       cfg.emailDestino,
+    fecha:          fecha(),
+    total:          total,
+    vencidos_n:     r.vencidos.length,
+    urgentes_n:     r.urgentes.length,
+    lista_vencidos: htmlCorreo,
+    lista_urgentes: '',
+  };
+
+  toast('Enviando correo...','');
   function doSend(){
-    if(cfg.emailjsPublicKey){window.emailjs.init({publicKey:cfg.emailjsPublicKey});}
-    window.emailjs.send(cfg.emailjsServiceId,cfg.emailjsTemplateId,{
-      to_email:cfg.emailDestino,
-      fecha:fecha(),
-      total:total,
-      vencidos_n:r.vencidos.length,
-      urgentes_n:r.urgentes.length,
-      lista_vencidos:htmlCorreo,
-      lista_urgentes:''
-    }).then(function(){toast('Correo enviado ✓','ok');})
-     .catch(function(e){toast('Error: '+(e.text||e.message||JSON.stringify(e)),'err');});
+    window.emailjs.send(cfg.emailjsServiceId, cfg.emailjsTemplateId, templateParams)
+      .then(function(){ toast('Correo enviado ✓','ok'); })
+      .catch(function(e){ toast('Error correo: '+(e.text||e.message||JSON.stringify(e)),'err'); });
   }
-  if(window._ejsReady){doSend();}
-  else if(window.emailjs){doSend();}
-  else{var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';s.onload=function(){doSend();};document.head.appendChild(s);}
+  if(window.emailjs){ doSend(); }
+  else{
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';
+    s.onload = function(){ doSend(); };
+    document.head.appendChild(s);
+  }
 }
 function renderNotificaciones(c){
   var cfg=getNotifConfig();var r=buildReporte();var critTotal=r.vencidos.length+r.urgentes.length;
@@ -566,7 +578,7 @@ if('serviceWorker' in navigator){
   navigator.serviceWorker.register('/VEOYOCA-APP/sw.js').catch(function(e){console.log('SW:',e);});
 }
 
-(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';s.onload=function(){var cfg=getNotifConfig();window.emailjs.init({publicKey:cfg.emailjsPublicKey||'Hn3mgOJeQOhzZBhNw'});window._ejsReady=true;};document.head.appendChild(s);})();
+(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';s.onload=function(){var cfg=getNotifConfig();if(cfg.emailjsPublicKey){window.emailjs.init({publicKey:cfg.emailjsPublicKey});}else{window.emailjs.init({publicKey:'Hn3mgOJeQOhzZBhNw'});}window._ejsReady=true;};document.head.appendChild(s);})();
 
 initFirebase();
 </script>
