@@ -526,7 +526,8 @@ function renderNotificaciones(c){
   if(critTotal>0){html+='<div style="background:#dc2626;border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px"><div style="font-size:28px">🚨</div><div><div style="color:#fff;font-weight:700;font-size:14px">'+critTotal+' pedidos requieren atención</div><div style="color:rgba(255,255,255,.8);font-size:12px">'+r.vencidos.length+' vencidos · '+r.urgentes.length+' urgentes</div></div><button onclick="enviarTodo()" class="btn btn-sm" style="margin-left:auto;background:#fff;color:#dc2626;white-space:nowrap">Enviar alerta</button></div>';}
   else{html+='<div style="background:#16a34a;border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px"><div style="font-size:28px">✅</div><div style="color:#fff;font-weight:700;font-size:14px">Todo bajo control<br><span style="font-size:12px;font-weight:400;opacity:.8">No hay pedidos críticos</span></div></div>';}
   html+='<div class="notif-banner"><h3>🔔 Canales de notificación</h3><p>Las notificaciones push llegan aunque la app esté cerrada</p>';
-  html+='<div class="notif-row"><div class="notif-icon">📱</div><div class="notif-info"><div class="notif-label">Push (OneSignal)</div><div class="notif-sub">Notificación en el celular con app cerrada</div></div><button onclick="activarPush()" style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer" id="btn-activar-push">Activar</button></div>';
+  var pushGranted = ('Notification' in window) && Notification.permission === 'granted';
+  html+='<div class="notif-row"><div class="notif-icon">📱</div><div class="notif-info"><div class="notif-label">Push (OneSignal)</div><div class="notif-sub">'+(pushGranted?'✓ Activado — notificaciones con app cerrada':'Toca para activar')+'</div></div><button onclick="activarPush()" id="btn-activar-push" style="background:'+(pushGranted?'#6b7280':'#16a34a')+';color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer">'+(pushGranted?'✓ Activado':'Activar')+'</button></div>';
   var emailOk=cfg.emailjsServiceId&&cfg.emailjsTemplateId&&cfg.emailjsPublicKey&&cfg.emailDestino;
   html+='<div class="notif-row"><div class="notif-icon">📧</div><div class="notif-info"><div class="notif-label">Correo electrónico</div><div class="notif-sub">'+(emailOk?'✓ '+cfg.emailDestino:'Configura abajo')+'</div></div><label class="notif-toggle"><input type="checkbox" '+(cfg.emailActivo?'checked':'')+' onchange="toggleCanal(\'email\',this.checked)"><span class="notif-slider"></span></label></div>';
   var waOk=cfg.waNumero&&cfg.waApikey;
@@ -539,10 +540,22 @@ function renderNotificaciones(c){
   c.innerHTML=html;
 }
 function activarPush(){
+  if(!('Notification' in window)){toast('Este navegador no soporta notificaciones','err');return;}
+  var perm = Notification.permission;
+  if(perm === 'granted'){
+    toast('Notificaciones ya están activadas ✓','ok');
+    var btn=document.getElementById('btn-activar-push');
+    if(btn){btn.textContent='✓ Activado';btn.style.background='#6b7280';}
+    return;
+  }
+  if(perm === 'denied'){
+    toast('Permiso denegado — actívalo en Ajustes → VeoYoca → Notificaciones','err');
+    return;
+  }
   if(!window._OneSignal){toast('OneSignal cargando, espera...','warn');setTimeout(activarPush,1500);return;}
   window._OneSignal.Notifications.requestPermission().then(function(accepted){
-    if(accepted){toast('Push activado ✓','ok');document.getElementById('btn-activar-push').textContent='✓ Activado';document.getElementById('btn-activar-push').style.background='#6b7280';}
-    else{toast('Permiso denegado — actívalo en ajustes del navegador','err');}
+    if(accepted){toast('Push activado ✓','ok');var btn=document.getElementById('btn-activar-push');if(btn){btn.textContent='✓ Activado';btn.style.background='#6b7280';}}
+    else{toast('Permiso denegado','err');}
   }).catch(function(){
     window._OneSignal.Slidedown.promptPush();
   });
