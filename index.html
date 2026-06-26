@@ -275,10 +275,28 @@ function renderHome(c){
   var urg=pends.filter(function(p){return clasif(p)==='urgente';}).length;
   var ent=DB.pedidos.filter(function(p){return p.estatus==='ENTREGADO';}).length;
   var total=DB.pedidos.length;var pct=total?Math.round((ent/total)*100):0;
-  c.innerHTML='<div class="stats-bar"><div class="stat"><div class="stat-v">'+pends.length+'</div><div class="stat-l">pendientes</div></div><div class="stat"><div class="stat-v" style="color:#fca5a5">'+venc+'</div><div class="stat-l">vencidos</div></div><div class="stat"><div class="stat-v" style="color:#fcd34d">'+urg+'</div><div class="stat-l">urgentes</div></div><div class="stat"><div class="stat-v" style="color:#86efac">'+ent+'</div><div class="stat-l">entregados</div></div></div><div class="prog-wrap"><div class="prog-bar"><div class="prog-fill" style="width:'+pct+'%"></div></div><div class="prog-label">'+ent+' de '+total+' entregados ('+pct+'%)</div></div><div class="toolbar"><input type="text" id="h-buscar" placeholder="Buscar cliente o numero..." oninput="filtrarHome()"><select id="h-est" onchange="filtrarHome()"><option value="">Todos</option><option value="vencido">Vencidos</option><option value="urgente">Urgentes</option><option value="sf">Sin fecha</option><option value="ok">Con tiempo</option><option value="LISTO">Listos</option></select></div><div class="section-pad" id="home-lista"></div>';
+  c.innerHTML='<div class="stats-bar"><div class="stat" onclick="aplicarFiltro(\'\')" style="cursor:pointer"><div class="stat-v">'+pends.length+'</div><div class="stat-l">pendientes</div></div><div class="stat" onclick="aplicarFiltro(\'vencido\')" style="cursor:pointer"><div class="stat-v" style="color:#fca5a5">'+venc+'</div><div class="stat-l">vencidos</div></div><div class="stat" onclick="aplicarFiltro(\'urgente\')" style="cursor:pointer"><div class="stat-v" style="color:#fcd34d">'+urg+'</div><div class="stat-l">urgentes</div></div><div class="stat" onclick="aplicarFiltroEntregados()" style="cursor:pointer"><div class="stat-v" style="color:#86efac">'+ent+'</div><div class="stat-l">entregados</div></div></div><div class="prog-wrap"><div class="prog-bar"><div class="prog-fill" style="width:'+pct+'%"></div></div><div class="prog-label">'+ent+' de '+total+' entregados ('+pct+'%)</div></div><div class="toolbar"><input type="text" id="h-buscar" placeholder="Buscar cliente o numero..." oninput="filtrarHome()"><select id="h-est" onchange="filtrarHome()"><option value="">Todos</option><option value="vencido">Vencidos</option><option value="urgente">Urgentes</option><option value="sf">Sin fecha</option><option value="ok">Con tiempo</option><option value="LISTO">Listos</option></select></div><div class="section-pad" id="home-lista"></div>';
   filtrarHome();
 }
-function filtrarHome(){
+function aplicarFiltro(valor){
+  var sel=document.getElementById('h-est');
+  if(sel){sel.value=valor;filtrarHome();}
+}
+function aplicarFiltroEntregados(){
+  var el=document.getElementById('home-lista');if(!el)return;
+  var lista=DB.pedidos.filter(function(p){return p.estatus==='ENTREGADO';});
+  lista.sort(function(a,b){return (b.fechaEntrega||'').localeCompare(a.fechaEntrega||'');});
+  if(!lista.length){el.innerHTML='<div class="empty"><div class="empty-icon">📦</div>No hay pedidos entregados</div>';return;}
+  var h='<div class="sec-label">Entregados ('+lista.length+')</div>';
+  lista.forEach(function(p){
+    var num=p.numero||p.id.substring(0,6);
+    h+='<div class="card"><div class="card-head"><div class="card-num">#'+num+'</div><div class="card-body"><div class="card-cliente">'+(p.cliente||'Sin nombre')+'</div><div class="card-meta">'+(p.ciudad||'')+(p.vendedor?' - '+p.vendedor:'')+'</div><div class="card-desc">'+(p.descripcion||'')+'</div></div><span class="badge b-success">Entregado</span></div>';
+    h+='<div class="card-foot"><span style="font-size:11px;color:var(--muted)">'+( p.fechaEntrega||'')+(p.entregadoPor?' por '+p.entregadoPor:'')+'</span></div></div>';
+  });
+  el.innerHTML=h;
+  var sel=document.getElementById('h-est');if(sel)sel.value='';
+}
+
   var b=(document.getElementById('h-buscar')||{value:''}).value.toLowerCase();
   var fe=(document.getElementById('h-est')||{value:''}).value;
   var lista=DB.pedidos.filter(function(p){if(p.estatus==='ENTREGADO')return false;var mb=!b||((p.cliente||'').toLowerCase().indexOf(b)>=0||(p.numero||'').indexOf(b)>=0);var mfe=!fe||clasif(p)===fe||(fe==='LISTO'&&p.estatus==='LISTO');return mb&&mfe;});
