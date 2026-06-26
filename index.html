@@ -302,7 +302,7 @@ function aplicarFiltroEntregados(){
   el.innerHTML=h;
   var sel=document.getElementById('h-est');if(sel)sel.value='';
 }
-
+function filtrarHome(){
   var b=(document.getElementById('h-buscar')||{value:''}).value.toLowerCase();
   var fe=(document.getElementById('h-est')||{value:''}).value;
   var lista=DB.pedidos.filter(function(p){if(p.estatus==='ENTREGADO')return false;var mb=!b||((p.cliente||'').toLowerCase().indexOf(b)>=0||(p.numero||'').indexOf(b)>=0);var mfe=!fe||clasif(p)===fe||(fe==='LISTO'&&p.estatus==='LISTO');return mb&&mfe;});
