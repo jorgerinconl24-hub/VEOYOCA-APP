@@ -333,6 +333,7 @@ function cardHTML(p,conEntregar){
   }
   h+='<div class="card-desc">'+(p.descripcion||'')+'</div></div>'+badgeHTML(p)+'</div><div class="card-foot">';
   if(canEdit)h+='<button class="btn btn-ghost btn-sm" data-edit="'+pid+'">Editar</button>';
+  if(p.pdfUrl)h+='<a href="'+p.pdfUrl+'" target="_blank" class="btn btn-blue btn-sm" style="text-decoration:none">📄 Ver PDF</a>';
   if(conEntregar&&p.estatus!=='ENTREGADO'){h+='<input type="text" id="nota-'+pid+'" placeholder="Nota de entrega..."><button class="btn btn-green btn-sm" data-entregar="'+pid+'">Entregar</button>';}
   h+='</div></div>';return h;
 }
