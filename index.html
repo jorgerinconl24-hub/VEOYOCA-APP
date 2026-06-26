@@ -168,7 +168,6 @@ button{cursor:pointer;font-family:inherit}input,select,textarea{font-family:inhe
 <div class="sfield-row"><div class="sfield"><label>Proveedor</label><input type="text" id="e-proveedor" placeholder="Ej: ORION, COLVEN..."></div>
 <div class="sfield"><label># Orden de compra</label><input type="text" id="e-oc" placeholder="Ej: OC-2026-045"></div></div>
 <div class="sfield-row"><div class="sfield"><label>Fecha entrega proveedor</label><input type="date" id="e-fecha-prov"></div>
-<div class="sfield"><label>Fecha l&#xED;mite</label><input type="date" id="e-fecha"></div></div>
 <div class="sfield"><label>Nota / Observaci&#xF3;n</label><input type="text" id="e-nota" placeholder="Observaci&#xF3;n adicional"></div></div>
 <div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal('modal-edit')">Cancelar</button><button class="btn btn-blue" onclick="guardarEdicion()">Guardar cambios</button></div></div></div>
 <div class="overlay" id="modal-perfil"><div class="sheet"><div class="sheet-handle"></div>
@@ -560,7 +559,7 @@ function verificarCamposIncompletosAlEntrar(){
   setNotifConfig(cfg);
   setTimeout(notificarCamposIncompletos, 5000);
 }
-try{return JSON.parse(localStorage.getItem('veo_notif')||'{}');}catch(e){return {};}}
+function getNotifConfig(){try{return JSON.parse(localStorage.getItem('veo_notif')||'{}');}catch(e){return {};}}
 function setNotifConfig(cfg){localStorage.setItem('veo_notif',JSON.stringify(cfg));}
 function buildReporte(){var vencidos=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&clasif(p)==='vencido';});var urgentes=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&clasif(p)==='urgente';});return {vencidos:vencidos,urgentes:urgentes};}
 function enviarWhatsApp(){var cfg=getNotifConfig();if(!cfg.waNumero||!cfg.waApikey){toast('Configura WhatsApp primero','err');return;}var r=buildReporte();var total=r.vencidos.length+r.urgentes.length;if(total===0){toast('No hay pedidos críticos','ok');return;}var msg='🚨 *VeoYoca — '+fecha()+'*\n\n';if(r.vencidos.length){msg+='🔴 *VENCIDOS ('+r.vencidos.length+')*\n';r.vencidos.forEach(function(p){msg+='• #'+(p.numero||'?')+' '+p.cliente+' — '+Math.abs(diasRestantes(p.fechaLimite))+'d vencido\n';});msg+='\n';}if(r.urgentes.length){msg+='🟡 *URGENTES ('+r.urgentes.length+')*\n';r.urgentes.forEach(function(p){msg+='• #'+(p.numero||'?')+' '+p.cliente+' — vence en '+diasRestantes(p.fechaLimite)+'d\n';});}var xhr=new XMLHttpRequest();xhr.open('POST','https://api.ultramsg.com/instance181941/messages/chat',true);xhr.setRequestHeader('Content-Type','application/x-www-form-urlencoded');xhr.timeout=8000;xhr.onload=function(){toast('WhatsApp enviado ✓','ok');};xhr.onerror=function(){toast('WhatsApp enviado','ok');};xhr.send('token=jd3odrhspk539mmp&to='+encodeURIComponent(cfg.waNumero)+'&body='+encodeURIComponent(msg));}
