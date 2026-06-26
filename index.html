@@ -9,6 +9,34 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="VeoYoca">
 <title>VeoYoca — Sistema de Pedidos</title>
+
+<!-- OneSignal SDK -->
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+<script>
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  OneSignalDeferred.push(async function(OneSignal) {
+    await OneSignal.init({
+      appId: "f2baf005-ca28-4491-a772-eca363f6f142",
+      serviceWorkerPath: "/OneSignalSDKWorker.js",
+      notifyButton: { enable: false },
+      promptOptions: {
+        slidedown: {
+          prompts: [{
+            type: "push",
+            autoPrompt: false,
+            text: {
+              actionMessage: "VeoYoca quiere enviarte alertas de pedidos nuevos y urgentes",
+              acceptButton: "Activar",
+              cancelButton: "Ahora no"
+            }
+          }]
+        }
+      }
+    });
+    window._OneSignal = OneSignal;
+  });
+</script>
+
 <style>
 :root{--accent:#1a1a2e;--accent2:#2d2d5e;--success:#16a34a;--danger:#dc2626;--warning:#d97706;--info:#1d4ed8;--bg:#f4f4f8;--card:#fff;--border:#e5e7eb;--text:#111827;--muted:#6b7280;--sbg:#f0fdf4;--dbg:#fef2f2;--wbg:#fffbeb;--ibg:#eff6ff}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -86,7 +114,6 @@ button{cursor:pointer;font-family:inherit}input,select,textarea{font-family:inhe
 .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;padding:11px 20px;border-radius:10px;font-size:14px;z-index:200;opacity:0;transition:opacity .25s;pointer-events:none;max-width:88vw;text-align:center;font-weight:500}
 .toast.show{opacity:1}.toast.t-ok{background:var(--success)}.toast.t-err{background:var(--danger)}.toast.t-warn{background:var(--warning)}
 .empty{text-align:center;padding:48px 20px;color:var(--muted);font-size:14px}.empty-icon{font-size:40px;margin-bottom:10px}
-/* NOTIFICACIONES */
 .notif-banner{background:linear-gradient(135deg,#1a1a2e,#2d2d5e);border-radius:14px;padding:16px;margin:14px;color:#fff}
 .notif-banner h3{font-size:14px;font-weight:700;margin-bottom:4px}
 .notif-banner p{font-size:12px;opacity:.7;margin-bottom:12px}
@@ -133,7 +160,6 @@ button{cursor:pointer;font-family:inherit}input,select,textarea{font-family:inhe
 </div></div>
 <div class="sync-badge" id="sync-badge">&#x2713; Guardado</div>
 
-<!-- MODALES -->
 <div class="overlay" id="modal-edit"><div class="sheet"><div class="sheet-handle"></div>
 <div class="sheet-head"><h2 id="modal-titulo">Editar pedido</h2><button class="sheet-close" onclick="cerrarModal('modal-edit')">&#x2715;</button></div>
 <div class="sheet-body"><input type="hidden" id="e-id">
@@ -165,6 +191,36 @@ button{cursor:pointer;font-family:inherit}input,select,textarea{font-family:inhe
 <div class="toast" id="toast"></div>
 
 <script>
+// ═══════════════════════════════════════════════════════════
+// ONESIGNAL
+// ═══════════════════════════════════════════════════════════
+var OS_APP_ID  = 'f2baf005-ca28-4491-a772-eca363f6f142';
+var OS_API_KEY = 'os_v2_app_6k5pabokfbcjdj3s5srwh5xrikmqkjompbiegtmvzstbmuwyrmmbg43dgpebq4qvxtathkixulolqpm7nyp66zmp43ds2wtv2sv5u4i';
+
+function pedirPermisoOneSignal() {
+  if (!window._OneSignal) { setTimeout(pedirPermisoOneSignal, 1000); return; }
+  window._OneSignal.Slidedown.promptPush();
+}
+
+function enviarPushOneSignal(titulo, cuerpo) {
+  fetch('https://onesignal.com/api/v1/notifications', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Basic ' + OS_API_KEY
+    },
+    body: JSON.stringify({
+      app_id: OS_APP_ID,
+      included_segments: ['All'],
+      headings: { es: titulo, en: titulo },
+      contents: { es: cuerpo,  en: cuerpo  },
+      url: 'https://jorgerinconl24-hub.github.io/VEOYOCA-APP/'
+    })
+  }).then(function(r){ return r.json(); })
+    .then(function(d){ console.log('Push OK:', d.id || d); })
+    .catch(function(e){ console.log('Push err:', e); });
+}
+
 // ═══════════════════════════════════════════════════════════
 // VARIABLES GLOBALES
 // ═══════════════════════════════════════════════════════════
@@ -223,7 +279,8 @@ function mostrarApp(){
   document.getElementById('user-avatar').textContent=SESSION.nombre.substring(0,2).toUpperCase();
   document.getElementById('topbar-sub').textContent=SESSION.nombre;
   if(SESSION.rol==='admin')document.getElementById('nb-admin').style.display='flex';
-  // Verificar pedidos críticos al entrar
+  // Pedir permiso OneSignal 3 segundos después de entrar
+  setTimeout(pedirPermisoOneSignal, 3000);
   setTimeout(verificarYNotificarAlEntrar, 2000);
   goTab('home',document.getElementById('nb-home'));
   setTimeout(verificarGoto, 500);
@@ -287,8 +344,7 @@ function filtrarHome(){
 }
 function cardHTML(p,conEntregar){
   var canEdit=SESSION.rol==='admin'||SESSION.username===p.creadoPor||SESSION.username===p.vendedor;
-  var pid=p.id;
-  var num=p.numero||pid.substring(0,6);
+  var pid=p.id;var num=p.numero||pid.substring(0,6);
   var h='<div class="card" id="card-'+pid+'">';
   h+='<div class="card-head">';
   h+='<div class="card-num">#'+num+'</div>';
@@ -332,8 +388,10 @@ async function marcarEntregado(id){
   var card=document.getElementById('card-'+id);
   if(card){card.style.opacity='.4';card.querySelector('.card-foot').innerHTML='<span style="color:var(--success);font-size:13px;font-weight:600">Entregado hoy</span>';}
   toast('Pedido entregado','ok');
-  notificarEvento('ENTREGADO', p);
-  notificarSW('✅ Pedido entregado', 'Cliente: '+(p.cliente||'')+(nota?' — '+nota:''), 'entregado-'+id);
+  enviarPushOneSignal(
+    '✅ Pedido entregado #'+(p.numero||''),
+    'Cliente: '+(p.cliente||'')+(nota?' — '+nota:'')
+  );
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -354,9 +412,12 @@ async function crearPedido(){
   DB.pedidos.push(p);registrarBitacora(p.id,'CREADO por '+SESSION.nombre);
   await guardarDB();
   ['n-numero','n-cliente','n-ciudad','n-proveedor','n-oc','n-fecha','n-desc'].forEach(function(id){document.getElementById(id).value='';});
-  toast('Pedido #'+numero+' creado en la nube','ok');
-  notificarEvento('NUEVO', p);
-  notificarSW('📦 Nuevo pedido #'+numero, 'Cliente: '+cliente+' — '+desc.substring(0,60), 'nuevo-pedido');
+  toast('Pedido #'+numero+' creado','ok');
+  // Push a todos los usuarios
+  enviarPushOneSignal(
+    '📦 Nuevo pedido #'+numero,
+    'Cliente: '+cliente+' — '+desc.substring(0,60)
+  );
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -511,349 +572,91 @@ function mostrarResultadoIA(texto){
 function copiarPlan(){var el=document.getElementById('ia-texto');if(!el)return;navigator.clipboard.writeText(el.innerText||el.textContent).then(function(){toast('Copiado','ok');}).catch(function(){toast('No se pudo copiar','err');});}
 
 // ═══════════════════════════════════════════════════════════
-// SISTEMA DE NOTIFICACIONES
+// NOTIFICACIONES (WhatsApp + Correo)
 // ═══════════════════════════════════════════════════════════
-
-// --- Config guardada localmente ---
-function getNotifConfig(){
-  try{ return JSON.parse(localStorage.getItem('veo_notif')||'{}'); }catch(e){ return {}; }
-}
-function setNotifConfig(cfg){
-  localStorage.setItem('veo_notif', JSON.stringify(cfg));
-}
-
-// --- Construir reporte de pedidos críticos ---
+function getNotifConfig(){try{return JSON.parse(localStorage.getItem('veo_notif')||'{}');}catch(e){return {};}}
+function setNotifConfig(cfg){localStorage.setItem('veo_notif',JSON.stringify(cfg));}
 function buildReporte(){
-  var vencidos = DB.pedidos.filter(function(p){ return p.estatus!=='ENTREGADO' && clasif(p)==='vencido'; });
-  var urgentes = DB.pedidos.filter(function(p){ return p.estatus!=='ENTREGADO' && clasif(p)==='urgente'; });
-  return { vencidos: vencidos, urgentes: urgentes };
+  var vencidos=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&clasif(p)==='vencido';});
+  var urgentes=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&clasif(p)==='urgente';});
+  return {vencidos:vencidos,urgentes:urgentes};
 }
-
-// --- 1. NOTIFICACIÓN EN LA APP (Web Push nativo del navegador) ---
-function solicitarPermisoNotificaciones(){
-  if(!('Notification' in window)){ toast('Este navegador no soporta notificaciones','err'); return; }
-  Notification.requestPermission().then(function(perm){
-    var cfg = getNotifConfig();
-    cfg.pushActivo = (perm === 'granted');
-    setNotifConfig(cfg);
-    if(perm === 'granted'){
-      toast('Notificaciones activadas ✓','ok');
-      new Notification('VeoYoca activado', { body: 'Recibirás alertas de pedidos críticos', icon: '/VEOYOCA-APP/icon-192.png' });
-      renderNotificaciones(document.getElementById('content'));
-    } else {
-      toast('Permiso denegado. Actívalo en configuración del navegador.','err');
-    }
-  });
-}
-
-function enviarNotifApp(){
-  if(Notification.permission !== 'granted'){ toast('Activa las notificaciones primero','warn'); return; }
-  var r = buildReporte();
-  var total = r.vencidos.length + r.urgentes.length;
-  if(total === 0){ toast('No hay pedidos críticos en este momento','ok'); return; }
-  var cuerpo = '';
-  if(r.vencidos.length) cuerpo += '🔴 '+r.vencidos.length+' vencidos: '+r.vencidos.slice(0,2).map(function(p){return p.cliente;}).join(', ')+(r.vencidos.length>2?'...':'')+'\n';
-  if(r.urgentes.length) cuerpo += '🟡 '+r.urgentes.length+' urgentes próximos a vencer';
-  new Notification('⚠ VeoYoca — '+total+' pedidos críticos', {
-    body: cuerpo,
-    icon: '/VEOYOCA-APP/icon-192.png',
-    badge: '/VEOYOCA-APP/icon-192.png',
-    tag: 'veoyoca-alerta',
-    requireInteraction: true
-  });
-  toast('Notificación enviada','ok');
-}
-
-// Verificar al entrar a la app
 function verificarYNotificarAlEntrar(){
-  var cfg = getNotifConfig();
-  if(!cfg.pushActivo || Notification.permission !== 'granted') return;
-  var r = buildReporte();
-  if(r.vencidos.length + r.urgentes.length === 0) return;
-  // Solo notificar una vez por día
-  var hoyStr = new Date().toDateString();
-  if(cfg.ultimaNotifPush === hoyStr) return;
-  cfg.ultimaNotifPush = hoyStr;
-  setNotifConfig(cfg);
-  enviarNotifApp();
+  var cfg=getNotifConfig();
+  if(!cfg.pushActivo||Notification.permission!=='granted')return;
+  var r=buildReporte();
+  if(r.vencidos.length+r.urgentes.length===0)return;
+  var hoyStr=new Date().toDateString();
+  if(cfg.ultimaNotifPush===hoyStr)return;
+  cfg.ultimaNotifPush=hoyStr;setNotifConfig(cfg);
 }
-
-// --- 2. CORREO con EmailJS ---
 function enviarCorreo(){
-  var cfg = getNotifConfig();
-  if(!cfg.emailjsServiceId || !cfg.emailjsTemplateId || !cfg.emailjsPublicKey || !cfg.emailDestino){
-    toast('Configura el correo primero','err'); return;
-  }
-  var r = buildReporte();
-  var total = r.vencidos.length + r.urgentes.length;
-  if(total === 0){ toast('No hay pedidos críticos para reportar','ok'); return; }
-
-  function filasTabla(lista, esVencido){
-    return lista.map(function(p){
-      var d = diasRestantes(p.fechaLimite);
-      var diasTxt = esVencido ? 'Venció hace '+Math.abs(d)+'d' : 'Vence en '+d+'d';
-      var colorDias = esVencido ? '#dc2626' : '#d97706';
-      return '<tr style="border-bottom:1px solid #f3f4f6">'
-        +'<td style="padding:8px 10px;font-weight:600;color:#1a1a2e">#'+(p.numero||'?')+'</td>'
-        +'<td style="padding:8px 10px">'+(p.cliente||'')+'</td>'
-        +'<td style="padding:8px 10px;color:#6b7280">'+(p.ciudad||'—')+'</td>'
-        +'<td style="padding:8px 10px;color:#6b7280">'+(p.vendedor||'—')+'</td>'
-        +'<td style="padding:8px 10px">'+(p.fechaLimite||'—')+'</td>'
-        +'<td style="padding:8px 10px;font-weight:700;color:'+colorDias+'">'+diasTxt+'</td>'
-        +'</tr>';
-    }).join('');
-  }
-
-  function seccionTabla(lista, titulo, color, esVencido){
-    if(!lista.length) return '';
-    return '<div style="margin-bottom:24px">'
-      +'<h3 style="color:'+color+';margin:0 0 10px;font-size:15px">'+titulo+' ('+lista.length+')</h3>'
-      +'<table style="width:100%;border-collapse:collapse;font-size:13px;background:#fff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb">'
-      +'<thead><tr style="background:#f9fafb">'
-      +'<th style="padding:8px 10px;text-align:left;color:#6b7280;font-size:11px">#Ped</th>'
-      +'<th style="padding:8px 10px;text-align:left;color:#6b7280;font-size:11px">Cliente</th>'
-      +'<th style="padding:8px 10px;text-align:left;color:#6b7280;font-size:11px">Ciudad</th>'
-      +'<th style="padding:8px 10px;text-align:left;color:#6b7280;font-size:11px">Vendedor</th>'
-      +'<th style="padding:8px 10px;text-align:left;color:#6b7280;font-size:11px">F. Límite</th>'
-      +'<th style="padding:8px 10px;text-align:left;color:#6b7280;font-size:11px">Días</th>'
-      +'</tr></thead>'
-      +'<tbody>'+filasTabla(lista, esVencido)+'</tbody>'
-      +'</table></div>';
-  }
-
-  var htmlCorreo =
-    '<div style="font-family:Arial,sans-serif;max-width:680px;margin:0 auto">'
-    +'<div style="background:#1a1a2e;padding:20px 24px;border-radius:10px 10px 0 0">'
-    +'<h2 style="color:#fff;margin:0;font-size:18px">Reporte diario de pedidos</h2>'
-    +'<p style="color:rgba(255,255,255,.6);margin:4px 0 0;font-size:13px">'+fecha()+'</p>'
-    +'</div>'
-    +'<div style="display:flex;border:1px solid #e5e7eb;border-top:none">'
-    +'<div style="flex:1;background:#fef2f2;padding:14px;text-align:center;border-right:1px solid #e5e7eb">'
-    +'<div style="font-size:24px;font-weight:700;color:#dc2626">'+r.vencidos.length+'</div>'
-    +'<div style="font-size:11px;color:#dc2626;font-weight:600">VENCIDOS</div></div>'
-    +'<div style="flex:1;background:#fffbeb;padding:14px;text-align:center;border-right:1px solid #e5e7eb">'
-    +'<div style="font-size:24px;font-weight:700;color:#d97706">'+r.urgentes.length+'</div>'
-    +'<div style="font-size:11px;color:#d97706;font-weight:600">URGENTES</div></div>'
-    +'<div style="flex:1;background:#f0fdf4;padding:14px;text-align:center">'
-    +'<div style="font-size:24px;font-weight:700;color:#16a34a">'+total+'</div>'
-    +'<div style="font-size:11px;color:#16a34a;font-weight:600">TOTAL ALERTAS</div></div>'
-    +'</div>'
-    +'<div style="padding:20px;background:#f9fafb;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 10px 10px">'
-    + seccionTabla(r.vencidos, '🔴 VENCIDOS', '#dc2626', true)
-    + seccionTabla(r.urgentes, '🟡 URGENTES', '#d97706', false)
-    +'<div style="text-align:center;margin-top:20px;padding-top:16px;border-top:1px solid #e5e7eb">'
-    +'<a href="https://jorgerinconl24-hub.github.io/VEOYOCA-APP/" style="display:inline-block;background:#1a1a2e;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600;margin-bottom:12px">📦 Ver pedidos en VeoYoca</a>'
-    +'<div style="font-size:11px;color:#9ca3af">VeoYoca — Sistema de Pedidos</div>'
-    +'</div>'
-    +'</div></div>';
-
-  var templateParams = {
-    to_email:       cfg.emailDestino,
-    fecha:          fecha(),
-    total:          total,
-    vencidos_n:     r.vencidos.length,
-    urgentes_n:     r.urgentes.length,
-    lista_vencidos: htmlCorreo,
-    lista_urgentes: '',
-  };
-
-  toast('Enviando correo...','');
-  function doSend(){
-    window.emailjs.send(cfg.emailjsServiceId, cfg.emailjsTemplateId, templateParams)
-      .then(function(){ toast('Correo enviado ✓','ok'); })
-      .catch(function(e){ toast('Error correo: '+(e.text||e.message||JSON.stringify(e)),'err'); });
-  }
-  if(window.emailjs){ doSend(); }
-  else{
-    var s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';
-    s.onload = function(){ doSend(); };
-    document.head.appendChild(s);
-  }
+  var cfg=getNotifConfig();
+  if(!cfg.emailjsServiceId||!cfg.emailjsTemplateId||!cfg.emailjsPublicKey||!cfg.emailDestino){toast('Configura el correo primero','err');return;}
+  var r=buildReporte();var total=r.vencidos.length+r.urgentes.length;
+  if(total===0){toast('No hay pedidos críticos','ok');return;}
+  var htmlCorreo='<div style="font-family:Arial,sans-serif"><h2>Reporte VeoYoca — '+fecha()+'</h2><p>'+total+' pedidos críticos: '+r.vencidos.length+' vencidos, '+r.urgentes.length+' urgentes</p></div>';
+  function doSend(){window.emailjs.send(cfg.emailjsServiceId,cfg.emailjsTemplateId,{to_email:cfg.emailDestino,fecha:fecha(),total:total,vencidos_n:r.vencidos.length,urgentes_n:r.urgentes.length,lista_vencidos:htmlCorreo,lista_urgentes:''}).then(function(){toast('Correo enviado ✓','ok');}).catch(function(e){toast('Error correo: '+(e.text||e.message),'err');});}
+  if(window.emailjs){doSend();}else{var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';s.onload=function(){doSend();};document.head.appendChild(s);}
 }
-
-// --- 3. WHATSAPP con CallMeBot ---
 function enviarWhatsApp(){
-  var cfg = getNotifConfig();
-  if(!cfg.waNumero || !cfg.waApikey){
-    toast('Configura WhatsApp primero','err'); return;
-  }
-  var r = buildReporte();
-  var total = r.vencidos.length + r.urgentes.length;
-  if(total === 0){ toast('No hay pedidos críticos para reportar','ok'); return; }
-
-  var msg = '🚨 *VeoYoca — Reporte '+fecha()+'*\n\n';
-  if(r.vencidos.length){
-    msg += '🔴 *VENCIDOS ('+r.vencidos.length+')*\n';
-    r.vencidos.forEach(function(p){
-      msg += '• #'+(p.numero||'?')+' '+p.cliente+' ('+p.ciudad+') — '+Math.abs(diasRestantes(p.fechaLimite))+'d vencido\n';
-    });
-    msg += '\n';
-  }
-  if(r.urgentes.length){
-    msg += '🟡 *URGENTES ('+r.urgentes.length+')*\n';
-    r.urgentes.forEach(function(p){
-      msg += '• #'+(p.numero||'?')+' '+p.cliente+' ('+p.ciudad+') — vence en '+diasRestantes(p.fechaLimite)+'d\n';
-    });
-  }
-
-  toast('Enviando WhatsApp...','');
-  var xhrMain = new XMLHttpRequest();
-  xhrMain.open('POST', 'https://api.ultramsg.com/instance181941/messages/chat', true);
-  xhrMain.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-  xhrMain.timeout = 8000;
-  xhrMain.onload = function(){ toast('WhatsApp enviado ✓','ok'); };
-  xhrMain.onerror = function(){ toast('WhatsApp enviado (verifica tu teléfono)','ok'); };
-  xhrMain.ontimeout = function(){ toast('WhatsApp enviado (verifica tu teléfono)','ok'); };
-  xhrMain.send('token=jd3odrhspk539mmp&to=' + encodeURIComponent(cfg.waNumero) + '&body=' + encodeURIComponent(msg));
+  var cfg=getNotifConfig();
+  if(!cfg.waNumero||!cfg.waApikey){toast('Configura WhatsApp primero','err');return;}
+  var r=buildReporte();var total=r.vencidos.length+r.urgentes.length;
+  if(total===0){toast('No hay pedidos críticos','ok');return;}
+  var msg='🚨 *VeoYoca — '+fecha()+'*\n\n';
+  if(r.vencidos.length){msg+='🔴 *VENCIDOS ('+r.vencidos.length+')*\n';r.vencidos.forEach(function(p){msg+='• #'+(p.numero||'?')+' '+p.cliente+' — '+Math.abs(diasRestantes(p.fechaLimite))+'d vencido\n';});msg+='\n';}
+  if(r.urgentes.length){msg+='🟡 *URGENTES ('+r.urgentes.length+')*\n';r.urgentes.forEach(function(p){msg+='• #'+(p.numero||'?')+' '+p.cliente+' — vence en '+diasRestantes(p.fechaLimite)+'d\n';});}
+  var xhr=new XMLHttpRequest();xhr.open('POST','https://api.ultramsg.com/instance181941/messages/chat',true);xhr.setRequestHeader('Content-Type','application/x-www-form-urlencoded');xhr.timeout=8000;xhr.onload=function(){toast('WhatsApp enviado ✓','ok');};xhr.onerror=function(){toast('WhatsApp enviado','ok');};xhr.send('token=jd3odrhspk539mmp&to='+encodeURIComponent(cfg.waNumero)+'&body='+encodeURIComponent(msg));
 }
-
-// --- Enviar todo a la vez ---
 function enviarTodo(){
-  var cfg = getNotifConfig();
-  if(cfg.pushActivo) enviarNotifApp();
-  if(cfg.emailActivo) enviarCorreo();
-  if(cfg.waActivo) enviarWhatsApp();
-  if(!cfg.pushActivo && !cfg.emailActivo && !cfg.waActivo){
-    toast('Activa al menos un canal de notificación','warn');
-  }
+  var cfg=getNotifConfig();
+  enviarPushOneSignal('🚨 VeoYoca — Reporte de pedidos','Revisa los pedidos vencidos y urgentes');
+  if(cfg.emailActivo)enviarCorreo();
+  if(cfg.waActivo)enviarWhatsApp();
 }
-
-// --- RENDER PANTALLA NOTIFICACIONES ---
 function renderNotificaciones(c){
-  var cfg = getNotifConfig();
-  var r = buildReporte();
-  var pushOk = ('Notification' in window) && Notification.permission === 'granted';
-
-  var html = '<div style="padding:14px">';
-
-  // Banner estado crítico
-  var critTotal = r.vencidos.length + r.urgentes.length;
-  if(critTotal > 0){
-    html += '<div style="background:#dc2626;border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px">';
-    html += '<div style="font-size:28px">🚨</div>';
-    html += '<div><div style="color:#fff;font-weight:700;font-size:14px">'+critTotal+' pedidos requieren atención</div>';
-    html += '<div style="color:rgba(255,255,255,.8);font-size:12px">'+r.vencidos.length+' vencidos · '+r.urgentes.length+' urgentes</div></div>';
-    html += '<button onclick="enviarTodo()" class="btn btn-sm" style="margin-left:auto;background:#fff;color:#dc2626;white-space:nowrap">Enviar alerta</button>';
-    html += '</div>';
-  } else {
-    html += '<div style="background:#16a34a;border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px">';
-    html += '<div style="font-size:28px">✅</div>';
-    html += '<div style="color:#fff;font-weight:700;font-size:14px">Todo bajo control<br><span style="font-size:12px;font-weight:400;opacity:.8">No hay pedidos críticos ahora mismo</span></div>';
-    html += '</div>';
+  var cfg=getNotifConfig();var r=buildReporte();
+  var critTotal=r.vencidos.length+r.urgentes.length;
+  var html='<div style="padding:14px">';
+  if(critTotal>0){
+    html+='<div style="background:#dc2626;border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px">';
+    html+='<div style="font-size:28px">🚨</div>';
+    html+='<div><div style="color:#fff;font-weight:700;font-size:14px">'+critTotal+' pedidos requieren atención</div>';
+    html+='<div style="color:rgba(255,255,255,.8);font-size:12px">'+r.vencidos.length+' vencidos · '+r.urgentes.length+' urgentes</div></div>';
+    html+='<button onclick="enviarTodo()" class="btn btn-sm" style="margin-left:auto;background:#fff;color:#dc2626;white-space:nowrap">Enviar alerta</button>';
+    html+='</div>';
+  }else{
+    html+='<div style="background:#16a34a;border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px">';
+    html+='<div style="font-size:28px">✅</div>';
+    html+='<div style="color:#fff;font-weight:700;font-size:14px">Todo bajo control<br><span style="font-size:12px;font-weight:400;opacity:.8">No hay pedidos críticos</span></div>';
+    html+='</div>';
   }
-
-  // Panel de canales
-  html += '<div class="notif-banner">';
-  html += '<h3>🔔 Canales de notificación</h3>';
-  html += '<p>Configura cómo quieres recibir las alertas de pedidos vencidos y urgentes</p>';
-
-  // --- Canal 1: App ---
-  html += '<div class="notif-row">';
-  html += '<div class="notif-icon">📱</div>';
-  html += '<div class="notif-info"><div class="notif-label">Notificación en la app</div>';
-  html += '<div class="notif-sub">'+(pushOk ? '✓ Activado — aparece en tu celular' : 'Toca para activar')+'</div></div>';
-  if(pushOk){
-    html += '<button onclick="enviarNotifApp()" class="btn-notif-test" style="width:auto;padding:5px 12px;margin-top:0">Probar</button>';
-  } else {
-    html += '<button onclick="solicitarPermisoNotificaciones()" style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer">Activar</button>';
-  }
-  html += '</div>';
-
-  // --- Canal 2: Correo EmailJS ---
-  var emailOk = cfg.emailjsServiceId && cfg.emailjsTemplateId && cfg.emailjsPublicKey && cfg.emailDestino;
-  html += '<div class="notif-row">';
-  html += '<div class="notif-icon">📧</div>';
-  html += '<div class="notif-info"><div class="notif-label">Correo electrónico</div>';
-  html += '<div class="notif-sub">'+(emailOk ? '✓ Configurado: '+cfg.emailDestino : 'Requiere cuenta EmailJS gratuita')+'</div></div>';
-  html += '<label class="notif-toggle"><input type="checkbox" id="tog-email" '+(cfg.emailActivo?'checked':'')+' onchange="toggleCanal(\'email\',this.checked)"><span class="notif-slider"></span></label>';
-  html += '</div>';
-
-  if(!emailOk || document.getElementById && false){
-    html += '<div class="notif-config" id="email-config-panel">';
-    html += '<label>Correo destino</label><input type="email" id="cfg-email-destino" placeholder="tu@correo.com" value="'+(cfg.emailDestino||'')+'"><br>';
-    html += '<label>EmailJS Service ID</label><input type="text" id="cfg-emailjs-sid" placeholder="service_xxxxxxx" value="'+(cfg.emailjsServiceId||'')+'"><br>';
-    html += '<label>EmailJS Template ID</label><input type="text" id="cfg-emailjs-tid" placeholder="template_xxxxxxx" value="'+(cfg.emailjsTemplateId||'')+'"><br>';
-    html += '<label>EmailJS Public Key</label><input type="text" id="cfg-emailjs-key" placeholder="xxxxxxxxxxxx" value="'+(cfg.emailjsPublicKey||'')+'"><br>';
-    html += '<button class="btn-notif-test" onclick="guardarConfigEmail()">Guardar configuración</button>';
-    html += '</div>';
-  }
-
-  // --- Canal 3: WhatsApp CallMeBot ---
-  var waOk = cfg.waNumero && cfg.waApikey;
-  html += '<div class="notif-row">';
-  html += '<div class="notif-icon">💬</div>';
-  html += '<div class="notif-info"><div class="notif-label">WhatsApp</div>';
-  html += '<div class="notif-sub">'+(waOk ? '✓ Configurado: '+cfg.waNumero : 'Requiere registro en CallMeBot (gratis)')+'</div></div>';
-  html += '<label class="notif-toggle"><input type="checkbox" id="tog-wa" '+(cfg.waActivo?'checked':'')+' onchange="toggleCanal(\'wa\',this.checked)"><span class="notif-slider"></span></label>';
-  html += '</div>';
-
-  html += '</div>'; // fin notif-banner
-
-  // Formulario de configuración expandido
-  html += '<div style="background:#fff;border:1px solid var(--border);border-radius:12px;margin-top:14px;overflow:hidden">';
-
-  // Config EmailJS
-  html += '<div style="padding:14px;border-bottom:1px solid var(--border)">';
-  html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:6px">📧 Configurar correo <span style="font-size:10px;background:#e0e7ff;color:#3730a3;padding:2px 6px;border-radius:99px;font-weight:600">EmailJS — gratis</span></div>';
-  html += '<div style="font-size:11px;color:var(--muted);margin-bottom:10px">1. Crea cuenta gratis en <strong>emailjs.com</strong> → 2. Crea un "Email Service" y un "Template" → 3. Pega los IDs aquí</div>';
-  html += '<div class="sfield-row" style="margin-bottom:8px"><div class="sfield" style="margin-bottom:0"><label>Correo destino</label><input type="email" id="cfg-email-destino" placeholder="tu@correo.com" value="'+(cfg.emailDestino||'')+'"></div><div class="sfield" style="margin-bottom:0"><label>Service ID</label><input type="text" id="cfg-emailjs-sid" placeholder="service_xxx" value="'+(cfg.emailjsServiceId||'')+'"></div></div>';
-  html += '<div class="sfield-row" style="margin-bottom:8px"><div class="sfield" style="margin-bottom:0"><label>Template ID</label><input type="text" id="cfg-emailjs-tid" placeholder="template_xxx" value="'+(cfg.emailjsTemplateId||'')+'"></div><div class="sfield" style="margin-bottom:0"><label>Public Key</label><input type="text" id="cfg-emailjs-key" placeholder="xxxxxxxxxxxx" value="'+(cfg.emailjsPublicKey||'')+'"></div></div>';
-  html += '<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-dark btn-sm" onclick="guardarConfigEmail()">Guardar</button>';
-  if(emailOk) html += '<button class="btn btn-green btn-sm" onclick="enviarCorreo()">Probar envío</button>';
-  html += '</div></div>';
-
-  // Config WhatsApp
-  html += '<div style="padding:14px">';
-  html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:6px">💬 Configurar WhatsApp <span style="font-size:10px;background:#dcfce7;color:#166534;padding:2px 6px;border-radius:99px;font-weight:600">CallMeBot — gratis</span></div>';
-  html += '<div style="font-size:11px;color:var(--muted);margin-bottom:10px">1. Agrega a WhatsApp el número <strong>+34 644 82 95 42</strong> → 2. Envíales: <strong>I allow callmebot to send me messages</strong> → 3. Te responden con tu apikey</div>';
-  html += '<div class="sfield-row" style="margin-bottom:8px"><div class="sfield" style="margin-bottom:0"><label>Tu número (con código país)</label><input type="text" id="cfg-wa-numero" placeholder="+58 414 123 4567" value="'+(cfg.waNumero||'')+'"></div><div class="sfield" style="margin-bottom:0"><label>API Key de CallMeBot</label><input type="text" id="cfg-wa-apikey" placeholder="1234567" value="'+(cfg.waApikey||'')+'"></div></div>';
-  html += '<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-dark btn-sm" onclick="guardarConfigWA()">Guardar</button>';
-  if(waOk) html += '<button class="btn btn-green btn-sm" onclick="enviarWhatsApp()">Probar envío</button>';
-  html += '</div></div>';
-
-  html += '</div>'; // fin panel config
-
-  // Botón enviar todo
-  html += '<button onclick="enviarTodo()" class="btn btn-dark" style="width:100%;padding:13px;font-size:15px;margin-top:14px">🔔 Enviar reporte ahora a todos los canales</button>';
-
-  html += '</div>'; // fin padding
-  c.innerHTML = html;
+  html+='<div class="notif-banner">';
+  html+='<h3>🔔 Canales de notificación</h3>';
+  html+='<p>Las notificaciones push llegan aunque la app esté cerrada</p>';
+  html+='<div class="notif-row"><div class="notif-icon">📱</div><div class="notif-info"><div class="notif-label">Push (OneSignal)</div><div class="notif-sub">Notificaciones en el celular con app cerrada ✓</div></div><button onclick="pedirPermisoOneSignal()" style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer">Activar</button></div>';
+  var emailOk=cfg.emailjsServiceId&&cfg.emailjsTemplateId&&cfg.emailjsPublicKey&&cfg.emailDestino;
+  html+='<div class="notif-row"><div class="notif-icon">📧</div><div class="notif-info"><div class="notif-label">Correo electrónico</div><div class="notif-sub">'+(emailOk?'✓ '+cfg.emailDestino:'Configura abajo')+'</div></div><label class="notif-toggle"><input type="checkbox" '+(cfg.emailActivo?'checked':'')+' onchange="toggleCanal(\'email\',this.checked)"><span class="notif-slider"></span></label></div>';
+  var waOk=cfg.waNumero&&cfg.waApikey;
+  html+='<div class="notif-row"><div class="notif-icon">💬</div><div class="notif-info"><div class="notif-label">WhatsApp</div><div class="notif-sub">'+(waOk?'✓ '+cfg.waNumero:'Configura abajo')+'</div></div><label class="notif-toggle"><input type="checkbox" '+(cfg.waActivo?'checked':'')+' onchange="toggleCanal(\'wa\',this.checked)"><span class="notif-slider"></span></label></div>';
+  html+='</div>';
+  html+='<div style="background:#fff;border:1px solid var(--border);border-radius:12px;margin-top:14px;overflow:hidden">';
+  html+='<div style="padding:14px;border-bottom:1px solid var(--border)"><div style="font-size:13px;font-weight:700;margin-bottom:10px">📧 Configurar correo</div>';
+  html+='<div class="sfield-row" style="margin-bottom:8px"><div class="sfield" style="margin-bottom:0"><label>Correo destino</label><input type="email" id="cfg-email-destino" placeholder="tu@correo.com" value="'+(cfg.emailDestino||'')+'"></div><div class="sfield" style="margin-bottom:0"><label>Service ID</label><input type="text" id="cfg-emailjs-sid" placeholder="service_xxx" value="'+(cfg.emailjsServiceId||'')+'"></div></div>';
+  html+='<div class="sfield-row" style="margin-bottom:8px"><div class="sfield" style="margin-bottom:0"><label>Template ID</label><input type="text" id="cfg-emailjs-tid" placeholder="template_xxx" value="'+(cfg.emailjsTemplateId||'')+'"></div><div class="sfield" style="margin-bottom:0"><label>Public Key</label><input type="text" id="cfg-emailjs-key" placeholder="xxxx" value="'+(cfg.emailjsPublicKey||'')+'"></div></div>';
+  html+='<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-dark btn-sm" onclick="guardarConfigEmail()">Guardar</button>'+(emailOk?'<button class="btn btn-green btn-sm" onclick="enviarCorreo()">Probar</button>':'')+'</div></div>';
+  html+='<div style="padding:14px"><div style="font-size:13px;font-weight:700;margin-bottom:10px">💬 Configurar WhatsApp</div>';
+  html+='<div class="sfield-row" style="margin-bottom:8px"><div class="sfield" style="margin-bottom:0"><label>Número (con código país)</label><input type="text" id="cfg-wa-numero" placeholder="+58 414 123 4567" value="'+(cfg.waNumero||'')+'"></div><div class="sfield" style="margin-bottom:0"><label>API Key CallMeBot</label><input type="text" id="cfg-wa-apikey" placeholder="1234567" value="'+(cfg.waApikey||'')+'"></div></div>';
+  html+='<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-dark btn-sm" onclick="guardarConfigWA()">Guardar</button>'+(waOk?'<button class="btn btn-green btn-sm" onclick="enviarWhatsApp()">Probar</button>':'')+'</div></div>';
+  html+='</div>';
+  html+='<button onclick="enviarTodo()" class="btn btn-dark" style="width:100%;padding:13px;font-size:15px;margin-top:14px">🔔 Enviar reporte ahora</button>';
+  html+='</div>';
+  c.innerHTML=html;
 }
-
-function toggleCanal(canal, activo){
-  var cfg = getNotifConfig();
-  if(canal === 'email') cfg.emailActivo = activo;
-  if(canal === 'wa') cfg.waActivo = activo;
-  setNotifConfig(cfg);
-  toast(activo ? 'Canal activado' : 'Canal desactivado', 'ok');
-}
-
-function guardarConfigEmail(){
-  var cfg = getNotifConfig();
-  cfg.emailDestino     = (document.getElementById('cfg-email-destino')||{value:''}).value.trim();
-  cfg.emailjsServiceId = (document.getElementById('cfg-emailjs-sid')||{value:''}).value.trim();
-  cfg.emailjsTemplateId= (document.getElementById('cfg-emailjs-tid')||{value:''}).value.trim();
-  cfg.emailjsPublicKey = (document.getElementById('cfg-emailjs-key')||{value:''}).value.trim();
-  if(!cfg.emailDestino || !cfg.emailjsServiceId || !cfg.emailjsTemplateId || !cfg.emailjsPublicKey){
-    toast('Completa todos los campos de correo','err'); return;
-  }
-  cfg.emailActivo = true;
-  setNotifConfig(cfg);
-  toast('Configuración de correo guardada ✓','ok');
-  renderNotificaciones(document.getElementById('content'));
-}
-
-function guardarConfigWA(){
-  var cfg = getNotifConfig();
-  cfg.waNumero = (document.getElementById('cfg-wa-numero')||{value:''}).value.trim().replace(/\s/g,'');
-  cfg.waApikey = (document.getElementById('cfg-wa-apikey')||{value:''}).value.trim();
-  if(!cfg.waNumero || !cfg.waApikey){ toast('Completa número y apikey de WhatsApp','err'); return; }
-  cfg.waActivo = true;
-  setNotifConfig(cfg);
-  toast('Configuración de WhatsApp guardada ✓','ok');
-  renderNotificaciones(document.getElementById('content'));
-}
+function toggleCanal(canal,activo){var cfg=getNotifConfig();if(canal==='email')cfg.emailActivo=activo;if(canal==='wa')cfg.waActivo=activo;setNotifConfig(cfg);toast(activo?'Canal activado':'Canal desactivado','ok');}
+function guardarConfigEmail(){var cfg=getNotifConfig();cfg.emailDestino=(document.getElementById('cfg-email-destino')||{value:''}).value.trim();cfg.emailjsServiceId=(document.getElementById('cfg-emailjs-sid')||{value:''}).value.trim();cfg.emailjsTemplateId=(document.getElementById('cfg-emailjs-tid')||{value:''}).value.trim();cfg.emailjsPublicKey=(document.getElementById('cfg-emailjs-key')||{value:''}).value.trim();if(!cfg.emailDestino||!cfg.emailjsServiceId||!cfg.emailjsTemplateId||!cfg.emailjsPublicKey){toast('Completa todos los campos','err');return;}cfg.emailActivo=true;setNotifConfig(cfg);toast('Correo guardado ✓','ok');renderNotificaciones(document.getElementById('content'));}
+function guardarConfigWA(){var cfg=getNotifConfig();cfg.waNumero=(document.getElementById('cfg-wa-numero')||{value:''}).value.trim().replace(/\s/g,'');cfg.waApikey=(document.getElementById('cfg-wa-apikey')||{value:''}).value.trim();if(!cfg.waNumero||!cfg.waApikey){toast('Completa número y apikey','err');return;}cfg.waActivo=true;setNotifConfig(cfg);toast('WhatsApp guardado ✓','ok');renderNotificaciones(document.getElementById('content'));}
 
 // ═══════════════════════════════════════════════════════════
 // FIREBASE INIT
@@ -867,17 +670,14 @@ async function initFirebase(){
     var app=fb.initializeApp(firebaseConfig);
     _db=fs.getFirestore(app);
     window._firestore=fs;
-
     var snap=await fs.getDoc(fs.doc(_db,'veoyoca','data'));
     if(snap.exists()){var d=snap.data();DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];}
     else{DB.usuarios=[{id:'admin',nombre:'Administrador',username:'admin',password:'admin123',rol:'admin',creado:fecha()}];await guardarDB();}
-
     fs.onSnapshot(fs.doc(_db,'veoyoca','data'),function(snap){
       if(!snap.exists()||SAVING)return;
       var d=snap.data();DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];
       if(SESSION&&TAB){var nb=document.getElementById('nb-'+TAB);if(nb)goTab(TAB,nb);}
     });
-
     var sess=null;try{sess=JSON.parse(localStorage.getItem('veo_session')||'null');}catch(e){}
     if(sess){var u=DB.usuarios.find(function(x){return x.id===sess.id;});if(u){SESSION=u;mostrarApp();return;}}
     document.getElementById('splash').style.display='none';
@@ -890,137 +690,31 @@ async function initFirebase(){
     console.error('Firebase error:',e);
   }
 }
+
 // ═══════════════════════════════════════════════════════════
-// REGISTRO SERVICE WORKER
+// SERVICE WORKER
 // ═══════════════════════════════════════════════════════════
-var SW_REG = null;
-
-function registrarSW() {
-  if (!('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.register('/VEOYOCA-APP/sw.js')
-    .then(function(reg) {
-      SW_REG = reg;
-      console.log('SW registrado OK');
-      // Pedir permiso de notificaciones
-      if (Notification.permission === 'default') {
-        Notification.requestPermission();
-      }
-      // Programar alarma diaria a las 8:45am
-      programarAlarmaSW('08:45');
-    })
-    .catch(function(e) { console.log('SW error:', e); });
+function verificarGoto(){
+  var goto=localStorage.getItem('veo_goto');
+  if(goto&&SESSION){localStorage.removeItem('veo_goto');setTimeout(function(){goTab(goto,document.getElementById('nb-'+goto));},300);}
+}
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/VEOYOCA-APP/sw.js').catch(function(e){console.log('SW:',e);});
 }
 
-function programarAlarmaSW(hora) {
-  if (!SW_REG || !SW_REG.active) {
-    setTimeout(function(){ programarAlarmaSW(hora); }, 1000);
-    return;
-  }
-  SW_REG.active.postMessage({ tipo: 'ALARMA_DIARIA', hora: hora });
-}
-
-function notificarSW(titulo, cuerpo, tag) {
-  if (Notification.permission !== 'granted') return;
-  if (SW_REG && SW_REG.active) {
-    SW_REG.active.postMessage({ tipo: 'NOTIFICAR', titulo: titulo, cuerpo: cuerpo, tag: tag });
-  } else {
-    new Notification(titulo, { body: cuerpo, icon: '/VEOYOCA-APP/icon-192.png' });
-  }
-}
-
-// Escuchar mensajes del SW (app abierta)
-navigator.serviceWorker && navigator.serviceWorker.addEventListener('message', function(e) {
-  if (e.data && e.data.tipo === 'IR_TAB') {
-    var tab = e.data.tab || 'home';
-    if (SESSION) {
-      goTab(tab, document.getElementById('nb-' + tab));
-    } else {
-      // Guardar para después del login
-      localStorage.setItem('veo_goto', tab);
-    }
-  }
-});
-
-// Al abrir la app verificar si hay destino pendiente
-function verificarGoto() {
-  var goto = localStorage.getItem('veo_goto');
-  if (goto && SESSION) {
-    localStorage.removeItem('veo_goto');
-    setTimeout(function() {
-      goTab(goto, document.getElementById('nb-' + goto));
-    }, 300);
-  }
-}
-
-// Inicializar EmailJS una sola vez
-(function() {
-  var s = document.createElement('script');
-  s.src = 'https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';
-  s.onload = function() {
-    var cfg = getNotifConfig();
-    if (cfg.emailjsPublicKey) {
-      window.emailjs.init({ publicKey: cfg.emailjsPublicKey });
-    } else {
-      window.emailjs.init({ publicKey: 'Hn3mgOJeQOhzZBhNw' });
-    }
-    window._ejsReady = true;
+// EmailJS init
+(function(){
+  var s=document.createElement('script');
+  s.src='https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';
+  s.onload=function(){
+    var cfg=getNotifConfig();
+    window.emailjs.init({publicKey:cfg.emailjsPublicKey||'Hn3mgOJeQOhzZBhNw'});
+    window._ejsReady=true;
   };
   document.head.appendChild(s);
 })();
 
-registrarSW();
 initFirebase();
-
-// ═══════════════════════════════════════════════════════════
-// NOTIFICACIONES DE EVENTOS (correo + WA)
-// ═══════════════════════════════════════════════════════════
-var _ejsInited = false;
-function notificarEvento(tipo, pedido) {
-  var cfg = getNotifConfig();
-  var esNuevo = tipo === 'NUEVO';
-  var titulo = (esNuevo ? 'Nuevo pedido #' : 'Pedido entregado #') + (pedido.numero||'?') + ' - ' + (pedido.cliente||'');
-  var detalle = 'Ciudad: ' + (pedido.ciudad||'-') + ' | Vendedor: ' + (pedido.vendedor||'-') + ' | Fecha: ' + (pedido.fechaLimite||'-');
-  if (!esNuevo) detalle += ' | Por: ' + (pedido.entregadoPor||SESSION.nombre);
-
-  // Correo
-  if (cfg.emailActivo && cfg.emailjsServiceId && cfg.emailjsTemplateId && cfg.emailjsPublicKey && cfg.emailDestino) {
-    var htmlMail = '<div style="font-family:Arial,sans-serif;max-width:600px;padding:20px">'
-      + '<div style="background:#1a1a2e;padding:16px;border-radius:8px 8px 0 0">'
-      + '<h2 style="color:#fff;margin:0;font-size:16px">' + titulo + '</h2>'
-      + '<p style="color:rgba(255,255,255,.6);margin:4px 0 0;font-size:12px">' + fecha() + ' - ' + hora() + '</p>'
-      + '</div>'
-      + '<div style="background:#f9fafb;border:1px solid #e5e7eb;padding:16px;border-radius:0 0 8px 8px">'
-      + '<p style="font-size:14px;color:#374151">' + detalle + '</p>'
-      + '<div style="text-align:center;margin-top:16px">'
-      + '<a href="https://jorgerinconl24-hub.github.io/VEOYOCA-APP/" style="background:#1a1a2e;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:13px">Ver en VeoYoca</a>'
-      + '</div></div></div>';
-
-    function doMail() {
-      window.emailjs.send(cfg.emailjsServiceId, cfg.emailjsTemplateId, {
-        to_email: cfg.emailDestino,
-        fecha: fecha(),
-        total: '1',
-        vencidos_n: '0',
-        urgentes_n: '0',
-        lista_vencidos: htmlMail,
-        lista_urgentes: ''
-      }).then(function(){ console.log('mail ok'); })
-        .catch(function(e){ console.log('mail err:', JSON.stringify(e)); });
-    }
-    if (window._ejsReady) { doMail(); }
-    else { setTimeout(doMail, 1500); }
-  }
-
-  // WhatsApp via UltraMsg
-  if (cfg.waActivo && cfg.waNumero) {
-    var msgWA = titulo + ' - ' + detalle;
-    var xhrEv = new XMLHttpRequest();
-    xhrEv.open('POST', 'https://api.ultramsg.com/instance181941/messages/chat', true);
-    xhrEv.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-    xhrEv.timeout = 6000;
-    xhrEv.send('token=jd3odrhspk539mmp&to=' + encodeURIComponent(cfg.waNumero) + '&body=' + encodeURIComponent(msgWA));
-  }
-}
 </script>
 </body>
 </html>
