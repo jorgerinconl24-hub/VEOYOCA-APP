@@ -278,6 +278,25 @@ function faltantesPedido(p){
   if(os.some(function(o){return !ordenRecibida(o)&&!o.fechaEstimadaEntrega;}))f.push('Fecha estimada en \u00F3rdenes');
   return f;
 }
+// Todas las ordenes pendientes que no tienen fecha estimada (obligatoria)
+function ordenesSinFecha(){
+  var res=[];
+  DB.pedidos.forEach(function(p){
+    if(p.estatus==='ENTREGADO')return;
+    getOrdenes(p).forEach(function(o){
+      if(!ordenRecibida(o)&&!o.fechaEstimadaEntrega)res.push({pedido:p,orden:o});
+    });
+  });
+  return res;
+}
+// Riesgo: la orden pendiente mas lejana llega DESPUES de la fecha limite del cliente
+function riesgoLimite(p){
+  var cb=cuelloBotella(p);
+  if(!cb||!p.fechaLimite)return null;
+  var dl=diasRestantes(p.fechaLimite),dc=diasRestantes(cb.fechaEstimadaEntrega);
+  if(dl===null||dc===null)return null;
+  return dc>dl?{dias:dc-dl,orden:cb}:null;
+}
 function chipOrden(o){
   var recib=ordenRecibida(o),retra=ordenRetrasada(o);
   var bg=recib?'var(--sbg)':retra?'var(--dbg)':'#fef3c7';
@@ -314,6 +333,7 @@ function mostrarApp(){
   goTab('home',document.getElementById('nb-home'));
   setTimeout(verificarGoto,500);
   setTimeout(verificarCamposIncompletosAlEntrar, 4000);
+  setInterval(verificarCamposIncompletosAlEntrar, 60*60*1000);
 }
 function mostrarPerfil(){
   var mis=DB.pedidos.filter(function(p){return p.creadoPor===SESSION.username||p.vendedor===SESSION.nombre;});
@@ -327,7 +347,7 @@ function goTab(tab,btn){
   var titulos={home:'Pedidos',entregar:'Despacho',nuevo:'Nuevo pedido',reportes:'Reportes',admin:'Administracion',plan:'Rutas',ia:'Plan IA',notif:'Alertas y Notificaciones'};
   document.getElementById('topbar-sub').textContent=titulos[tab]||SESSION.nombre;
   var c=document.getElementById('content');
-  c.onclick=function(e){var ed=e.target.getAttribute('data-edit');var en=e.target.getAttribute('data-entregar');var or=e.target.getAttribute('data-ordenes');if(ed)abrirEditar(ed);if(en)marcarEntregado(en);if(or)abrirOrdenes(or);};
+  c.onclick=function(e){var ed=e.target.getAttribute('data-edit');var en=e.target.getAttribute('data-entregar');var or=e.target.getAttribute('data-ordenes');if(ed)abrirEditar(ed);if(en)marcarEntregado(en);if(or)abrirOrdenes(or);if(!ed&&!en&&!or&&e.target.closest){var pv=e.target.closest('[data-prov-toggle]');if(pv)toggleProv(pv.getAttribute('data-prov-toggle'));}};
   if(tab==='home')renderHome(c);else if(tab==='entregar')renderEntregar(c);else if(tab==='nuevo')renderNuevo(c);
   else if(tab==='reportes')renderReportes(c);else if(tab==='admin')renderAdmin(c);
   else if(tab==='plan')renderPlanificacion(c);else if(tab==='ia')renderPlanIA(c);else if(tab==='notif')renderNotificaciones(c);
@@ -345,7 +365,9 @@ function renderHome(c){
     +'<div class="stat" onclick="aplicarFiltro(\'urgente\')" style="cursor:pointer"><div class="stat-v" style="color:#fcd34d">'+urg+'</div><div class="stat-l">urgentes</div></div>'
     +'<div class="stat" onclick="aplicarFiltroEntregados()" style="cursor:pointer"><div class="stat-v" style="color:#86efac">'+ent+'</div><div class="stat-l">entregados</div></div>'
     +'</div>';
-  c.innerHTML=statsBar+'<div class="prog-wrap"><div class="prog-bar"><div class="prog-fill" style="width:'+pct+'%"></div></div><div class="prog-label">'+ent+' de '+total+' entregados ('+pct+'%)</div></div><div class="toolbar"><input type="text" id="h-buscar" placeholder="Buscar cliente o numero..." oninput="filtrarHome()"><select id="h-est" onchange="filtrarHome()"><option value="">Todos</option><option value="vencido">Vencidos</option><option value="urgente">Urgentes</option><option value="sf">Sin fecha</option><option value="ok">Con tiempo</option><option value="LISTO">Listos</option><option value="ORDENES">Con \u00F3rdenes pendientes</option></select></div><div class="section-pad" id="home-lista"></div>';
+  var sf=ordenesSinFecha();
+  var bannerSF=sf.length?'<div onclick="aplicarFiltro(\'SINFECHA\')" style="background:var(--warning);color:#fff;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px"><span>\u26A0\uFE0F '+sf.length+' orden'+(sf.length>1?'es':'')+' sin fecha estimada de entrega</span><span style="font-size:11px;opacity:.85;white-space:nowrap">Toca para ver \u2192</span></div>':'';
+  c.innerHTML=statsBar+bannerSF+'<div class="prog-wrap"><div class="prog-bar"><div class="prog-fill" style="width:'+pct+'%"></div></div><div class="prog-label">'+ent+' de '+total+' entregados ('+pct+'%)</div></div><div class="toolbar"><input type="text" id="h-buscar" placeholder="Buscar cliente o numero..." oninput="filtrarHome()"><select id="h-est" onchange="filtrarHome()"><option value="">Todos</option><option value="vencido">Vencidos</option><option value="urgente">Urgentes</option><option value="sf">Sin fecha</option><option value="ok">Con tiempo</option><option value="LISTO">Listos</option><option value="ORDENES">Con \u00F3rdenes pendientes</option><option value="SINFECHA">\u00D3rdenes sin fecha estimada</option></select></div><div class="section-pad" id="home-lista"></div>';
   filtrarHome();
 }
 function aplicarFiltro(valor){
@@ -369,12 +391,12 @@ function aplicarFiltroEntregados(){
 function filtrarHome(){
   var b=(document.getElementById('h-buscar')||{value:''}).value.toLowerCase();
   var fe=(document.getElementById('h-est')||{value:''}).value;
-  var lista=DB.pedidos.filter(function(p){if(p.estatus==='ENTREGADO')return false;var mb=!b||((p.cliente||'').toLowerCase().indexOf(b)>=0||(p.numero||'').indexOf(b)>=0);var mfe=!fe||clasif(p)===fe||(fe==='LISTO'&&p.estatus==='LISTO')||(fe==='ORDENES'&&(function(){var r=resumenOrdenes(p);return r.total>0&&r.listas<r.total;})());return mb&&mfe;});
+  var lista=DB.pedidos.filter(function(p){if(p.estatus==='ENTREGADO')return false;var mb=!b||((p.cliente||'').toLowerCase().indexOf(b)>=0||(p.numero||'').indexOf(b)>=0);var mfe=!fe||clasif(p)===fe||(fe==='LISTO'&&p.estatus==='LISTO')||(fe==='ORDENES'&&(function(){var r=resumenOrdenes(p);return r.total>0&&r.listas<r.total;})())||(fe==='SINFECHA'&&getOrdenes(p).some(function(o){return !ordenRecibida(o)&&!o.fechaEstimadaEntrega;}));return mb&&mfe;});
   lista.sort(function(a,b){var da=diasRestantes(a.fechaLimite),db=diasRestantes(b.fechaLimite);if(da===null&&db===null)return 0;if(da===null)return 1;if(db===null)return -1;return da-db;});
   var el=document.getElementById('home-lista');if(!el)return;
   if(!lista.length){el.innerHTML='<div class="empty"><div class="empty-icon">OK</div>No hay pedidos pendientes</div>';return;}
-  if(fe==='ORDENES'){
-    var h2='<div class="sec-label">Con \u00F3rdenes pendientes ('+lista.length+')</div>';
+  if(fe==='ORDENES'||fe==='SINFECHA'){
+    var h2='<div class="sec-label">'+(fe==='SINFECHA'?'Con \u00F3rdenes sin fecha estimada':'Con \u00F3rdenes pendientes')+' ('+lista.length+')</div>';
     lista.forEach(function(p){h2+=cardHTML(p,false);});
     el.innerHTML=h2;return;
   }
@@ -395,6 +417,8 @@ function cardHTML(p,conEntregar){
     h+='</div>';
     var cb=cuelloBotella(p);
     h+='<div style="font-size:11px;color:var(--muted);margin-top:3px">\u00D3rdenes: '+r.listas+'/'+r.total+' recibidas'+(cb?' \u00B7 entrega m\u00E1s lejana: '+cb.fechaEstimadaEntrega:'')+'</div>';
+    var rg=riesgoLimite(p);
+    if(rg)h+='<div style="font-size:11px;color:var(--danger);font-weight:700;margin-top:3px">\uD83D\uDEA8 Riesgo: la mercanc\u00EDa llega '+rg.dias+'d despu\u00E9s de la fecha l\u00EDmite ('+esc(rg.orden.proveedor||tipoLabel(rg.orden.tipo))+')</div>';
   }else if(p.proveedor){
     h+='<span class="card-vend" style="background:#fef3c7;color:#92400e">'+p.proveedor+'</span>';
   }
@@ -504,6 +528,9 @@ function renderOrdenesBody(){
   var h='';
   if(os.length){
     h+='<div style="font-size:12px;color:var(--muted);margin-bottom:12px"><strong>'+r.listas+' de '+r.total+'</strong> recibidas'+(cb?' \u00B7 la entrega m\u00E1s lejana es <strong>'+cb.fechaEstimadaEntrega+'</strong> ('+esc(cb.proveedor||tipoLabel(cb.tipo))+')':'')+'</div>';
+    var rgm=riesgoLimite(p);
+    if(rgm)h+='<div style="background:var(--dbg);border:1px solid #fecaca;border-radius:10px;padding:8px 12px;font-size:12px;color:var(--danger);font-weight:600;margin-bottom:12px">\uD83D\uDEA8 La entrega m\u00E1s lejana llega '+rgm.dias+'d despu\u00E9s de la fecha l\u00EDmite del cliente ('+(p.fechaLimite||'')+')</div>';
+    if(os.some(function(o){return !ordenRecibida(o)&&!o.fechaEstimadaEntrega;}))h+='<div style="background:var(--wbg);border:1px solid #fde68a;border-radius:10px;padding:8px 12px;font-size:12px;color:var(--warning);font-weight:600;margin-bottom:12px">\u26A0\uFE0F Hay \u00F3rdenes sin fecha estimada \u2014 es obligatoria para el seguimiento</div>';
   }else{
     h+='<div style="font-size:12px;color:var(--muted);margin-bottom:12px">Este pedido a\u00FAn no tiene \u00F3rdenes registradas.</div>';
   }
@@ -513,7 +540,7 @@ function renderOrdenesBody(){
     h+='<div class="orden-item'+(recib?' recibida':retra?' retrasada':'')+'">';
     h+='<div class="orden-head"><span class="orden-tipo">'+tipoLabel(o.tipo)+(o.numeroOC?' #'+esc(o.numeroOC):'')+'</span>'+badge+'</div>';
     h+='<div class="sfield-row" style="margin-bottom:8px"><div class="sfield" style="margin-bottom:0"><label>'+(o.tipo==='OF'?'Subcontratado':'Proveedor')+'</label><input type="text" value="'+esc(o.proveedor)+'" onchange="ordCampo('+i+',\'proveedor\',this.value)"></div><div class="sfield" style="margin-bottom:0"><label># Orden</label><input type="text" value="'+esc(o.numeroOC)+'" onchange="ordCampo('+i+',\'numeroOC\',this.value)"></div></div>';
-    h+='<div class="sfield-row"><div class="sfield" style="margin-bottom:0"><label>Fecha estimada entrega</label><input type="date" value="'+fechaInput(o.fechaEstimadaEntrega)+'" onchange="ordCampo('+i+',\'fechaEstimadaEntrega\',inputFecha(this.value))"></div><div class="sfield" style="margin-bottom:0"><label>Estado</label><select onchange="ordCampo('+i+',\'estado\',this.value)"><option value="PENDIENTE"'+(o.estado==='PENDIENTE'||!o.estado?' selected':'')+'>Pendiente</option><option value="EN PROCESO"'+(o.estado==='EN PROCESO'?' selected':'')+'>En proceso</option><option value="RECIBIDA"'+(recib?' selected':'')+'>Recibida</option></select></div></div>';
+    h+='<div class="sfield-row"><div class="sfield" style="margin-bottom:0"><label>Fecha estimada entrega'+((!o.fechaEstimadaEntrega&&!recib)?' <span style="color:var(--danger)">*obligatoria</span>':'')+'</label><input type="date" value="'+fechaInput(o.fechaEstimadaEntrega)+'"'+((!o.fechaEstimadaEntrega&&!recib)?' style="border-color:var(--danger)"':'')+' onchange="ordCampo('+i+',\'fechaEstimadaEntrega\',inputFecha(this.value));renderOrdenesBody()"></div><div class="sfield" style="margin-bottom:0"><label>Estado</label><select onchange="ordCampo('+i+',\'estado\',this.value)"><option value="PENDIENTE"'+(o.estado==='PENDIENTE'||!o.estado?' selected':'')+'>Pendiente</option><option value="EN PROCESO"'+(o.estado==='EN PROCESO'?' selected':'')+'>En proceso</option><option value="RECIBIDA"'+(recib?' selected':'')+'>Recibida</option></select></div></div>';
     h+='<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">';
     if(!recib)h+='<button class="btn btn-green btn-sm" onclick="ordRecibida('+i+')">\u2713 Marcar recibida</button>';
     if(o.pdfUrl)h+='<a href="'+o.pdfUrl+'" target="_blank" class="btn btn-blue btn-sm" style="text-decoration:none">📄 PDF</a>';
@@ -555,6 +582,7 @@ function ordAgregar(){
   var fval=(document.getElementById('no-fecha')||{value:''}).value;
   if(!prov&&tipo!=='INVENTARIO'){toast('Indica el proveedor o subcontratado','err');return;}
   p.ordenes.push({id:uid(),tipo:tipo,proveedor:prov||(tipo==='INVENTARIO'?'Inventario':''),numeroOC:num,fechaEmision:fecha(),fechaEstimadaEntrega:inputFecha(fval),fechaRecepcion:null,estado:'PENDIENTE',pdfUrl:''});
+  if(!fval)toast('Orden agregada SIN fecha estimada \u2014 compl\u00E9tala pronto, se notificar\u00E1 hasta que la tenga','warn');
   renderOrdenesBody();
 }
 async function guardarOrdenes(){
@@ -576,6 +604,14 @@ async function guardarOrdenes(){
   toast('\u00D3rdenes guardadas','ok');
 }
 
+function toggleProv(i){
+  var el=document.getElementById('prov-peds-'+i);if(!el)return;
+  var abierto=el.style.display!=='none';
+  el.style.display=abierto?'none':'block';
+  var fl=document.getElementById('prov-arrow-'+i);
+  if(fl)fl.textContent=abierto?'\u25B6':'\u25BC';
+}
+
 function renderReportes(c){
   var total=DB.pedidos.length,ent=DB.pedidos.filter(function(p){return p.estatus==='ENTREGADO';}).length;
   var pend=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';}).length;
@@ -594,19 +630,24 @@ function renderReportes(c){
     getOrdenes(p).forEach(function(o){
       if(ordenRecibida(o))return;
       var k=(o.proveedor||'').trim()||tipoLabel(o.tipo)||'Sin proveedor';
-      if(!provMap[k])provMap[k]={n:0,retra:0,peds:[]};
+      if(!provMap[k])provMap[k]={n:0,retra:0,ids:[]};
       provMap[k].n++;
       if(ordenRetrasada(o))provMap[k].retra++;
-      var ref='#'+(p.numero||p.id.substring(0,6))+(o.fechaEstimadaEntrega?' ('+o.fechaEstimadaEntrega+')':'');
-      if(provMap[k].peds.indexOf(ref)<0)provMap[k].peds.push(ref);
+      if(provMap[k].ids.indexOf(p.id)<0)provMap[k].ids.push(p.id);
     });
   });
-  var provArr=Object.keys(provMap).map(function(k){return {prov:k,n:provMap[k].n,retra:provMap[k].retra,peds:provMap[k].peds};});
+  var provArr=Object.keys(provMap).map(function(k){return {prov:k,n:provMap[k].n,retra:provMap[k].retra,ids:provMap[k].ids};});
   provArr.sort(function(a,b){return b.retra-a.retra||b.n-a.n;});
   if(provArr.length){
-    html+='<div class="chart-wrap"><div class="chart-title">\u00D3rdenes pendientes por proveedor</div>';
-    provArr.forEach(function(item){
-      html+='<div style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;font-weight:600">'+esc(item.prov)+'</span><span style="font-size:12px">'+item.n+' pendiente'+(item.n>1?'s':'')+(item.retra?' \u00B7 <span style="color:var(--danger);font-weight:700">'+item.retra+' retrasada'+(item.retra>1?'s':'')+'</span>':'')+'</span></div><div style="font-size:11px;color:var(--muted);margin-top:2px">Pedidos: '+item.peds.join(', ')+'</div></div>';
+    html+='<div class="chart-wrap"><div class="chart-title">\u00D3rdenes pendientes por proveedor <span style="font-weight:400;color:var(--muted);font-size:11px">(toca un proveedor para ver sus pedidos)</span></div>';
+    provArr.forEach(function(item,idx){
+      html+='<div data-prov-toggle="'+idx+'" style="padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="font-size:13px;font-weight:600"><span id="prov-arrow-'+idx+'" style="display:inline-block;font-size:10px;color:var(--muted);margin-right:6px">\u25B6</span>'+esc(item.prov)+'</span><span style="font-size:12px">'+item.n+' pendiente'+(item.n>1?'s':'')+(item.retra?' \u00B7 <span style="color:var(--danger);font-weight:700">'+item.retra+' retrasada'+(item.retra>1?'s':'')+'</span>':'')+' \u00B7 <span style="color:var(--muted)">'+item.ids.length+' pedido'+(item.ids.length>1?'s':'')+'</span></span></div></div>';
+      html+='<div id="prov-peds-'+idx+'" style="display:none;padding:10px 0 4px;background:var(--bg);margin:0 -14px;padding-left:14px;padding-right:14px;border-bottom:1px solid var(--border)">';
+      item.ids.forEach(function(pid){
+        var p=DB.pedidos.find(function(x){return x.id===pid;});
+        if(p)html+=cardHTML(p,false);
+      });
+      html+='</div>';
     });
     html+='</div>';
   }
@@ -662,13 +703,15 @@ function pedidosConCamposIncompletos(){
   ayer.setDate(ayer.getDate() - 1);
   return DB.pedidos.filter(function(p){
     if(p.estatus==='ENTREGADO') return false;
-    // Solo pedidos creados hace más de 1 día
+    // Ordenes pendientes sin fecha estimada: fastidiar de inmediato, sin gracia
+    var sinFecha = getOrdenes(p).some(function(o){return !ordenRecibida(o)&&!o.fechaEstimadaEntrega;});
+    if(sinFecha) return true;
+    // Pedidos sin ninguna orden registrada: 1 dia de gracia desde su creacion
     var partes = (p.fechaCreacion||'').split('/');
     if(partes.length!==3) return false;
     var fechaCreado = new Date(parseInt(partes[2]),parseInt(partes[1])-1,parseInt(partes[0]));
     if(fechaCreado > ayer) return false;
-    // Verificar si faltan ordenes o fechas estimadas en las ordenes
-    return faltantesPedido(p).length > 0;
+    return getOrdenes(p).length === 0;
   });
 }
 
@@ -737,13 +780,13 @@ function notificarCamposIncompletos(){
 }
 
 function verificarCamposIncompletosAlEntrar(){
-  // Verificar solo una vez por día
+  // Insistir cada 4 horas mientras haya ordenes sin fecha o pedidos sin ordenes
   var cfg = getNotifConfig();
-  var hoyStr = new Date().toDateString();
-  if(cfg.ultimaNotifIncompletos === hoyStr) return;
+  var ahora = Date.now();
+  if(cfg.ultimaNotifIncompletosTs && (ahora - cfg.ultimaNotifIncompletosTs) < 4*60*60*1000) return;
   var incompletos = pedidosConCamposIncompletos();
   if(!incompletos.length) return;
-  cfg.ultimaNotifIncompletos = hoyStr;
+  cfg.ultimaNotifIncompletosTs = ahora;
   setNotifConfig(cfg);
   setTimeout(notificarCamposIncompletos, 5000);
 }
