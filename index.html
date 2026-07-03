@@ -172,7 +172,7 @@ button{cursor:pointer;font-family:inherit}input,select,textarea{font-family:inhe
 <div class="sfield"><label>Descripci&#xF3;n</label><textarea id="e-desc" placeholder="Productos, medidas, colores..."></textarea></div>
 <div class="sfield"><label>Nota / Observaci&#xF3;n</label><input type="text" id="e-nota" placeholder="Observaci&#xF3;n adicional"></div>
 <div style="background:var(--ibg);border:1px solid #bfdbfe;border-radius:10px;padding:10px 12px;font-size:12px;color:var(--info)">Las &#xF3;rdenes de compra, inventario y fabricaci&#xF3;n de este pedido se gestionan desde el bot&#xF3;n <strong>&#xD3;rdenes</strong> en la tarjeta del pedido.</div>
-<div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal('modal-edit')">Cancelar</button><button class="btn btn-blue" onclick="guardarEdicion()">Guardar cambios</button></div></div></div>
+<div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal('modal-edit')">Cancelar</button><button class="btn btn-blue" onclick="guardarEdicion()">Guardar cambios</button></div></div></div></div>
 <div class="overlay" id="modal-ordenes"><div class="sheet"><div class="sheet-handle"></div>
 <div class="sheet-head"><h2 id="ord-titulo">&#xD3;rdenes del pedido</h2><button class="sheet-close" onclick="cerrarModal('modal-ordenes')">&#x2715;</button></div>
 <div class="sheet-body" id="ordenes-body"></div>
@@ -227,6 +227,7 @@ function hora(){return new Date().toLocaleTimeString('es-VE',{hour:'2-digit',min
 function uid(){return Date.now().toString(36)+Math.random().toString(36).substr(2,5);}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function cerrarModal(id){document.getElementById(id).classList.remove('open');}
+function abrirModal(id){document.querySelectorAll('.overlay.open').forEach(function(o){o.classList.remove('open');});document.getElementById(id).classList.add('open');}
 function toast(msg,tipo){var t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(tipo==='ok'?' t-ok':tipo==='err'?' t-err':tipo==='warn'?' t-warn':'');setTimeout(function(){t.className='toast';},4000);}
 function mostrarBadge(tipo){var b=document.getElementById('sync-badge');b.className='sync-badge show'+(tipo==='syncing'?' syncing':tipo==='err'?' err':'');b.textContent=tipo==='syncing'?'Guardando...':tipo==='err'?'Error al guardar':'Guardado';if(tipo!=='syncing')setTimeout(function(){b.className='sync-badge';},2500);}
 function diasRestantes(f){if(!f)return null;var p=f.split('/');if(p.length!==3)return null;var d=parseInt(p[0]),m=parseInt(p[1])-1,y=parseInt(p[2]);if(y<100)y+=2000;var dt=new Date(y,m,d);dt.setHours(0,0,0,0);var hoy=new Date();hoy.setHours(0,0,0,0);return isNaN(dt.getTime())?null:Math.round((dt-hoy)/86400000);}
@@ -318,7 +319,7 @@ function mostrarPerfil(){
   var mis=DB.pedidos.filter(function(p){return p.creadoPor===SESSION.username||p.vendedor===SESSION.nombre;});
   var ent=mis.filter(function(p){return p.estatus==='ENTREGADO';});
   document.getElementById('perfil-body').innerHTML='<div style="text-align:center;padding:8px 0 20px"><div style="width:64px;height:64px;border-radius:50%;background:var(--accent);color:#fff;font-size:22px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 12px">'+SESSION.nombre.substring(0,2).toUpperCase()+'</div><div style="font-size:18px;font-weight:700">'+SESSION.nombre+'</div><div style="font-size:13px;color:var(--muted);margin-top:3px">@'+SESSION.username+' - '+SESSION.rol+'</div></div><div class="admin-section"><div class="admin-row"><div>Mis pedidos</div><strong>'+mis.length+'</strong></div><div class="admin-row"><div>Entregados</div><strong>'+ent.length+'</strong></div></div>';
-  document.getElementById('modal-perfil').classList.add('open');
+  abrirModal('modal-perfil');
 }
 
 function goTab(tab,btn){
@@ -470,7 +471,7 @@ function abrirEditar(id){
   var vsel=document.getElementById('e-vendedor');vsel.innerHTML='<option value="">Sin cambio</option>';
   DB.usuarios.forEach(function(u){var o=document.createElement('option');o.value=u.nombre;o.textContent=u.nombre;if(u.nombre===p.vendedor)o.selected=true;vsel.appendChild(o);});
   document.getElementById('e-estado').value=p.estatus||'';
-  document.getElementById('modal-edit').classList.add('open');
+  abrirModal('modal-edit');
 }
 async function guardarEdicion(){
   var id=PEDIDO_EDIT_ID;var p=DB.pedidos.find(function(x){return x.id===id;});if(!p)return;
@@ -495,7 +496,7 @@ function abrirOrdenes(id){
   PEDIDO_ORD_ID=id;
   document.getElementById('ord-titulo').textContent='\u00D3rdenes de #'+(p.numero||id.substring(0,6))+' \u2014 '+(p.cliente||'');
   renderOrdenesBody();
-  document.getElementById('modal-ordenes').classList.add('open');
+  abrirModal('modal-ordenes');
 }
 function renderOrdenesBody(){
   var p=pedidoOrd();if(!p)return;
@@ -622,8 +623,8 @@ function renderAdmin(c){
   c.innerHTML=html;
   c.onclick=function(e){var t=e.target;if(t.getAttribute('data-nuevo-usuario'))abrirNuevoUsuario();var eu=t.getAttribute('data-edit-user');if(eu)editarUsuario(eu);var du=t.getAttribute('data-del-user');if(du)eliminarUsuario(du);var ex=t.getAttribute('data-exportar');if(ex==='json')exportarJSON();if(ex==='csv')exportarCSV();if(t.getAttribute('data-borrar-pedidos'))borrarPedidos();};
 }
-function abrirNuevoUsuario(){document.getElementById('u-titulo').textContent='Nuevo usuario';['u-id','u-nombre','u-user','u-pass'].forEach(function(id){document.getElementById(id).value='';});document.getElementById('u-rol').value='empleado';document.getElementById('modal-usuario').classList.add('open');}
-function editarUsuario(id){var u=DB.usuarios.find(function(x){return x.id===id;});if(!u)return;document.getElementById('u-titulo').textContent='Editar usuario';document.getElementById('u-id').value=id;document.getElementById('u-nombre').value=u.nombre;document.getElementById('u-user').value=u.username;document.getElementById('u-pass').value=u.password;document.getElementById('u-rol').value=u.rol;document.getElementById('modal-usuario').classList.add('open');}
+function abrirNuevoUsuario(){document.getElementById('u-titulo').textContent='Nuevo usuario';['u-id','u-nombre','u-user','u-pass'].forEach(function(id){document.getElementById(id).value='';});document.getElementById('u-rol').value='empleado';abrirModal('modal-usuario');}
+function editarUsuario(id){var u=DB.usuarios.find(function(x){return x.id===id;});if(!u)return;document.getElementById('u-titulo').textContent='Editar usuario';document.getElementById('u-id').value=id;document.getElementById('u-nombre').value=u.nombre;document.getElementById('u-user').value=u.username;document.getElementById('u-pass').value=u.password;document.getElementById('u-rol').value=u.rol;abrirModal('modal-usuario');}
 async function guardarUsuario(){var nombre=document.getElementById('u-nombre').value.trim();var user=document.getElementById('u-user').value.trim().toLowerCase();var pass=document.getElementById('u-pass').value;var rol=document.getElementById('u-rol').value;var eid=document.getElementById('u-id').value;if(!nombre||!user||!pass){toast('Todos los campos son obligatorios','err');return;}if(DB.usuarios.find(function(x){return x.username===user&&x.id!==eid;})){toast('El usuario ya existe','err');return;}if(eid){var u=DB.usuarios.find(function(x){return x.id===eid;});if(u){u.nombre=nombre;u.username=user;u.password=pass;u.rol=rol;}}else{DB.usuarios.push({id:uid(),nombre:nombre,username:user,password:pass,rol:rol,creado:fecha()});}await guardarDB();cerrarModal('modal-usuario');goTab('admin',document.getElementById('nb-admin'));toast('Usuario guardado','ok');}
 async function eliminarUsuario(id){if(!confirm('Eliminar este usuario?'))return;DB.usuarios=DB.usuarios.filter(function(x){return x.id!==id;});await guardarDB();goTab('admin',document.getElementById('nb-admin'));toast('Usuario eliminado','warn');}
 async function borrarPedidos(){if(!confirm('Borrar TODOS los pedidos?'))return;DB.pedidos=[];await guardarDB();goTab('admin',document.getElementById('nb-admin'));toast('Pedidos eliminados','warn');}
@@ -911,6 +912,11 @@ async function initFirebase(){
 }
 
 function verificarGoto(){var goto=localStorage.getItem('veo_goto');if(goto&&SESSION){localStorage.removeItem('veo_goto');setTimeout(function(){goTab(goto,document.getElementById('nb-'+goto));},300);}}
+
+// Tocar el fondo oscuro cierra el panel abierto
+document.querySelectorAll('.overlay').forEach(function(ov){
+  ov.addEventListener('click',function(e){if(e.target===ov)ov.classList.remove('open');});
+});
 
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('/VEOYOCA-APP/sw.js').catch(function(e){console.log('SW:',e);});
