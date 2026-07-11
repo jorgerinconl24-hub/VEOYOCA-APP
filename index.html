@@ -246,7 +246,8 @@ function registrarBitacora(id,accion){DB.bitacora.push({pedidoId:id,accion:accio
 // ═══════════════════════════════════════════════════════════
 function tipoLabel(t){return t==='OF'?'Fabricaci\u00F3n':t==='INVENTARIO'?'Inventario':'OC';}
 function ordenRecibida(o){return o.estado==='RECIBIDA';}
-function ordenRetrasada(o){if(ordenRecibida(o))return false;var d=diasRestantes(o.fechaEstimadaEntrega);return d!==null&&d<0;}
+function ordenListaPlanta(o){return o.estado==='LISTA_PROVEEDOR';}
+function ordenRetrasada(o){if(ordenRecibida(o)||ordenListaPlanta(o))return false;var d=diasRestantes(o.fechaEstimadaEntrega);return d!==null&&d<0;}
 // Lectura: devuelve las ordenes del pedido; si solo tiene los campos viejos
 // (ordenCompra/proveedorOC) los muestra como una orden virtual sin persistir.
 function getOrdenes(p){
@@ -298,12 +299,13 @@ function riesgoLimite(p){
   return dc>dl?{dias:dc-dl,orden:cb}:null;
 }
 function chipOrden(o){
-  var recib=ordenRecibida(o),retra=ordenRetrasada(o);
-  var bg=recib?'var(--sbg)':retra?'var(--dbg)':'#fef3c7';
-  var col=recib?'var(--success)':retra?'var(--danger)':'#92400e';
+  var recib=ordenRecibida(o),retra=ordenRetrasada(o),lista=ordenListaPlanta(o);
+  var bg=recib?'var(--sbg)':lista?'var(--ibg)':retra?'var(--dbg)':'#fef3c7';
+  var col=recib?'var(--success)':lista?'var(--info)':retra?'var(--danger)':'#92400e';
   var txt=tipoLabel(o.tipo)+(o.proveedor?' '+esc(o.proveedor):'')+(o.numeroOC?' #'+esc(o.numeroOC):'');
   var est='';
   if(recib)est='\u2713';
+  else if(lista)est='lista en planta';
   else if(retra)est='retrasada '+Math.abs(diasRestantes(o.fechaEstimadaEntrega))+'d';
   else if(o.fechaEstimadaEntrega){var d=diasRestantes(o.fechaEstimadaEntrega);est=d!==null?('en '+d+'d'):'';}
   var chip='<span class="card-vend" style="background:'+bg+';color:'+col+';margin-right:4px'+(o.pdfUrl?';text-decoration:underline;cursor:pointer':'')+'">'+(o.pdfUrl?'\uD83D\uDCC4 ':'')+txt+(est?' \u00B7 '+est:'')+'</span>';
@@ -538,12 +540,12 @@ function renderOrdenesBody(){
     h+='<div style="font-size:12px;color:var(--muted);margin-bottom:12px">Este pedido a\u00FAn no tiene \u00F3rdenes registradas.</div>';
   }
   os.forEach(function(o,i){
-    var recib=ordenRecibida(o),retra=ordenRetrasada(o);
-    var badge=recib?'<span class="badge b-success">Recibida '+(o.fechaRecepcion||'')+'</span>':retra?'<span class="badge b-danger">Retrasada '+Math.abs(diasRestantes(o.fechaEstimadaEntrega))+'d</span>':o.estado==='EN PROCESO'?'<span class="badge b-info">En proceso</span>':'<span class="badge b-warning">Pendiente</span>';
+    var recib=ordenRecibida(o),retra=ordenRetrasada(o),lista=ordenListaPlanta(o);
+    var badge=recib?'<span class="badge b-success">Recibida '+(o.fechaRecepcion||'')+'</span>':lista?'<span class="badge b-info">Lista en planta</span>':retra?'<span class="badge b-danger">Retrasada '+Math.abs(diasRestantes(o.fechaEstimadaEntrega))+'d</span>':o.estado==='EN PROCESO'?'<span class="badge b-info">En proceso</span>':'<span class="badge b-warning">Pendiente</span>';
     h+='<div class="orden-item'+(recib?' recibida':retra?' retrasada':'')+'">';
     h+='<div class="orden-head"><span class="orden-tipo">'+tipoLabel(o.tipo)+(o.numeroOC?' #'+esc(o.numeroOC):'')+'</span>'+badge+'</div>';
     h+='<div class="sfield-row" style="margin-bottom:8px"><div class="sfield" style="margin-bottom:0"><label>'+(o.tipo==='OF'?'Subcontratado':'Proveedor')+'</label><input type="text" value="'+esc(o.proveedor)+'" onchange="ordCampo('+i+',\'proveedor\',this.value)"></div><div class="sfield" style="margin-bottom:0"><label># Orden</label><input type="text" value="'+esc(o.numeroOC)+'" onchange="ordCampo('+i+',\'numeroOC\',this.value)"></div></div>';
-    h+='<div class="sfield-row"><div class="sfield" style="margin-bottom:0"><label>Fecha estimada entrega'+((!o.fechaEstimadaEntrega&&!recib)?' <span style="color:var(--danger)">*obligatoria</span>':'')+'</label><input type="date" value="'+fechaInput(o.fechaEstimadaEntrega)+'"'+((!o.fechaEstimadaEntrega&&!recib)?' style="border-color:var(--danger)"':'')+' onchange="ordCampo('+i+',\'fechaEstimadaEntrega\',inputFecha(this.value));renderOrdenesBody()"></div><div class="sfield" style="margin-bottom:0"><label>Estado</label><select onchange="ordCampo('+i+',\'estado\',this.value)"><option value="PENDIENTE"'+(o.estado==='PENDIENTE'||!o.estado?' selected':'')+'>Pendiente</option><option value="EN PROCESO"'+(o.estado==='EN PROCESO'?' selected':'')+'>En proceso</option><option value="RECIBIDA"'+(recib?' selected':'')+'>Recibida</option></select></div></div>';
+    h+='<div class="sfield-row"><div class="sfield" style="margin-bottom:0"><label>Fecha estimada entrega'+((!o.fechaEstimadaEntrega&&!recib)?' <span style="color:var(--danger)">*obligatoria</span>':'')+'</label><input type="date" value="'+fechaInput(o.fechaEstimadaEntrega)+'"'+((!o.fechaEstimadaEntrega&&!recib)?' style="border-color:var(--danger)"':'')+' onchange="ordCampo('+i+',\'fechaEstimadaEntrega\',inputFecha(this.value));renderOrdenesBody()"></div><div class="sfield" style="margin-bottom:0"><label>Estado</label><select onchange="ordCampo('+i+',\'estado\',this.value)"><option value="PENDIENTE"'+(o.estado==='PENDIENTE'||!o.estado?' selected':'')+'>Pendiente</option><option value="EN PROCESO"'+(o.estado==='EN PROCESO'?' selected':'')+'>En proceso</option><option value="LISTA_PROVEEDOR"'+(lista?' selected':'')+'>Lista en planta proveedor</option><option value="RECIBIDA"'+(recib?' selected':'')+'>Recibida</option></select></div></div>';
     h+='<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">';
     if(!recib)h+='<button class="btn btn-green btn-sm" onclick="ordRecibida('+i+')">\u2713 Marcar recibida</button>';
     if(o.pdfUrl)h+='<a href="'+esc(o.pdfUrl)+'" target="_blank" class="btn btn-blue btn-sm" style="text-decoration:none">📄 Ver PDF</a>';
