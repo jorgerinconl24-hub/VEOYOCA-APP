@@ -546,6 +546,28 @@ function renderOrdenesBody(){
     h+='<div class="orden-head"><span class="orden-tipo">'+tipoLabel(o.tipo)+(o.numeroOC?' #'+esc(o.numeroOC):'')+'</span>'+badge+'</div>';
     h+='<div class="sfield-row" style="margin-bottom:8px"><div class="sfield" style="margin-bottom:0"><label>'+(o.tipo==='OF'?'Subcontratado':'Proveedor')+'</label><input type="text" value="'+esc(o.proveedor)+'" onchange="ordCampo('+i+',\'proveedor\',this.value)"></div><div class="sfield" style="margin-bottom:0"><label># Orden</label><input type="text" value="'+esc(o.numeroOC)+'" onchange="ordCampo('+i+',\'numeroOC\',this.value)"></div></div>';
     h+='<div class="sfield-row"><div class="sfield" style="margin-bottom:0"><label>Fecha estimada entrega'+((!o.fechaEstimadaEntrega&&!recib)?' <span style="color:var(--danger)">*obligatoria</span>':'')+'</label><input type="date" value="'+fechaInput(o.fechaEstimadaEntrega)+'"'+((!o.fechaEstimadaEntrega&&!recib)?' style="border-color:var(--danger)"':'')+' onchange="ordCampo('+i+',\'fechaEstimadaEntrega\',inputFecha(this.value));renderOrdenesBody()"></div><div class="sfield" style="margin-bottom:0"><label>Estado</label><select onchange="ordCampo('+i+',\'estado\',this.value)"><option value="PENDIENTE"'+(o.estado==='PENDIENTE'||!o.estado?' selected':'')+'>Pendiente</option><option value="EN PROCESO"'+(o.estado==='EN PROCESO'?' selected':'')+'>En proceso</option><option value="LISTA_PROVEEDOR"'+(lista?' selected':'')+'>Lista en planta proveedor</option><option value="RECIBIDA"'+(recib?' selected':'')+'>Recibida</option></select></div></div>';
+    // Ficha de items de la orden (extraidos del PDF por la IA)
+    if(o.items&&o.items.length){
+      h+='<div style="margin-top:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;overflow:hidden">';
+      h+='<div onclick="toggleItems('+i+')" style="padding:7px 10px;font-size:11px;font-weight:700;color:var(--muted);cursor:pointer;display:flex;justify-content:space-between;align-items:center"><span>\uD83E\uDDFE Items de la orden ('+o.items.length+')</span><span id="items-arrow-'+i+'" style="font-size:10px">\u25B6</span></div>';
+      h+='<div id="items-lista-'+i+'" style="display:none;padding:0 10px 8px">';
+      o.items.forEach(function(it){h+='<div style="font-size:12px;padding:4px 0;border-top:1px solid var(--border);display:flex;gap:8px"><strong style="min-width:34px;text-align:right;flex-shrink:0">'+esc(it.cantidad)+' \u00D7</strong><span>'+esc(it.descripcion)+'</span></div>';});
+      h+='</div></div>';
+    }
+    // Resultado de la verificacion de la guia de despacho
+    if(o.guiaDespacho){
+      var gd=o.guiaDespacho;
+      var gcol=gd.cuadra===true?'var(--success)':gd.cuadra===false?'var(--danger)':'var(--muted)';
+      var gtxt=gd.cuadra===true?'\u2705 Gu\u00EDa #'+esc(gd.numeroGuia||'?')+' verificada: todo cuadra':gd.cuadra===false?'\uD83D\uDEA8 Gu\u00EDa #'+esc(gd.numeroGuia||'?')+': NO cuadra con la orden':'\u2139\uFE0F Gu\u00EDa #'+esc(gd.numeroGuia||'?')+' registrada sin comparar';
+      h+='<div style="margin-top:6px;font-size:12px;font-weight:600;color:'+gcol+'">'+gtxt+(gd.fecha?' \u00B7 '+esc(gd.fecha):'')+(gd.pdfUrl?' \u00B7 <a href="'+esc(gd.pdfUrl)+'" target="_blank" style="color:var(--info)">ver gu\u00EDa</a>':'')+'</div>';
+      if(gd.cuadra===false&&gd.discrepancias&&gd.discrepancias.length){
+        gd.discrepancias.forEach(function(dd){h+='<div style="font-size:11px;color:var(--danger);padding-left:12px;margin-top:2px">\u2022 '+esc(dd)+'</div>';});
+      }
+      if(gd.revisarManualmente&&gd.revisarManualmente.length){
+        h+='<div style="font-size:11px;color:var(--warning);font-weight:600;margin-top:4px">\uD83D\uDC40 Revisar a ojo (letra dudosa):</div>';
+        gd.revisarManualmente.forEach(function(dd){h+='<div style="font-size:11px;color:var(--warning);padding-left:12px;margin-top:2px">\u2022 '+esc(dd)+'</div>';});
+      }
+    }
     h+='<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">';
     if(!recib)h+='<button class="btn btn-green btn-sm" onclick="ordRecibida('+i+')">\u2713 Marcar recibida</button>';
     if(o.pdfUrl)h+='<a href="'+esc(o.pdfUrl)+'" target="_blank" class="btn btn-blue btn-sm" style="text-decoration:none">📄 Ver PDF</a>';
@@ -557,6 +579,13 @@ function renderOrdenesBody(){
   h+='<div class="sfield-row"><div class="sfield" style="margin-bottom:0"><label># Orden (opcional)</label><input type="text" id="no-num" placeholder="Ej: 1051"></div><div class="sfield" style="margin-bottom:0"><label>Fecha estimada</label><input type="date" id="no-fecha"></div></div>';
   h+='<button class="btn btn-dark btn-sm" style="width:100%;margin-top:10px" onclick="ordAgregar()">+ Agregar orden</button></div>';
   document.getElementById('ordenes-body').innerHTML=h;
+}
+function toggleItems(i){
+  var el=document.getElementById('items-lista-'+i);if(!el)return;
+  var abierto=el.style.display!=='none';
+  el.style.display=abierto?'none':'block';
+  var fl=document.getElementById('items-arrow-'+i);
+  if(fl)fl.textContent=abierto?'\u25B6':'\u25BC';
 }
 function ordCampo(i,campo,valor){
   var p=pedidoOrd();if(!p||!p.ordenes[i])return;
