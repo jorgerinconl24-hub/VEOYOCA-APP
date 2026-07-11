@@ -306,7 +306,10 @@ function chipOrden(o){
   if(recib)est='\u2713';
   else if(retra)est='retrasada '+Math.abs(diasRestantes(o.fechaEstimadaEntrega))+'d';
   else if(o.fechaEstimadaEntrega){var d=diasRestantes(o.fechaEstimadaEntrega);est=d!==null?('en '+d+'d'):'';}
-  return '<span class="card-vend" style="background:'+bg+';color:'+col+';margin-right:4px">'+txt+(est?' \u00B7 '+est:'')+'</span>';
+  var chip='<span class="card-vend" style="background:'+bg+';color:'+col+';margin-right:4px'+(o.pdfUrl?';text-decoration:underline;cursor:pointer':'')+'">'+(o.pdfUrl?'\uD83D\uDCC4 ':'')+txt+(est?' \u00B7 '+est:'')+'</span>';
+  // Si la orden tiene PDF adjunto, el chip se vuelve un enlace que lo abre
+  if(o.pdfUrl)return '<a href="'+esc(o.pdfUrl)+'" target="_blank" style="text-decoration:none">'+chip+'</a>';
+  return chip;
 }
 
 async function guardarDB(){
@@ -543,7 +546,7 @@ function renderOrdenesBody(){
     h+='<div class="sfield-row"><div class="sfield" style="margin-bottom:0"><label>Fecha estimada entrega'+((!o.fechaEstimadaEntrega&&!recib)?' <span style="color:var(--danger)">*obligatoria</span>':'')+'</label><input type="date" value="'+fechaInput(o.fechaEstimadaEntrega)+'"'+((!o.fechaEstimadaEntrega&&!recib)?' style="border-color:var(--danger)"':'')+' onchange="ordCampo('+i+',\'fechaEstimadaEntrega\',inputFecha(this.value));renderOrdenesBody()"></div><div class="sfield" style="margin-bottom:0"><label>Estado</label><select onchange="ordCampo('+i+',\'estado\',this.value)"><option value="PENDIENTE"'+(o.estado==='PENDIENTE'||!o.estado?' selected':'')+'>Pendiente</option><option value="EN PROCESO"'+(o.estado==='EN PROCESO'?' selected':'')+'>En proceso</option><option value="RECIBIDA"'+(recib?' selected':'')+'>Recibida</option></select></div></div>';
     h+='<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">';
     if(!recib)h+='<button class="btn btn-green btn-sm" onclick="ordRecibida('+i+')">\u2713 Marcar recibida</button>';
-    if(o.pdfUrl)h+='<a href="'+o.pdfUrl+'" target="_blank" class="btn btn-blue btn-sm" style="text-decoration:none">📄 PDF</a>';
+    if(o.pdfUrl)h+='<a href="'+esc(o.pdfUrl)+'" target="_blank" class="btn btn-blue btn-sm" style="text-decoration:none">📄 Ver PDF</a>';
     h+='<button class="btn btn-red btn-sm" style="margin-left:auto" onclick="ordEliminar('+i+')">Eliminar</button></div>';
     h+='</div>';
   });
