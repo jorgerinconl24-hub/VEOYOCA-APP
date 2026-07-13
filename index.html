@@ -189,6 +189,10 @@ button{cursor:pointer;font-family:inherit}input,select,textarea{font-family:inhe
 <div class="sfield"><label>Contrase&#xF1;a</label><input type="password" id="u-pass" placeholder="&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;"></div></div>
 <div class="sfield"><label>Rol</label><select id="u-rol"><option value="empleado">Empleado</option><option value="admin">Administrador</option></select></div></div>
 <div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal('modal-usuario')">Cancelar</button><button class="btn btn-dark" onclick="guardarUsuario()">Guardar</button></div></div></div>
+<div class="overlay" id="modal-reporte"><div class="sheet"><div class="sheet-handle"></div>
+<div class="sheet-head"><h2>&#x1F4C4; Reporte de pedidos</h2><button class="sheet-close" onclick="cerrarModal('modal-reporte')">&#x2715;</button></div>
+<div class="sheet-body" id="reporte-body"></div>
+<div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal('modal-reporte')">Cerrar</button></div></div></div>
 <div class="toast" id="toast"></div>
 <script>
 // ═══════════════════════════════════════════════════════════
@@ -372,7 +376,7 @@ function renderHome(c){
     +'</div>';
   var sf=ordenesSinFecha();
   var bannerSF=sf.length?'<div onclick="aplicarFiltro(\'SINFECHA\')" style="background:var(--warning);color:#fff;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px"><span>\u26A0\uFE0F '+sf.length+' orden'+(sf.length>1?'es':'')+' sin fecha estimada de entrega</span><span style="font-size:11px;opacity:.85;white-space:nowrap">Toca para ver \u2192</span></div>':'';
-  c.innerHTML=statsBar+bannerSF+'<div class="prog-wrap"><div class="prog-bar"><div class="prog-fill" style="width:'+pct+'%"></div></div><div class="prog-label">'+ent+' de '+total+' entregados ('+pct+'%)</div></div><div class="toolbar"><input type="text" id="h-buscar" placeholder="Buscar cliente o numero..." oninput="filtrarHome()"><select id="h-est" onchange="filtrarHome()"><option value="">Todos</option><option value="vencido">Vencidos</option><option value="urgente">Urgentes</option><option value="sf">Sin fecha</option><option value="ok">Con tiempo</option><option value="LISTO">Listos</option><option value="ORDENES">Con \u00F3rdenes pendientes</option><option value="SINFECHA">\u00D3rdenes sin fecha estimada</option></select></div><div class="section-pad" id="home-lista"></div>';
+  c.innerHTML=statsBar+bannerSF+'<div class="prog-wrap"><div class="prog-bar"><div class="prog-fill" style="width:'+pct+'%"></div></div><div class="prog-label">'+ent+' de '+total+' entregados ('+pct+'%)</div></div><div class="toolbar"><input type="text" id="h-buscar" placeholder="Buscar cliente o numero..." oninput="filtrarHome()"><select id="h-est" onchange="filtrarHome()"><option value="">Todos</option><option value="vencido">Vencidos</option><option value="urgente">Urgentes</option><option value="sf">Sin fecha</option><option value="ok">Con tiempo</option><option value="LISTO">Listos</option><option value="ORDENES">Con \u00F3rdenes pendientes</option><option value="SINFECHA">\u00D3rdenes sin fecha estimada</option></select><button class="btn btn-dark btn-sm" onclick="generarReporte()" style="align-self:center">\uD83D\uDCC4 Generar Reporte</button></div><div class="section-pad" id="home-lista"></div>';
   filtrarHome();
 }
 function aplicarFiltro(valor){
@@ -646,6 +650,174 @@ function toggleProv(i){
   if(fl)fl.textContent=abierto?'\u25B6':'\u25BC';
 }
 
+// ═══════════════════════════════════════════════════════════
+// REPORTE GENERAL EN PDF (Resumen de Pedidos)
+// Solo pedidos pendientes por entregar, ordenados del más
+// retrasado (fecha de inicio más vieja) al más reciente.
+// Se puede descargar, compartir y enviar al grupo WA de pedidos.
+// ═══════════════════════════════════════════════════════════
+var GRUPO_PEDIDOS_WA='120363404800026100@g.us';
+var REPORTE_DOC=null,REPORTE_BLOB=null,REPORTE_NOMBRE='';
+function cargarLibsPDF(){
+  return new Promise(function(resolve,reject){
+    if(window.jspdf&&window.jspdf.jsPDF&&window.jspdf.jsPDF.API&&window.jspdf.jsPDF.API.autoTable){resolve();return;}
+    function load(src){return new Promise(function(res,rej){var s=document.createElement('script');s.src=src;s.onload=res;s.onerror=function(){rej(new Error('No se pudo cargar '+src));};document.head.appendChild(s);});}
+    load('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
+      .then(function(){return load('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');})
+      .then(resolve).catch(reject);
+  });
+}
+function parseFechaDMY(f){if(!f)return null;var p=String(f).split('/');if(p.length!==3)return null;var y=parseInt(p[2]);if(y<100)y+=2000;var d=new Date(y,parseInt(p[1])-1,parseInt(p[0]));return isNaN(d.getTime())?null:d;}
+function diasTranscurridos(f){var d=parseFechaDMY(f);if(!d)return null;var hoy=new Date();hoy.setHours(0,0,0,0);d.setHours(0,0,0,0);return Math.round((hoy-d)/86400000);}
+// Observaciones del reporte: la nota manual del pedido, o si no hay,
+// un resumen automatico del estado de sus ordenes
+function obsPedido(p){
+  if(p.nota)return p.nota;
+  var partes=[];
+  if(p.estatus==='LISTO')partes.push('LISTO PARA ENTREGAR');
+  getOrdenes(p).forEach(function(o){
+    var ref=(o.proveedor||tipoLabel(o.tipo))+(o.numeroOC?' #'+o.numeroOC:'');
+    if(ordenRecibida(o))partes.push(ref+' recibida');
+    else if(ordenListaPlanta(o))partes.push(ref+' lista en planta');
+    else if(ordenRetrasada(o))partes.push(ref+' retrasada '+Math.abs(diasRestantes(o.fechaEstimadaEntrega))+'d');
+    else if(o.guiaDespacho&&o.guiaDespacho.cuadra===false)partes.push(ref+' guia NO cuadra');
+  });
+  return partes.join('. ');
+}
+async function generarReporte(){
+  var pends=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';});
+  if(!pends.length){toast('No hay pedidos pendientes para el reporte','warn');return;}
+  toast('Generando reporte PDF...','');
+  try{await cargarLibsPDF();}catch(e){toast('Error cargando librer\u00EDas PDF: '+e.message,'err');return;}
+  // Ordenar: del mas retrasado (fecha de inicio mas vieja) al mas reciente
+  pends.sort(function(a,b){
+    var da=parseFechaDMY(a.fechaCreacion),db2=parseFechaDMY(b.fechaCreacion);
+    if(!da&&!db2)return 0;if(!da)return 1;if(!db2)return -1;return da-db2;
+  });
+  var venc=pends.filter(function(p){return clasif(p)==='vencido';}).length;
+  var anio=new Date().getFullYear();
+  var hoyTxt=fecha()+' '+hora();
+  var jsPDF=window.jspdf.jsPDF;
+  var doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+  var filas=pends.map(function(p){
+    var os=getOrdenes(p);
+    var dt=diasTranscurridos(p.fechaCreacion);
+    return [
+      p.numero||p.id.substring(0,6),
+      p.cliente||'',
+      p.ciudad||'',
+      p.fechaCreacion||'',
+      dt!==null?String(dt):'',
+      p.fechaLimite||'',
+      os.map(function(o){return o.numeroOC||'';}).filter(Boolean).join(' / '),
+      os.map(function(o){return o.proveedor||tipoLabel(o.tipo);}).filter(Boolean).join(' / '),
+      os.map(function(o){return o.fechaEstimadaEntrega||'';}).filter(Boolean).join(' / '),
+      obsPedido(p)
+    ];
+  });
+  doc.autoTable({
+    startY:26,
+    head:[['PEDIDO','CLIENTE','CIUDAD','F. INICIO','DIAS','ENTREGA CLIENTE','# ORDEN','PROVEEDOR','ENTREGA PROV.','OBSERVACIONES']],
+    body:filas,
+    styles:{fontSize:6.8,cellPadding:1.6,overflow:'linebreak',textColor:[17,24,39],valign:'middle'},
+    headStyles:{fillColor:[26,26,46],textColor:255,fontSize:7,fontStyle:'bold',halign:'center'},
+    alternateRowStyles:{fillColor:[244,244,248]},
+    columnStyles:{
+      0:{cellWidth:14,fontStyle:'bold',halign:'center'},
+      1:{cellWidth:42},
+      2:{cellWidth:30},
+      3:{cellWidth:19,halign:'center'},
+      4:{cellWidth:11,halign:'center'},
+      5:{cellWidth:21,halign:'center'},
+      6:{cellWidth:18,halign:'center'},
+      7:{cellWidth:28},
+      8:{cellWidth:21,halign:'center'},
+      9:{cellWidth:'auto'}
+    },
+    didParseCell:function(dataCell){
+      if(dataCell.section!=='body')return;
+      var p=pends[dataCell.row.index];if(!p)return;
+      var d=diasRestantes(p.fechaLimite);
+      if(d!==null&&d<0){
+        dataCell.cell.styles.textColor=[220,38,38];
+        if(dataCell.column.index===5||dataCell.column.index===4)dataCell.cell.styles.fontStyle='bold';
+      }
+    },
+    didDrawPage:function(){
+      // Encabezado en cada pagina
+      doc.setFillColor(26,26,46);doc.rect(0,0,297,22,'F');
+      doc.setTextColor(255,255,255);doc.setFontSize(15);doc.setFont('helvetica','bold');
+      doc.text('RESUMEN DE PEDIDOS '+anio,148.5,10,{align:'center'});
+      doc.setFontSize(8);doc.setFont('helvetica','normal');
+      doc.text('VEOYOCA \u2014 Vitrinas Estantes de Occidente y Oriente C.A.',148.5,15,{align:'center'});
+      doc.text('Pedidos pendientes por entregar \u00B7 Del m\u00E1s retrasado al m\u00E1s reciente \u00B7 Generado: '+hoyTxt,148.5,19.3,{align:'center'});
+      // Pie de pagina
+      doc.setFontSize(7);doc.setTextColor(107,114,128);
+      doc.text(pends.length+' pedidos pendientes \u00B7 '+venc+' vencidos (en rojo) \u00B7 P\u00E1gina '+doc.internal.getNumberOfPages(),148.5,205,{align:'center'});
+    },
+    margin:{top:26,bottom:10,left:8,right:8}
+  });
+  REPORTE_DOC=doc;
+  REPORTE_NOMBRE='Resumen_Pedidos_'+fecha().replace(/\//g,'-')+'.pdf';
+  REPORTE_BLOB=doc.output('blob');
+  var puedeCompartir=!!navigator.share;
+  document.getElementById('reporte-body').innerHTML=
+    '<div style="text-align:center;padding:4px 0 16px"><div style="font-size:40px">\uD83D\uDCC4</div>'
+    +'<div style="font-weight:700;font-size:16px;margin-top:6px">Reporte generado</div>'
+    +'<div style="font-size:13px;color:var(--muted);margin-top:4px">'+pends.length+' pedidos pendientes \u00B7 <span style="color:var(--danger);font-weight:600">'+venc+' vencidos</span><br>Ordenado del m\u00E1s retrasado al m\u00E1s reciente</div></div>'
+    +'<button class="btn btn-dark" style="width:100%;padding:13px;font-size:14px;margin-bottom:8px" onclick="descargarReporte()">\uD83D\uDCE5 Descargar PDF</button>'
+    +(puedeCompartir?'<button class="btn btn-blue" style="width:100%;padding:13px;font-size:14px;margin-bottom:8px" onclick="compartirReporte()">\uD83D\uDCE4 Compartir</button>':'')
+    +'<button class="btn btn-green" style="width:100%;padding:13px;font-size:14px" id="btn-rep-wa" onclick="enviarReporteGrupo()">\uD83D\uDCAC Enviar al grupo de pedidos</button>';
+  abrirModal('modal-reporte');
+}
+function descargarReporte(){
+  if(!REPORTE_DOC)return;
+  REPORTE_DOC.save(REPORTE_NOMBRE);
+  toast('Reporte descargado','ok');
+}
+function compartirReporte(){
+  if(!REPORTE_BLOB)return;
+  try{
+    var file=new File([REPORTE_BLOB],REPORTE_NOMBRE,{type:'application/pdf'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      navigator.share({files:[file],title:'Resumen de pedidos VEOYOCA'}).catch(function(){});
+    }else{
+      toast('Tu navegador no permite compartir archivos, usa Descargar','warn');
+    }
+  }catch(e){
+    toast('No se pudo compartir: '+e.message,'err');
+  }
+}
+function enviarReporteGrupo(){
+  if(!REPORTE_BLOB)return;
+  var btn=document.getElementById('btn-rep-wa');
+  if(btn){btn.disabled=true;btn.textContent='Enviando al grupo...';}
+  function restaurar(){if(btn){btn.disabled=false;btn.textContent='\uD83D\uDCAC Enviar al grupo de pedidos';}}
+  var reader=new FileReader();
+  reader.onload=function(){
+    var base64=reader.result; // data:application/pdf;base64,....
+    var xhr=new XMLHttpRequest();
+    xhr.open('POST','https://api.ultramsg.com/instance181941/messages/document',true);
+    xhr.setRequestHeader('Content-Type','application/x-www-form-urlencoded');
+    xhr.timeout=90000;
+    xhr.onload=function(){
+      var ok=false;
+      try{var r=JSON.parse(xhr.responseText);ok=r&&(r.sent==='true'||r.sent===true||(r.message&&String(r.message).toLowerCase()==='ok'));}catch(e){}
+      if(ok){toast('Reporte enviado al grupo de pedidos \u2713','ok');cerrarModal('modal-reporte');}
+      else{toast('UltraMsg no confirm\u00F3 el env\u00EDo, revisa el grupo','warn');console.log('UltraMsg doc resp:',xhr.responseText);}
+      restaurar();
+    };
+    xhr.onerror=function(){toast('Error de red al enviar el reporte','err');restaurar();};
+    xhr.ontimeout=function(){toast('Tiempo de espera agotado al enviar','err');restaurar();};
+    xhr.send('token=jd3odrhspk539mmp&to='+encodeURIComponent(GRUPO_PEDIDOS_WA)
+      +'&filename='+encodeURIComponent(REPORTE_NOMBRE)
+      +'&document='+encodeURIComponent(base64)
+      +'&caption='+encodeURIComponent('\uD83D\uDCCA Resumen de pedidos pendientes \u2014 '+fecha()));
+  };
+  reader.onerror=function(){toast('No se pudo leer el PDF generado','err');restaurar();};
+  reader.readAsDataURL(REPORTE_BLOB);
+}
+
 function renderReportes(c){
   var total=DB.pedidos.length,ent=DB.pedidos.filter(function(p){return p.estatus==='ENTREGADO';}).length;
   var pend=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';}).length;
@@ -656,7 +828,8 @@ function renderReportes(c){
   var pv={};DB.pedidos.forEach(function(p){var v=p.vendedor||'Sin vendedor';if(!pv[v])pv[v]={t:0,e:0};pv[v].t++;if(p.estatus==='ENTREGADO')pv[v].e++;});
   var va=[];for(var v in pv)va.push({v:v,t:pv[v].t,e:pv[v].e});va.sort(function(a,b){return b.t-a.t;});
   var maxT=va.length?va[0].t:1;var bit=DB.bitacora.slice(-10).reverse();
-  var html='<div class="report-grid"><div class="report-card"><div class="report-val" style="color:var(--accent)">'+total+'</div><div class="report-label">Total</div></div><div class="report-card"><div class="report-val" style="color:var(--success)">'+ent+'</div><div class="report-label">Entregados</div></div><div class="report-card"><div class="report-val" style="color:var(--warning)">'+pend+'</div><div class="report-label">Pendientes</div></div><div class="report-card"><div class="report-val" style="color:var(--danger)">'+venc+'</div><div class="report-label">Vencidos</div></div><div class="report-card"><div class="report-val" style="color:var(--info)">'+listos+'</div><div class="report-label">Listos</div></div><div class="report-card"><div class="report-val" style="color:var(--success)">'+entHoy+'</div><div class="report-label">Entregados hoy</div></div><div class="report-card"><div class="report-val">'+pct+'%</div><div class="report-label">Completados</div></div><div class="report-card"><div class="report-val">'+DB.bitacora.length+'</div><div class="report-label">Acciones</div></div></div>';
+  var html='<div style="padding:14px 14px 0"><button class="btn btn-dark" style="width:100%;padding:13px;font-size:15px" onclick="generarReporte()">\uD83D\uDCC4 Generar Reporte PDF de pedidos pendientes</button></div>';
+  html+='<div class="report-grid"><div class="report-card"><div class="report-val" style="color:var(--accent)">'+total+'</div><div class="report-label">Total</div></div><div class="report-card"><div class="report-val" style="color:var(--success)">'+ent+'</div><div class="report-label">Entregados</div></div><div class="report-card"><div class="report-val" style="color:var(--warning)">'+pend+'</div><div class="report-label">Pendientes</div></div><div class="report-card"><div class="report-val" style="color:var(--danger)">'+venc+'</div><div class="report-label">Vencidos</div></div><div class="report-card"><div class="report-val" style="color:var(--info)">'+listos+'</div><div class="report-label">Listos</div></div><div class="report-card"><div class="report-val" style="color:var(--success)">'+entHoy+'</div><div class="report-label">Entregados hoy</div></div><div class="report-card"><div class="report-val">'+pct+'%</div><div class="report-label">Completados</div></div><div class="report-card"><div class="report-val">'+DB.bitacora.length+'</div><div class="report-label">Acciones</div></div></div>';
   // Órdenes pendientes por proveedor (vista transversal)
   var provMap={};
   DB.pedidos.forEach(function(p){
