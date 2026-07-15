@@ -148,6 +148,16 @@ button{cursor:pointer;font-family:inherit}input,select,textarea{font-family:inhe
 .kb-meta{font-size:11px;color:var(--muted);margin-top:2px}
 .seg-item{border-left:3px solid var(--border);padding:4px 0 4px 10px;margin-bottom:6px;font-size:12px}
 .seg-fecha{font-size:10px;color:var(--muted)}
+.crm-wrap{overflow-x:auto;background:#fff;border-top:1px solid var(--border);-webkit-overflow-scrolling:touch}
+table.crm{border-collapse:collapse;font-size:12px;min-width:1780px}
+.crm th{background:#f4f4f8;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.04em;padding:8px 10px;text-align:left;border:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:3}
+.crm td{border:1px solid #eef0f4;padding:0;background:#fff;min-width:110px}
+.crm td input,.crm td select{width:100%;border:none;background:transparent;padding:8px 10px;font-size:12px;color:var(--text)}
+.crm td input:focus,.crm td select:focus{outline:2px solid var(--info);background:var(--ibg)}
+.crm td input[type=date]{min-width:128px}
+.crm .colfija{position:sticky;left:0;z-index:2;background:#fff;min-width:180px;box-shadow:2px 0 0 var(--border)}
+.crm th.colfija{z-index:4;background:#f4f4f8}
+.crm td.venc input{color:var(--danger);font-weight:700}
 </style>
 </head>
 <body>
@@ -864,7 +874,7 @@ function enviarReporteGrupo(){
 // ultimo y proximo contacto, estado 1, estado 2, notas y
 // seguimientos. Vista de lista y tablero agrupado por estado.
 // ═══════════════════════════════════════════════════════════
-var VENTAS_VISTA=localStorage.getItem('veo_ventas_vista')||'lista';
+var VENTAS_VISTA=localStorage.getItem('veo_ventas_vista')||'tabla';
 var CLIENTE_EDIT_ID=null;
 var EST1_OPCIONES=['SIN CONTACTAR','CONTACTADO'];
 function getClientes(){if(!Array.isArray(DB.clientes))DB.clientes=[];return DB.clientes;}
@@ -895,6 +905,7 @@ function renderVentas(c){
     +'<select id="v-est1" onchange="filtrarVentas()">'+eopts+'</select>'
     +'</div>'
     +'<div class="toolbar" style="border-top:none">'
+    +'<button class="btn '+(VENTAS_VISTA==='tabla'?'btn-dark':'btn-ghost')+' btn-sm" onclick="cambiarVistaVentas(\'tabla\')">\u25A4 Tabla</button>'
     +'<button class="btn '+(VENTAS_VISTA==='lista'?'btn-dark':'btn-ghost')+' btn-sm" onclick="cambiarVistaVentas(\'lista\')">\u2630 Lista</button>'
     +'<button class="btn '+(VENTAS_VISTA==='tablero'?'btn-dark':'btn-ghost')+' btn-sm" onclick="cambiarVistaVentas(\'tablero\')">\u25A6 Tablero</button>'
     +'<button class="btn btn-ghost btn-sm" onclick="exportarClientesCSV()">CSV</button>'
@@ -965,6 +976,7 @@ function clienteCardHTML(cl){
 function filtrarVentas(){
   var el=document.getElementById('ventas-lista');if(!el)return;
   var lista=ordenarClientes(clientesFiltrados());
+  if(VENTAS_VISTA==='tabla'){renderTablaCRM(el,lista);return;}
   if(!getClientes().length){el.innerHTML='<div class="empty"><div class="empty-icon">\uD83D\uDCBC</div>A\u00FAn no hay clientes en el CRM<br><span style="font-size:12px">Toca "+ Nuevo cliente" para agregar el primero</span></div>';return;}
   if(!lista.length){el.innerHTML='<div class="empty"><div class="empty-icon">\uD83D\uDD0D</div>Ning\u00FAn cliente coincide con el filtro</div>';return;}
   if(VENTAS_VISTA==='tablero'){
@@ -993,6 +1005,81 @@ function filtrarVentas(){
     lista.forEach(function(cl){h2+=clienteCardHTML(cl);});
     el.innerHTML=h2+'</div>';
   }
+}
+// ---- VISTA TABLA: edición directa en las casillas, tipo Notion ----
+// Cada cambio en una celda se guarda solo (con espera de 0.9s para
+// agrupar varios cambios seguidos en un solo guardado a Firebase).
+var CRM_SAVE_TIMER=null;
+function crmCampo(id,campo,valor){
+  var cl=getClientes().find(function(x){return x.id===id;});if(!cl)return;
+  if(['ciudad','producto','redSocial','tipoNegocio'].indexOf(campo)>=0)valor=String(valor||'').trim().toUpperCase();
+  if(campo==='cantidadMuebles')valor=valor?parseInt(valor):'';
+  cl[campo]=valor;
+  cl.ultimaEdicion=fecha()+' '+hora();cl.editadoPor=SESSION.nombre;
+  clearTimeout(CRM_SAVE_TIMER);
+  CRM_SAVE_TIMER=setTimeout(function(){guardarDB();},900);
+}
+async function crmQuickAdd(inp){
+  var nombre=(inp.value||'').trim();if(!nombre)return;
+  var cl={id:uid(),nombre:nombre,estado1:'SIN CONTACTAR',estado2:'',seguimientos:[],vendedor:SESSION?SESSION.nombre:'',creadoPor:SESSION?SESSION.username:'',fechaCreacion:fecha()};
+  getClientes().push(cl);
+  registrarBitacora(cl.id,'CLIENTE CRM creado (tabla): '+nombre+' por '+SESSION.nombre);
+  inp.value='';
+  await guardarDB();
+  filtrarVentas();
+  setTimeout(function(){var n=document.getElementById('crm-nuevo');if(n)n.focus();},100);
+  toast('Cliente "'+nombre+'" agregado','ok');
+}
+function celdaInput(id,campo,valor,tipo){
+  return '<input type="'+(tipo||'text')+'" value="'+esc(valor==null?'':valor)+'" onchange="crmCampo(\''+id+'\',\''+campo+'\',this.value)">';
+}
+function celdaFecha(id,campo,valor){
+  return '<input type="date" value="'+fechaInput(valor)+'" onchange="crmCampo(\''+id+'\',\''+campo+'\',inputFecha(this.value))">';
+}
+function celdaSelect(id,campo,valor,opciones,vacio){
+  var h='<select onchange="crmCampo(\''+id+'\',\''+campo+'\',this.value)">';
+  if(vacio!==undefined)h+='<option value=""'+(!valor?' selected':'')+'>'+esc(vacio)+'</option>';
+  var tiene=false;
+  opciones.forEach(function(o){if(o===valor)tiene=true;h+='<option value="'+esc(o)+'"'+(o===valor?' selected':'')+'>'+esc(o)+'</option>';});
+  if(valor&&!tiene)h+='<option value="'+esc(valor)+'" selected>'+esc(valor)+'</option>';
+  return h+'</select>';
+}
+function renderTablaCRM(el,lista){
+  var vends={};DB.usuarios.forEach(function(u){vends[u.nombre]=1;});getClientes().forEach(function(x){if(x.vendedor)vends[x.vendedor]=1;});
+  var vendArr=Object.keys(vends).sort();
+  var EST2=['PRESUPUESTO ENVIADO','EN NEGOCIACION','COMPRO','NO COMPRO'];
+  var h='<div class="crm-wrap"><table class="crm" id="tabla-crm"><thead><tr>';
+  ['Nombre','Tel\u00E9fono','Vendedor','Producto/Servicio','Ciudad','Red social','Tipo de negocio','Estatus/Objeci\u00F3n','Plan de acci\u00F3n','Cant.','Porqu\u00E9 compr\u00F3','Porqu\u00E9 NO compr\u00F3','\u00DAlt. contacto','Pr\u00F3x. contacto','Estado 1','Notas','Estado 2'].forEach(function(t,i){
+    h+='<th'+(i===0?' class="colfija"':'')+'>'+t+'</th>';
+  });
+  h+='</tr></thead><tbody>';
+  // Fila de alta rapida, como la fila "Nuevo" de Notion
+  h+='<tr><td class="colfija" style="background:var(--ibg)"><input id="crm-nuevo" placeholder="+ Nuevo cliente (Enter)" onkeydown="if(event.key===\'Enter\')crmQuickAdd(this)"></td><td colspan="16" style="padding:8px 10px;font-size:11px;color:var(--muted);background:var(--ibg)">Escribe el nombre, presiona Enter y llena las casillas directamente \u2014 los cambios se guardan solos. Toca \uD83D\uDCC2 para abrir la ficha y los seguimientos.</td></tr>';
+  lista.forEach(function(cl){
+    var id=cl.id;
+    h+='<tr>';
+    h+='<td class="colfija"><div style="display:flex;align-items:center"><button onclick="abrirCliente(\''+id+'\')" title="Abrir ficha completa y seguimientos" style="border:none;background:none;font-size:13px;cursor:pointer;padding:0 2px 0 8px">\uD83D\uDCC2</button>'+celdaInput(id,'nombre',cl.nombre)+'</div></td>';
+    h+='<td>'+celdaInput(id,'telefono',cl.telefono,'tel')+'</td>';
+    h+='<td>'+celdaSelect(id,'vendedor',cl.vendedor||'',vendArr,'\u2014')+'</td>';
+    h+='<td>'+celdaInput(id,'producto',cl.producto)+'</td>';
+    h+='<td>'+celdaInput(id,'ciudad',cl.ciudad)+'</td>';
+    h+='<td>'+celdaInput(id,'redSocial',cl.redSocial)+'</td>';
+    h+='<td>'+celdaInput(id,'tipoNegocio',cl.tipoNegocio)+'</td>';
+    h+='<td style="min-width:170px">'+celdaInput(id,'estatusObjecion',cl.estatusObjecion)+'</td>';
+    h+='<td style="min-width:170px">'+celdaInput(id,'planAccion',cl.planAccion)+'</td>';
+    h+='<td style="min-width:60px">'+celdaInput(id,'cantidadMuebles',cl.cantidadMuebles,'number')+'</td>';
+    h+='<td style="min-width:150px">'+celdaInput(id,'porqueCompro',cl.porqueCompro)+'</td>';
+    h+='<td style="min-width:150px">'+celdaInput(id,'porqueNoCompro',cl.porqueNoCompro)+'</td>';
+    h+='<td>'+celdaFecha(id,'ultimoContacto',cl.ultimoContacto)+'</td>';
+    h+='<td class="'+(proxVencido(cl)?'venc':'')+'">'+celdaFecha(id,'proximoContacto',cl.proximoContacto)+'</td>';
+    h+='<td>'+celdaSelect(id,'estado1',est1De(cl),EST1_OPCIONES)+'</td>';
+    h+='<td style="min-width:210px">'+celdaInput(id,'notas',cl.notas)+'</td>';
+    h+='<td style="min-width:170px">'+celdaSelect(id,'estado2',cl.estado2||'',EST2,'\u2014')+'</td>';
+    h+='</tr>';
+  });
+  h+='</tbody></table></div>';
+  if(!lista.length&&getClientes().length)h+='<div class="empty" style="padding:20px">Ning\u00FAn cliente coincide con el filtro</div>';
+  el.innerHTML=h;
 }
 function renderSeguimientosCliente(cl){
   var box=document.getElementById('c-seguimientos');if(!box)return;
@@ -1436,7 +1523,7 @@ async function initFirebase(){
     var snap=await fs.getDoc(fs.doc(_db,'veoyoca','data'));
     if(snap.exists()){var d=snap.data();DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];DB.clientes=d.clientes||[];}
     else{DB.usuarios=[{id:'admin',nombre:'Administrador',username:'admin',password:'admin123',rol:'admin',creado:fecha()}];await guardarDB();}
-    fs.onSnapshot(fs.doc(_db,'veoyoca','data'),function(snap){if(!snap.exists()||SAVING)return;var d=snap.data();DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];DB.clientes=d.clientes||[];if(SESSION&&TAB){var nb=document.getElementById('nb-'+TAB);if(nb)goTab(TAB,nb);}});
+    fs.onSnapshot(fs.doc(_db,'veoyoca','data'),function(snap){if(!snap.exists()||SAVING)return;var d=snap.data();DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];DB.clientes=d.clientes||[];if(TAB==='ventas'&&document.activeElement&&document.activeElement.closest&&document.activeElement.closest('#tabla-crm'))return;if(SESSION&&TAB){var nb=document.getElementById('nb-'+TAB);if(nb)goTab(TAB,nb);}});
     var sess=null;try{sess=JSON.parse(localStorage.getItem('veo_session')||'null');}catch(e){}
     if(sess){var u=DB.usuarios.find(function(x){return x.id===sess.id;});if(u){SESSION=u;mostrarApp();return;}}
     document.getElementById('splash').style.display='none';
