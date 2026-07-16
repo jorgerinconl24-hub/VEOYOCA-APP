@@ -208,6 +208,9 @@ table.crm{border-collapse:collapse;font-size:12px;min-width:1780px}
 <div class="sfield"><label>Nombre completo</label><input type="text" id="u-nombre" placeholder="Ej: Mar&#xED;a L&#xF3;pez"></div>
 <div class="sfield-row"><div class="sfield"><label>Usuario</label><input type="text" id="u-user" placeholder="marialopez"></div>
 <div class="sfield"><label>Contrase&#xF1;a</label><input type="password" id="u-pass" placeholder="&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;"></div></div>
+<div class="sfield-row"><div class="sfield"><label>WhatsApp (con 58)</label><input type="tel" id="u-telefono" placeholder="584121234567"></div>
+<div class="sfield"><label>Correo</label><input type="email" id="u-correo" placeholder="vendedor@correo.com"></div></div>
+<div style="background:var(--ibg);border:1px solid #bfdbfe;border-radius:10px;padding:8px 12px;font-size:11px;color:var(--info);margin-bottom:12px">A este WhatsApp y correo llegar&#xE1;n los recordatorios de contactos del CRM.</div>
 <div class="sfield"><label>Rol</label><select id="u-rol"><option value="empleado">Empleado</option><option value="admin">Administrador</option></select></div></div>
 <div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal('modal-usuario')">Cancelar</button><button class="btn btn-dark" onclick="guardarUsuario()">Guardar</button></div></div></div>
 <div class="overlay" id="modal-cliente"><div class="sheet"><div class="sheet-handle"></div>
@@ -387,6 +390,9 @@ function mostrarApp(){
   document.getElementById('user-avatar').textContent=SESSION.nombre.substring(0,2).toUpperCase();
   document.getElementById('topbar-sub').textContent=SESSION.nombre;
   if(SESSION.rol==='admin')document.getElementById('nb-admin').style.display='flex';
+  // Vincular este dispositivo al usuario en OneSignal para poder enviarle
+  // notificaciones push SOLO a él (recordatorios del CRM dirigidos)
+  try{window.OneSignalDeferred=window.OneSignalDeferred||[];window.OneSignalDeferred.push(function(OneSignal){OneSignal.login(SESSION.username).catch(function(){});});}catch(e){}
   goTab('home',document.getElementById('nb-home'));
   setTimeout(verificarGoto,500);
   setTimeout(verificarCamposIncompletosAlEntrar, 4000);
@@ -886,6 +892,42 @@ function getClientes(){if(!Array.isArray(DB.clientes))DB.clientes=[];return DB.c
 function est1De(cl){return ((cl.estado1||'').trim()||'SIN CONTACTAR').toUpperCase();}
 function proxVencido(cl){var d=diasRestantes(cl.proximoContacto);return d!==null&&d<0;}
 function telWA(t){var n=String(t||'').replace(/[^0-9]/g,'');return n?('https://wa.me/'+n):'';}
+function usuarioPorNombre(n){return DB.usuarios.find(function(u){return u.nombre===n;});}
+function enviarWAdirecto(numero,msj){if(!numero)return;var xhr=new XMLHttpRequest();xhr.open('POST','https://api.ultramsg.com/instance181941/messages/chat',true);xhr.setRequestHeader('Content-Type','application/x-www-form-urlencoded');xhr.timeout=8000;xhr.send('token=jd3odrhspk539mmp&to='+encodeURIComponent(numero)+'&body='+encodeURIComponent(msj));}
+// Push SOLO a usuarios específicos (usa el login de OneSignal por username)
+function enviarPushUsuarios(usernames,titulo,cuerpo){
+  if(!usernames||!usernames.length)return;
+  fetch('https://onesignal.com/api/v1/notifications',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Basic '+OS_API_KEY},body:JSON.stringify({app_id:OS_APP_ID,include_aliases:{external_id:usernames},target_channel:'push',headings:{es:titulo,en:titulo},contents:{es:cuerpo,en:cuerpo},url:'https://jorgerinconl24-hub.github.io/VEOYOCA-APP/'})}).catch(function(e){console.log('push dirigido err',e);});
+}
+function correoRecordatorio(destino,cuerpo){
+  if(!destino)return;
+  var htmlB='<div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto"><div style="background:#1a1a2e;padding:16px 20px;border-radius:10px 10px 0 0"><h2 style="color:#fff;margin:0;font-size:16px">\uD83D\uDCC5 Contacto programado \u2014 VeoYoca CRM</h2></div><div style="padding:16px 20px;background:#f9fafb;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 10px 10px;font-size:14px;color:#374151;white-space:pre-line">'+esc(cuerpo)+'</div></div>';
+  function go(){window.emailjs.send('veoyoca_correo','template_r8xba4h',{to_email:destino,fecha:fecha(),total:1,vencidos_n:0,urgentes_n:0,lista_vencidos:htmlB,lista_urgentes:''}).catch(function(e){console.log('mail err',e);});}
+  if(window.emailjs)go();else setTimeout(go,1800);
+}
+// Aviso inmediato al programar el próximo contacto: SOLO al vendedor
+// asignado y a los administradores (push en la app + WhatsApp + correo)
+var NOTIF_CRM_ULTIMO={};
+function notificarProximoContacto(cl){
+  try{
+    if(!cl||!cl.proximoContacto)return;
+    var clave=cl.id+'|'+cl.proximoContacto;
+    if(NOTIF_CRM_ULTIMO[clave])return; // no repetir por la misma fecha en la sesión
+    NOTIF_CRM_ULTIMO[clave]=1;
+    var vend=usuarioPorNombre(cl.vendedor);
+    var dest=[];
+    if(vend)dest.push(vend);
+    DB.usuarios.filter(function(u){return u.rol==='admin';}).forEach(function(a){if(!dest.some(function(x){return x.id===a.id;}))dest.push(a);});
+    if(!dest.length)return;
+    var cuerpo='Cliente: '+(cl.nombre||'')+(cl.telefono?' ('+cl.telefono+')':'')+'\nFecha de contacto: '+cl.proximoContacto+'\nVendedor: '+(cl.vendedor||'sin asignar')+(cl.producto?'\nProducto: '+cl.producto:'')+(cl.planAccion?'\nPlan: '+cl.planAccion:'')+'\nProgramado por: '+SESSION.nombre;
+    enviarPushUsuarios(dest.map(function(u){return u.username;}),'\uD83D\uDCC5 Contacto programado: '+(cl.nombre||''),'El '+cl.proximoContacto+' \u00B7 Vendedor: '+(cl.vendedor||'sin asignar'));
+    dest.forEach(function(u){
+      if(u.telefono)enviarWAdirecto(u.telefono,'\uD83D\uDCC5 *VeoYoca CRM \u2014 Contacto programado*\n\n'+cuerpo);
+      if(u.correo)correoRecordatorio(u.correo,cuerpo);
+    });
+    toast('Recordatorio enviado a '+dest.map(function(u){return u.nombre.split(' ')[0];}).join(', '),'ok');
+  }catch(e){console.log('notif crm err',e);}
+}
 function chipCliente(txt,bg,col){return '<span class="card-vend" style="background:'+bg+';color:'+col+';margin-right:4px">'+esc(txt)+'</span>';}
 function renderVentas(c){
   var cls=getClientes();
@@ -916,7 +958,9 @@ function renderVentas(c){
     +'<button class="btn btn-ghost btn-sm" onclick="exportarClientesCSV()">CSV</button>'
     +'<button class="btn btn-green btn-sm" style="margin-left:auto" onclick="abrirCliente(null)">+ Nuevo cliente</button>'
     +'</div>';
-  c.innerHTML=statsBar+toolbar+'<div id="ventas-lista"></div>';
+  var pendCt=cls.filter(function(x){var d=diasRestantes(x.proximoContacto);if(d===null||d>0)return false;return SESSION.rol==='admin'||x.vendedor===SESSION.nombre;});
+  var bannerCt=pendCt.length?'<div onclick="var s=document.getElementById(\'v-est1\');if(s){s.value=\'__VENC__\';filtrarVentas();}" style="background:var(--warning);color:#fff;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;justify-content:space-between;gap:8px"><span>\uD83D\uDCC5 '+pendCt.length+' contacto'+(pendCt.length>1?'s':'')+' para hoy o vencido'+(pendCt.length>1?'s':'')+(SESSION.rol==='admin'?' (todos)':' tuyos')+'</span><span style="font-size:11px;opacity:.85">Toca para ver \u2192</span></div>':'';
+  c.innerHTML=statsBar+bannerCt+toolbar+'<div id="ventas-lista"></div>';
   filtrarVentas();
 }
 function cambiarVistaVentas(v){VENTAS_VISTA=v;localStorage.setItem('veo_ventas_vista',v);renderVentas(document.getElementById('content'));}
@@ -928,7 +972,7 @@ function clientesFiltrados(){
     var texto=((cl.nombre||'')+' '+(cl.telefono||'')+' '+(cl.producto||'')+' '+(cl.ciudad||'')+' '+(cl.tipoNegocio||'')).toLowerCase();
     var mb=!b||texto.indexOf(b)>=0;
     var mv=!fv||cl.vendedor===fv;
-    var me=!fe||(fe==='__VENC__'?proxVencido(cl):est1De(cl)===fe);
+    var me=!fe||(fe==='__VENC__'?(function(){var d=diasRestantes(cl.proximoContacto);return d!==null&&d<=0;})():est1De(cl)===fe);
     return mb&&mv&&me;
   });
 }
@@ -1023,6 +1067,7 @@ function crmCampo(id,campo,valor){
   cl.ultimaEdicion=fecha()+' '+hora();cl.editadoPor=SESSION.nombre;
   clearTimeout(CRM_SAVE_TIMER);
   CRM_SAVE_TIMER=setTimeout(function(){guardarDB();},900);
+  if(campo==='proximoContacto'&&valor)notificarProximoContacto(cl);
 }
 async function crmQuickAdd(inp){
   var nombre=(inp.value||'').trim();if(!nombre)return;
@@ -1135,6 +1180,7 @@ async function guardarCliente(){
   var esNuevo=!CLIENTE_EDIT_ID;
   var cl=esNuevo?{id:uid(),seguimientos:[],creadoPor:SESSION.username,fechaCreacion:fecha()}:getClientes().find(function(x){return x.id===CLIENTE_EDIT_ID;});
   if(!cl)return;
+  var proxAntes=esNuevo?'':(cl.proximoContacto||'');
   cl.nombre=nombre;
   cl.telefono=document.getElementById('c-telefono').value.trim();
   cl.vendedor=document.getElementById('c-vendedor').value;
@@ -1155,6 +1201,7 @@ async function guardarCliente(){
   cl.ultimaEdicion=fecha()+' '+hora();cl.editadoPor=SESSION.nombre;
   if(esNuevo)getClientes().push(cl);
   registrarBitacora(cl.id,(esNuevo?'CLIENTE CRM creado: ':'CLIENTE CRM editado: ')+nombre+' por '+SESSION.nombre);
+  if(cl.proximoContacto&&cl.proximoContacto!==proxAntes)notificarProximoContacto(cl);
   await guardarDB();
   cerrarModal('modal-cliente');
   if(TAB==='ventas')renderVentas(document.getElementById('content'));
@@ -1244,14 +1291,14 @@ function renderReportes(c){
 function renderAdmin(c){
   if(SESSION.rol!=='admin'){c.innerHTML='<div class="empty">Acceso denegado</div>';return;}
   var html='<div class="section-pad"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="sec-label" style="margin:0">Usuarios ('+DB.usuarios.length+')</div><button class="btn btn-dark btn-sm" data-nuevo-usuario="1">+ Agregar</button></div><div class="admin-section">';
-  DB.usuarios.forEach(function(u){html+='<div class="admin-row"><div class="admin-info"><div class="admin-name">'+u.nombre+'</div><div class="admin-meta">@'+u.username+' - '+u.creado+'</div></div><span class="role-badge '+(u.rol==='admin'?'role-admin':'role-emp')+'">'+u.rol+'</span>';if(u.id!==SESSION.id){html+='<button class="btn btn-ghost btn-sm" data-edit-user="'+u.id+'">Editar</button><button class="btn btn-red btn-sm" data-del-user="'+u.id+'">Eliminar</button>';}else{html+='<span style="font-size:11px;color:var(--muted)">Tú</span>';}html+='</div>';});
+  DB.usuarios.forEach(function(u){html+='<div class="admin-row"><div class="admin-info"><div class="admin-name">'+u.nombre+'</div><div class="admin-meta">@'+u.username+' - '+u.creado+(u.telefono?' \u00B7 \uD83D\uDCF1':'')+(u.correo?' \u00B7 \u2709\uFE0F':'')+'</div></div><span class="role-badge '+(u.rol==='admin'?'role-admin':'role-emp')+'">'+u.rol+'</span>';if(u.id!==SESSION.id){html+='<button class="btn btn-ghost btn-sm" data-edit-user="'+u.id+'">Editar</button><button class="btn btn-red btn-sm" data-del-user="'+u.id+'">Eliminar</button>';}else{html+='<span style="font-size:11px;color:var(--muted)">Tú</span>';}html+='</div>';});
   html+='</div><div class="sec-label" style="margin-top:20px">Sistema</div><div class="admin-section"><div class="admin-row"><div class="admin-info"><div class="admin-name">Total pedidos</div></div><strong>'+DB.pedidos.length+'</strong></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Base de datos</div></div><span style="color:var(--success);font-weight:600">Firebase activo</span></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Exportar</div></div><button class="btn btn-ghost btn-sm" data-exportar="json">JSON</button><button class="btn btn-ghost btn-sm" data-exportar="csv" style="margin-left:6px">CSV</button></div><div class="admin-row"><div class="admin-info"><div class="admin-name" style="color:var(--danger)">Borrar todos los pedidos</div><div class="admin-meta">No se puede deshacer</div></div><button class="btn btn-red btn-sm" data-borrar-pedidos="1">Borrar</button></div></div></div>';
   c.innerHTML=html;
   c.onclick=function(e){var t=e.target;if(t.getAttribute('data-nuevo-usuario'))abrirNuevoUsuario();var eu=t.getAttribute('data-edit-user');if(eu)editarUsuario(eu);var du=t.getAttribute('data-del-user');if(du)eliminarUsuario(du);var ex=t.getAttribute('data-exportar');if(ex==='json')exportarJSON();if(ex==='csv')exportarCSV();if(t.getAttribute('data-borrar-pedidos'))borrarPedidos();};
 }
-function abrirNuevoUsuario(){document.getElementById('u-titulo').textContent='Nuevo usuario';['u-id','u-nombre','u-user','u-pass'].forEach(function(id){document.getElementById(id).value='';});document.getElementById('u-rol').value='empleado';abrirModal('modal-usuario');}
-function editarUsuario(id){var u=DB.usuarios.find(function(x){return x.id===id;});if(!u)return;document.getElementById('u-titulo').textContent='Editar usuario';document.getElementById('u-id').value=id;document.getElementById('u-nombre').value=u.nombre;document.getElementById('u-user').value=u.username;document.getElementById('u-pass').value=u.password;document.getElementById('u-rol').value=u.rol;abrirModal('modal-usuario');}
-async function guardarUsuario(){var nombre=document.getElementById('u-nombre').value.trim();var user=document.getElementById('u-user').value.trim().toLowerCase();var pass=document.getElementById('u-pass').value;var rol=document.getElementById('u-rol').value;var eid=document.getElementById('u-id').value;if(!nombre||!user||!pass){toast('Todos los campos son obligatorios','err');return;}if(DB.usuarios.find(function(x){return x.username===user&&x.id!==eid;})){toast('El usuario ya existe','err');return;}if(eid){var u=DB.usuarios.find(function(x){return x.id===eid;});if(u){u.nombre=nombre;u.username=user;u.password=pass;u.rol=rol;}}else{DB.usuarios.push({id:uid(),nombre:nombre,username:user,password:pass,rol:rol,creado:fecha()});}await guardarDB();cerrarModal('modal-usuario');goTab('admin',document.getElementById('nb-admin'));toast('Usuario guardado','ok');}
+function abrirNuevoUsuario(){document.getElementById('u-titulo').textContent='Nuevo usuario';['u-id','u-nombre','u-user','u-pass','u-telefono','u-correo'].forEach(function(id){document.getElementById(id).value='';});document.getElementById('u-rol').value='empleado';abrirModal('modal-usuario');}
+function editarUsuario(id){var u=DB.usuarios.find(function(x){return x.id===id;});if(!u)return;document.getElementById('u-titulo').textContent='Editar usuario';document.getElementById('u-id').value=id;document.getElementById('u-nombre').value=u.nombre;document.getElementById('u-user').value=u.username;document.getElementById('u-pass').value=u.password;document.getElementById('u-telefono').value=u.telefono||'';document.getElementById('u-correo').value=u.correo||'';document.getElementById('u-rol').value=u.rol;abrirModal('modal-usuario');}
+async function guardarUsuario(){var nombre=document.getElementById('u-nombre').value.trim();var user=document.getElementById('u-user').value.trim().toLowerCase();var pass=document.getElementById('u-pass').value;var rol=document.getElementById('u-rol').value;var eid=document.getElementById('u-id').value;if(!nombre||!user||!pass){toast('Todos los campos son obligatorios','err');return;}if(DB.usuarios.find(function(x){return x.username===user&&x.id!==eid;})){toast('El usuario ya existe','err');return;}var tel=(document.getElementById('u-telefono')||{value:''}).value.trim().replace(/[^0-9]/g,'');var correo=(document.getElementById('u-correo')||{value:''}).value.trim();if(eid){var u=DB.usuarios.find(function(x){return x.id===eid;});if(u){u.nombre=nombre;u.username=user;u.password=pass;u.rol=rol;u.telefono=tel;u.correo=correo;}}else{DB.usuarios.push({id:uid(),nombre:nombre,username:user,password:pass,rol:rol,telefono:tel,correo:correo,creado:fecha()});}await guardarDB();cerrarModal('modal-usuario');goTab('admin',document.getElementById('nb-admin'));toast('Usuario guardado','ok');}
 async function eliminarUsuario(id){if(!confirm('Eliminar este usuario?'))return;DB.usuarios=DB.usuarios.filter(function(x){return x.id!==id;});await guardarDB();goTab('admin',document.getElementById('nb-admin'));toast('Usuario eliminado','warn');}
 async function borrarPedidos(){if(!confirm('Borrar TODOS los pedidos?'))return;DB.pedidos=[];await guardarDB();goTab('admin',document.getElementById('nb-admin'));toast('Pedidos eliminados','warn');}
 function exportarJSON(){var a=document.createElement('a');a.href='data:application/json;charset=utf-8,'+encodeURIComponent(JSON.stringify({pedidos:DB.pedidos,bitacora:DB.bitacora},null,2));a.download='veoyoca_'+fecha().replace(/\//g,'-')+'.json';a.click();}
