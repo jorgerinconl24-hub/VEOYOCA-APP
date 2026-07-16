@@ -897,7 +897,15 @@ function enviarWAdirecto(numero,msj){if(!numero)return;var xhr=new XMLHttpReques
 // Push SOLO a usuarios específicos (usa el login de OneSignal por username)
 function enviarPushUsuarios(usernames,titulo,cuerpo){
   if(!usernames||!usernames.length)return;
-  fetch('https://onesignal.com/api/v1/notifications',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Basic '+OS_API_KEY},body:JSON.stringify({app_id:OS_APP_ID,include_aliases:{external_id:usernames},target_channel:'push',headings:{es:titulo,en:titulo},contents:{es:cuerpo,en:cuerpo},url:'https://jorgerinconl24-hub.github.io/VEOYOCA-APP/'})}).catch(function(e){console.log('push dirigido err',e);});
+  fetch('https://onesignal.com/api/v1/notifications',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Basic '+OS_API_KEY},body:JSON.stringify({app_id:OS_APP_ID,include_aliases:{external_id:usernames},target_channel:'push',headings:{es:titulo,en:titulo},contents:{es:cuerpo,en:cuerpo},url:'https://jorgerinconl24-hub.github.io/VEOYOCA-APP/'})})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    console.log('push dirigido resp:',JSON.stringify(d));
+    if(d&&(d.errors||d.recipients===0)){
+      toast('Push dirigido sin destinatarios ('+usernames.join(', ')+'): ese usuario debe cerrar sesi\u00F3n y volver a entrar en SU tel\u00E9fono','warn');
+    }
+  })
+  .catch(function(e){console.log('push dirigido err',e);});
 }
 function correoRecordatorio(destino,cuerpo){
   if(!destino)return;
@@ -1529,6 +1537,7 @@ function renderNotificaciones(c){
   html+='<div class="notif-banner"><h3>🔔 Canales de notificación</h3><p>Las notificaciones push llegan aunque la app esté cerrada</p>';
   var pushGranted = ('Notification' in window) && Notification.permission === 'granted';
   html+='<div class="notif-row"><div class="notif-icon">📱</div><div class="notif-info"><div class="notif-label">Push (OneSignal)</div><div class="notif-sub">'+(pushGranted?'✓ Activado — notificaciones con app cerrada':'Toca para activar')+'</div></div><button onclick="activarPush()" id="btn-activar-push" style="background:'+(pushGranted?'#6b7280':'#16a34a')+';color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer">'+(pushGranted?'✓ Activado':'Activar')+'</button></div>';
+  html+='<button class="btn-notif-test" onclick="probarPushDirigido()">\uD83C\uDFAF Probar push dirigido (solo a m\u00ED: '+SESSION.nombre+')</button>';
   var emailOk=cfg.emailjsServiceId&&cfg.emailjsTemplateId&&cfg.emailjsPublicKey&&cfg.emailDestino;
   html+='<div class="notif-row"><div class="notif-icon">📧</div><div class="notif-info"><div class="notif-label">Correo electrónico</div><div class="notif-sub">'+(emailOk?'✓ '+cfg.emailDestino:'Configura abajo')+'</div></div><label class="notif-toggle"><input type="checkbox" '+(cfg.emailActivo?'checked':'')+' onchange="toggleCanal(\'email\',this.checked)"><span class="notif-slider"></span></label></div>';
   var waOk=cfg.waNumero&&cfg.waApikey;
@@ -1539,6 +1548,16 @@ function renderNotificaciones(c){
   html+='<div style="padding:14px"><div style="font-size:13px;font-weight:700;margin-bottom:10px">💬 Configurar WhatsApp</div><div class="sfield-row" style="margin-bottom:8px"><div class="sfield" style="margin-bottom:0"><label>Número (con código país)</label><input type="text" id="cfg-wa-numero" placeholder="+58 414 123 4567" value="'+(cfg.waNumero||'')+'"></div><div class="sfield" style="margin-bottom:0"><label>API Key CallMeBot</label><input type="text" id="cfg-wa-apikey" placeholder="1234567" value="'+(cfg.waApikey||'')+'"></div></div><div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-dark btn-sm" onclick="guardarConfigWA()">Guardar</button>'+(waOk?'<button class="btn btn-green btn-sm" onclick="enviarWhatsApp()">Probar</button>':'')+'</div></div>';
   html+='</div><button onclick="enviarTodo()" class="btn btn-dark" style="width:100%;padding:13px;font-size:15px;margin-top:14px">🔔 Enviar reporte ahora</button></div>';
   c.innerHTML=html;
+}
+// Prueba del push dirigido: primero re-vincula el usuario en OneSignal
+// (por si el login inicial no corrió) y a los 3 segundos envía el push
+// únicamente a este usuario.
+function probarPushDirigido(){
+  try{window.OneSignalDeferred=window.OneSignalDeferred||[];window.OneSignalDeferred.push(function(OneSignal){OneSignal.login(SESSION.username).catch(function(e){console.log('os login err',e);});});}catch(e){}
+  toast('Vinculando usuario y enviando prueba...','');
+  setTimeout(function(){
+    enviarPushUsuarios([SESSION.username],'\uD83C\uDFAF Prueba de push dirigido','Si ves esto, el push dirigido a '+SESSION.nombre+' (@'+SESSION.username+') funciona correctamente');
+  },3000);
 }
 function activarPush(){
   if(!('Notification' in window)){toast('Este navegador no soporta notificaciones','err');return;}
