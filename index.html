@@ -606,6 +606,11 @@ function renderOrdenesBody(){
       o.items.forEach(function(it){h+='<div style="font-size:12px;padding:4px 0;border-top:1px solid var(--border);display:flex;gap:8px"><strong style="min-width:34px;text-align:right;flex-shrink:0">'+esc(it.cantidad)+' \u00D7</strong><span>'+esc(it.descripcion)+'</span></div>';});
       h+='</div></div>';
     }
+    // Lista de TODAS las guias recibidas de esta orden (entregas parciales)
+    if(Array.isArray(o.guias)&&o.guias.length){
+      var gl=o.guias.map(function(gx){var t='#'+esc(gx.numeroGuia||'?')+(gx.fecha?' ('+esc(gx.fecha)+')':'');return gx.pdfUrl?'<a href="'+esc(gx.pdfUrl)+'" target="_blank" style="color:var(--info)">'+t+'</a>':t;}).join(' \u00B7 ');
+      h+='<div style="margin-top:6px;font-size:12px;color:var(--muted)">\uD83D\uDE9A Gu\u00EDas recibidas ('+o.guias.length+'): '+gl+'</div>';
+    }
     // Resultado de la verificacion de la guia de despacho
     if(o.guiaDespacho){
       var gd=o.guiaDespacho;
