@@ -257,7 +257,7 @@ function enviarPushOneSignal(titulo, cuerpo) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': 'Basic ' + OS_API_KEY
+      'Authorization': (OS_API_KEY.indexOf('os_v2_')===0?'Key ':'Basic ') + OS_API_KEY
     },
     body: JSON.stringify({
       app_id: OS_APP_ID,
