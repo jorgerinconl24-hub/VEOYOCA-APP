@@ -253,21 +253,14 @@ var OS_APP_ID  = 'f2baf005-ca28-4491-a772-eca363f6f142';
 var OS_API_KEY = 'os_v2_app_6k5pabokfbcjdj3s5srwh5xrikmqkjompbiegtmvzstbmuwyrmmbg43dgpebq4qvxtathkixulolqpm7nyp66zmp43ds2wtv2sv5u4i';
 
 function enviarPushOneSignal(titulo, cuerpo) {
-  fetch('https://onesignal.com/api/v1/notifications', {
+  // Sale por el servidor de Render, que usa la direccion y clave correctas
+  // de OneSignal (api.onesignal.com con la clave os_v2)
+  fetch('https://veoyoca-webhook.onrender.com/push-crm', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': (OS_API_KEY.indexOf('os_v2_')===0?'Key ':'Basic ') + OS_API_KEY
-    },
-    body: JSON.stringify({
-      app_id: OS_APP_ID,
-      included_segments: ['All'],
-      headings: { es: titulo, en: titulo },
-      contents: { es: cuerpo, en: cuerpo },
-      url: 'https://jorgerinconl24-hub.github.io/VEOYOCA-APP/'
-    })
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: 'veoyoca-push-2026', all: true, titulo: titulo, cuerpo: cuerpo })
   }).then(function(r){ return r.json(); })
-    .then(function(d){ console.log('Push:', JSON.stringify(d)); })
+    .then(function(d){ console.log('Push general:', JSON.stringify(d)); })
     .catch(function(e){ console.log('Push err:', e); });
 }
 
