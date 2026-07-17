@@ -390,9 +390,9 @@ function mostrarApp(){
   document.getElementById('user-avatar').textContent=SESSION.nombre.substring(0,2).toUpperCase();
   document.getElementById('topbar-sub').textContent=SESSION.nombre;
   if(SESSION.rol==='admin')document.getElementById('nb-admin').style.display='flex';
-  // Vincular este dispositivo al usuario en OneSignal para poder enviarle
-  // notificaciones push SOLO a él (recordatorios del CRM dirigidos)
-  try{window.OneSignalDeferred=window.OneSignalDeferred||[];window.OneSignalDeferred.push(function(OneSignal){OneSignal.login(SESSION.username).catch(function(){});});}catch(e){}
+  // Vincular este dispositivo al usuario y guardar su ID de suscripción
+  // en Firebase (para los push dirigidos del CRM)
+  sincronizarPushId();
   goTab('home',document.getElementById('nb-home'));
   setTimeout(verificarGoto,500);
   setTimeout(verificarCamposIncompletosAlEntrar, 4000);
@@ -893,6 +893,32 @@ function est1De(cl){return ((cl.estado1||'').trim()||'SIN CONTACTAR').toUpperCas
 function proxVencido(cl){var d=diasRestantes(cl.proximoContacto);return d!==null&&d<0;}
 function telWA(t){var n=String(t||'').replace(/[^0-9]/g,'');return n?('https://wa.me/'+n):'';}
 function usuarioPorNombre(n){return DB.usuarios.find(function(u){return u.nombre===n;});}
+// Guarda el ID de suscripción push de ESTE aparato dentro del usuario que
+// inició sesión (en Firebase). El servidor usa esos IDs para enviar los
+// push dirigidos directo al teléfono correcto, sin depender de alias.
+function sincronizarPushId(){
+  try{
+    window.OneSignalDeferred=window.OneSignalDeferred||[];
+    window.OneSignalDeferred.push(function(OneSignal){
+      try{OneSignal.login(SESSION.username).catch(function(){});}catch(e){}
+      setTimeout(function(){
+        try{
+          var sid=OneSignal.User&&OneSignal.User.PushSubscription&&OneSignal.User.PushSubscription.id;
+          if(!sid||!SESSION)return;
+          var u=DB.usuarios.find(function(x){return x.id===SESSION.id;});
+          if(!u)return;
+          if(!Array.isArray(u.pushIds))u.pushIds=[];
+          if(u.pushIds.indexOf(sid)<0){
+            u.pushIds.push(sid);
+            if(u.pushIds.length>5)u.pushIds=u.pushIds.slice(-5);
+            guardarDB();
+            console.log('Aparato push registrado para',SESSION.username,':',sid);
+          }
+        }catch(e){console.log('sync push id err',e);}
+      },2500);
+    });
+  }catch(e){}
+}
 function enviarWAdirecto(numero,msj){if(!numero)return;var xhr=new XMLHttpRequest();xhr.open('POST','https://api.ultramsg.com/instance181941/messages/chat',true);xhr.setRequestHeader('Content-Type','application/x-www-form-urlencoded');xhr.timeout=8000;xhr.send('token=jd3odrhspk539mmp&to='+encodeURIComponent(numero)+'&body='+encodeURIComponent(msj));}
 // Push SOLO a usuarios específicos. Se envía A TRAVÉS DEL SERVIDOR de
 // Render (endpoint /push-crm) porque iPhone/Safari bloquea la llamada
@@ -1577,14 +1603,24 @@ function probarPushDirigido(){
       pasos.push('2. V\u00EDnculo de usuario (external id): '+(extId?extId+' \u2713':'\u2717 NO REGISTRADO'));
       pasos.push('3. Suscripci\u00F3n push del aparato: '+(subId?subId.substring(0,10)+'... \u2713':'\u2717 NINGUNA'));
       pasos.push('4. Push activo en este aparato: '+optedIn);
+      if(subId){
+        var uu=DB.usuarios.find(function(x){return x.id===SESSION.id;});
+        if(uu){
+          if(!Array.isArray(uu.pushIds))uu.pushIds=[];
+          if(uu.pushIds.indexOf(subId)<0){uu.pushIds.push(subId);if(uu.pushIds.length>5)uu.pushIds=uu.pushIds.slice(-5);guardarDB();}
+          pasos.push('4b. Aparato guardado en tu usuario \u2713 (aparatos registrados: '+uu.pushIds.length+')');
+        }
+      }
       pasos.push('');
       pasos.push('Enviando push de prueba solo a @'+SESSION.username+' (v\u00EDa servidor)...');
+      setTimeout(function(){
       enviarPushUsuarios([SESSION.username],'\uD83C\uDFAF Prueba de push dirigido','Si ves esto, el push dirigido a '+SESSION.nombre+' funciona',function(d){
         pasos.push('5. Respuesta del servidor: '+JSON.stringify(d).substring(0,400));
         pasos.push('');
         pasos.push('Nota: si el servidor estaba dormido puede tardar ~30s en responder la primera vez.');
         alert(pasos.join('\n'));
       });
+      },2000);
     });
   });
 }
