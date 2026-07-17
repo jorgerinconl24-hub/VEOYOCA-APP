@@ -894,18 +894,22 @@ function proxVencido(cl){var d=diasRestantes(cl.proximoContacto);return d!==null
 function telWA(t){var n=String(t||'').replace(/[^0-9]/g,'');return n?('https://wa.me/'+n):'';}
 function usuarioPorNombre(n){return DB.usuarios.find(function(u){return u.nombre===n;});}
 function enviarWAdirecto(numero,msj){if(!numero)return;var xhr=new XMLHttpRequest();xhr.open('POST','https://api.ultramsg.com/instance181941/messages/chat',true);xhr.setRequestHeader('Content-Type','application/x-www-form-urlencoded');xhr.timeout=8000;xhr.send('token=jd3odrhspk539mmp&to='+encodeURIComponent(numero)+'&body='+encodeURIComponent(msj));}
-// Push SOLO a usuarios específicos (usa el login de OneSignal por username)
-function enviarPushUsuarios(usernames,titulo,cuerpo){
+// Push SOLO a usuarios específicos. Se envía A TRAVÉS DEL SERVIDOR de
+// Render (endpoint /push-crm) porque iPhone/Safari bloquea la llamada
+// directa del navegador a OneSignal con destinatarios por alias.
+function enviarPushUsuarios(usernames,titulo,cuerpo,cb){
   if(!usernames||!usernames.length)return;
-  fetch('https://onesignal.com/api/v1/notifications',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Basic '+OS_API_KEY},body:JSON.stringify({app_id:OS_APP_ID,include_aliases:{external_id:usernames},target_channel:'push',headings:{es:titulo,en:titulo},contents:{es:cuerpo,en:cuerpo},url:'https://jorgerinconl24-hub.github.io/VEOYOCA-APP/'})})
+  fetch('https://veoyoca-webhook.onrender.com/push-crm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:'veoyoca-push-2026',usernames:usernames,titulo:titulo,cuerpo:cuerpo})})
   .then(function(r){return r.json();})
   .then(function(d){
-    console.log('push dirigido resp:',JSON.stringify(d));
-    if(d&&(d.errors||d.recipients===0)){
-      toast('Push dirigido sin destinatarios ('+usernames.join(', ')+'): ese usuario debe cerrar sesi\u00F3n y volver a entrar en SU tel\u00E9fono','warn');
+    console.log('push-crm resp:',JSON.stringify(d));
+    if(cb)cb(d);
+    var rr=d&&d.resultado;
+    if(rr&&(rr.errors||rr.recipients===0)){
+      toast('Push dirigido sin destinatarios ('+usernames.join(', ')+'): ese usuario debe abrir la app e iniciar sesi\u00F3n en su tel\u00E9fono','warn');
     }
   })
-  .catch(function(e){console.log('push dirigido err',e);});
+  .catch(function(e){console.log('push-crm err',e);if(cb)cb({ok:false,error:e.message});});
 }
 function correoRecordatorio(destino,cuerpo){
   if(!destino)return;
@@ -1574,11 +1578,13 @@ function probarPushDirigido(){
       pasos.push('3. Suscripci\u00F3n push del aparato: '+(subId?subId.substring(0,10)+'... \u2713':'\u2717 NINGUNA'));
       pasos.push('4. Push activo en este aparato: '+optedIn);
       pasos.push('');
-      pasos.push('Enviando push de prueba solo a @'+SESSION.username+'...');
-      fetch('https://onesignal.com/api/v1/notifications',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Basic '+OS_API_KEY},body:JSON.stringify({app_id:OS_APP_ID,include_aliases:{external_id:[SESSION.username]},target_channel:'push',headings:{es:'\uD83C\uDFAF Prueba de push dirigido',en:'Prueba'},contents:{es:'Si ves esto, el push dirigido a '+SESSION.nombre+' funciona',en:'ok'},url:'https://jorgerinconl24-hub.github.io/VEOYOCA-APP/'})})
-      .then(function(r){return r.json();})
-      .then(function(d){pasos.push('5. Respuesta de OneSignal: '+JSON.stringify(d).substring(0,400));alert(pasos.join('\n'));})
-      .catch(function(e){pasos.push('5. ERROR enviando: '+e.message);alert(pasos.join('\n'));});
+      pasos.push('Enviando push de prueba solo a @'+SESSION.username+' (v\u00EDa servidor)...');
+      enviarPushUsuarios([SESSION.username],'\uD83C\uDFAF Prueba de push dirigido','Si ves esto, el push dirigido a '+SESSION.nombre+' funciona',function(d){
+        pasos.push('5. Respuesta del servidor: '+JSON.stringify(d).substring(0,400));
+        pasos.push('');
+        pasos.push('Nota: si el servidor estaba dormido puede tardar ~30s en responder la primera vez.');
+        alert(pasos.join('\n'));
+      });
     });
   });
 }
