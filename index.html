@@ -905,7 +905,7 @@ function sincronizarPushId(){
           if(u.pushIds.indexOf(sid)<0){
             u.pushIds.push(sid);
             if(u.pushIds.length>5)u.pushIds=u.pushIds.slice(-5);
-            guardarDB();
+            if(SAVING){setTimeout(function(){guardarDB();},1800);}else{guardarDB();}
             console.log('Aparato push registrado para',SESSION.username,':',sid);
           }
         }catch(e){console.log('sync push id err',e);}
@@ -925,8 +925,8 @@ function enviarPushUsuarios(usernames,titulo,cuerpo,cb){
     console.log('push-crm resp:',JSON.stringify(d));
     if(cb)cb(d);
     var rr=d&&d.resultado;
-    if(rr&&(rr.errors||rr.recipients===0)){
-      toast('Push dirigido sin destinatarios ('+usernames.join(', ')+'): ese usuario debe abrir la app e iniciar sesi\u00F3n en su tel\u00E9fono','warn');
+    if(rr&&!rr.id){
+      toast('Push dirigido sin entregar ('+usernames.join(', ')+'): revisa que ese usuario haya abierto la app e iniciado sesi\u00F3n en su tel\u00E9fono','warn');
     }
   })
   .catch(function(e){console.log('push-crm err',e);if(cb)cb({ok:false,error:e.message});});
@@ -1621,7 +1621,12 @@ function probarPushDirigido(){
         var uu=DB.usuarios.find(function(x){return x.id===SESSION.id;});
         if(uu){
           if(!Array.isArray(uu.pushIds))uu.pushIds=[];
-          if(uu.pushIds.indexOf(subId)<0){uu.pushIds.push(subId);if(uu.pushIds.length>5)uu.pushIds=uu.pushIds.slice(-5);await conLimite(guardarDB(),8000);}
+          if(uu.pushIds.indexOf(subId)<0)uu.pushIds.push(subId);
+          if(uu.pushIds.length>5)uu.pushIds=uu.pushIds.slice(-5);
+          // esperar si hay otro guardado en curso, guardar, y esperar a que termine
+          var t=0;while(SAVING&&t<20){await espera(300);t++;}
+          await conLimite(guardarDB(),9000);
+          t=0;while(SAVING&&t<20){await espera(300);t++;}
           pasos.push('4b. Aparato guardado en tu usuario \u2713 (aparatos registrados: '+uu.pushIds.length+')');
         }
       }
@@ -1629,7 +1634,7 @@ function probarPushDirigido(){
       etapa='enviando push por el servidor';
       pasos.push('Enviando push de prueba solo a @'+SESSION.username+' (v\u00EDa servidor)...');
       enviarPushUsuarios([SESSION.username],'\uD83C\uDFAF Prueba de push dirigido','Si ves esto, el push dirigido a '+SESSION.nombre+' funciona',function(d){
-        pasos.push('5. Respuesta del servidor: '+JSON.stringify(d).substring(0,400));
+        pasos.push('5. Respuesta del servidor: '+JSON.stringify(d).substring(0,700));
         fin();
       });
     }catch(e){
