@@ -898,6 +898,7 @@ function sincronizarPushId(){
         try{
           var sid=OneSignal.User&&OneSignal.User.PushSubscription&&OneSignal.User.PushSubscription.id;
           if(!sid||!SESSION)return;
+          if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sid)){console.log('push id con formato invalido, no se guarda:',sid);return;}
           var u=DB.usuarios.find(function(x){return x.id===SESSION.id;});
           if(!u)return;
           if(!Array.isArray(u.pushIds))u.pushIds=[];
@@ -1594,9 +1595,10 @@ function probarPushDirigido(){
       try{subId=(OneSignal.User.PushSubscription&&OneSignal.User.PushSubscription.id)||'';}catch(e){}
       try{optedIn=String(OneSignal.User.PushSubscription&&OneSignal.User.PushSubscription.optedIn);}catch(e){}
       pasos.push('2. V\u00EDnculo de usuario (external id): '+(extId?extId+' \u2713':'\u2717 NO REGISTRADO'));
-      pasos.push('3. Suscripci\u00F3n push del aparato: '+(subId?subId.substring(0,10)+'... \u2713':'\u2717 NINGUNA'));
+      var subIdValido=subId&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(subId);
+      pasos.push('3. Suscripci\u00F3n push del aparato: '+(subId?subId+(subIdValido?' \u2713':' \u26A0\uFE0F FORMATO INVALIDO'):'\u2717 NINGUNA'));
       pasos.push('4. Push activo en este aparato: '+optedIn);
-      if(subId){
+      if(subId&&subIdValido){
         var uu=DB.usuarios.find(function(x){return x.id===SESSION.id;});
         if(uu){
           if(!Array.isArray(uu.pushIds))uu.pushIds=[];
