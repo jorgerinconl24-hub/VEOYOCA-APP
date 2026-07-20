@@ -1,7 +1,10 @@
 // ═══════════════════════════════════════════════════════════
-// VEOYOCA — SERVICE WORKER
-// Maneja notificaciones push aunque la app esté cerrada
+// VEOYOCA — SERVICE WORKER UNIFICADO
+// Linea 1: motor de push de OneSignal (OBLIGATORIO de primero).
+// Debajo: cache, alarmas locales y clicks de VeoYoca.
 // ═══════════════════════════════════════════════════════════
+importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js");
+
 
 var CACHE_NAME = 'veoyoca-v1';
 
