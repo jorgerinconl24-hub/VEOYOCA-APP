@@ -1616,6 +1616,21 @@ function probarPushDirigido(){
           pasos.push('W2. Worker unificado: OK');
           var subNativa=await conLimite(reg.pushManager.getSubscription(),5000);
           pasos.push('W3. Suscripci\u00F3n nativa del navegador: '+((subNativa&&subNativa.endpoint)?'SI \u2713':'NO \u2717 (OneSignal debe crearla)'));
+          // W4: sonda directa. El TIPO de error revela la causa:
+          //  - InvalidAccessError/clave requerida => el servicio de push de
+          //    Google SI responde (el bloqueo estaria en el SDK)
+          //  - AbortError/"push service error" o similar => el navegador NO
+          //    logra contactar el servicio de push (red/ISP bloqueando FCM)
+          if(!(subNativa&&subNativa.endpoint)){
+            try{
+              var st=await conLimite(reg.pushManager.subscribe({userVisibleOnly:true}),9000);
+              if(st&&st.endpoint){pasos.push('W4. Sonda de suscripci\u00F3n: CREADA \u2713 ('+st.endpoint.substring(0,40)+'...)');}
+              else if(st&&st.__timeout){pasos.push('W4. Sonda de suscripci\u00F3n: SIN RESPUESTA (9s) \u2014 huele a red bloqueando el servicio de push');}
+              else{pasos.push('W4. Sonda de suscripci\u00F3n: respuesta rara: '+JSON.stringify(st).substring(0,120));}
+            }catch(eS){
+              pasos.push('W4. Sonda de suscripci\u00F3n \u2014 ERROR: '+(eS&&eS.name)+': '+((eS&&eS.message)||eS).toString().substring(0,160));
+            }
+          }
         }else{
           pasos.push('W2. Worker unificado: SIN RESPUESTA');
         }
