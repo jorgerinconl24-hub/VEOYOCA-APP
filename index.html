@@ -1591,6 +1591,14 @@ function probarPushDirigido(){
   if(!window.OneSignalDeferred)window.OneSignalDeferred=[];
   window.OneSignalDeferred.push(async function(OneSignal){
     try{
+      // Si el permiso no esta concedido, pedirlo AQUI (sale el cartel nativo)
+      if(('Notification' in window)&&Notification.permission!=='granted'){
+        etapa='pidiendo permiso de notificaciones';
+        pasos.push('1b. Pidiendo permiso... (acepta el cartel si aparece)');
+        await conLimite(OneSignal.Notifications.requestPermission(),20000);
+        pasos.push('1c. Permiso tras pedirlo: '+Notification.permission);
+        await espera(2000);
+      }
       etapa='vinculando usuario';
       var rlogin=await conLimite(OneSignal.login(SESSION.username),6000);
       var extId='',subId='',optedIn='';
@@ -1614,6 +1622,8 @@ function probarPushDirigido(){
       var subIdValido=subId&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(subId);
       pasos.push('3. Suscripci\u00F3n push del aparato: '+(subId?subId+(subIdValido?' \u2713':' \u26A0\uFE0F FORMATO INVALIDO')+(subIdAntes&&subId!==subIdAntes?' (RENOVADA \u2713)':''):'\u2717 NINGUNA'));
       pasos.push('4. Push activo en este aparato: '+optedIn);
+      var token='';try{token=(OneSignal.User.PushSubscription&&OneSignal.User.PushSubscription.token)||'';}catch(e){}
+      pasos.push('4t. Token de entrega del navegador: '+(token?'SI \u2713':'NO \u2717 (el navegador no lo emiti\u00F3)'));
       etapa='guardando aparato en Firebase';
       if(subId&&subIdValido){
         var uu=DB.usuarios.find(function(x){return x.id===SESSION.id;});
