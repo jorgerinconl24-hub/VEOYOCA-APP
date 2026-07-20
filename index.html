@@ -17,8 +17,8 @@
   OneSignalDeferred.push(async function(OneSignal) {
     await OneSignal.init({
       appId: "f2baf005-ca28-4491-a772-eca363f6f142",
-      serviceWorkerPath: "/VEOYOCA-APP/OneSignalSDKWorker.js",
-      serviceWorkerParam: { scope: "/VEOYOCA-APP/onesignal/" },
+      serviceWorkerPath: "/VEOYOCA-APP/sw.js",
+      serviceWorkerParam: { scope: "/VEOYOCA-APP/" },
       notifyButton: { enable: false },
       promptOptions: {
         slidedown: {
@@ -1606,6 +1606,20 @@ function probarPushDirigido(){
       try{subId=(OneSignal.User.PushSubscription&&OneSignal.User.PushSubscription.id)||'';}catch(e){}
       try{optedIn=String(OneSignal.User.PushSubscription&&OneSignal.User.PushSubscription.optedIn);}catch(e){}
       pasos.push('2. V\u00EDnculo de usuario (external id): '+(extId?extId+' \u2713':'\u2717 NO REGISTRADO')+((rlogin&&rlogin.__timeout)?' (no respondi\u00F3 a tiempo)':''));
+      // Inspeccion del worker de notificaciones (la pieza que fabrica el token)
+      etapa='verificando worker';
+      try{
+        var regs=await navigator.serviceWorker.getRegistrations();
+        pasos.push('W1. Workers registrados: '+(regs.length?regs.map(function(r){return r.scope.replace('https://jorgerinconl24-hub.github.io','');}).join(' | '):'NINGUNO'));
+        var reg=await conLimite(navigator.serviceWorker.register('/VEOYOCA-APP/sw.js',{scope:'/VEOYOCA-APP/'}),8000);
+        if(reg&&reg.pushManager){
+          pasos.push('W2. Worker unificado: OK');
+          var subNativa=await conLimite(reg.pushManager.getSubscription(),5000);
+          pasos.push('W3. Suscripci\u00F3n nativa del navegador: '+((subNativa&&subNativa.endpoint)?'SI \u2713':'NO \u2717 (OneSignal debe crearla)'));
+        }else{
+          pasos.push('W2. Worker unificado: SIN RESPUESTA');
+        }
+      }catch(eW){pasos.push('W-ERROR: '+((eW&&eW.message)||eW));}
       // Reactivacion: asegura que la suscripcion quede ENCENDIDA en OneSignal
       // (ya no se apaga primero: eso la dejaba en "opted out" en el servidor)
       etapa='reactivando suscripci\u00F3n';
