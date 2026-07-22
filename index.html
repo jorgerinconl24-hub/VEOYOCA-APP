@@ -274,6 +274,16 @@ function fecha(){return new Date().toLocaleDateString('es-VE',{day:'2-digit',mon
 function hora(){return new Date().toLocaleTimeString('es-VE',{hour:'2-digit',minute:'2-digit'});}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).substr(2,5);}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// Clasifica una linea de verificacion y devuelve icono + color.
+// dudoso=true fuerza el reloj (para lineas de "revisar a ojo").
+function veoIcono(txt,dudoso){
+  var t=String(txt==null?'':txt).toUpperCase();
+  if(dudoso) return {ic:'🕐',col:'var(--warning)'};                         // 🕐 reloj
+  if(/REVISAR|DUDOS|VERIFIC|ILEGIBL|\(\?\)/.test(t)) return {ic:'🕐',col:'var(--warning)'};
+  if(/NO CUADRA|SOBRANT|DISCREPANC|FALTA|INCOMPLET|NO COINCID|DE M[AÁ]S/.test(t)) return {ic:'❌',col:'var(--danger)'};  // ❌
+  if(/CUADRA/.test(t)) return {ic:'✅',col:'var(--success)'};                      // ✅
+  return {ic:'❌',col:'var(--danger)'};                                            // por defecto: problema
+}
 function cerrarModal(id){document.getElementById(id).classList.remove('open');}
 function abrirModal(id){document.querySelectorAll('.overlay.open').forEach(function(o){o.classList.remove('open');});document.getElementById(id).classList.add('open');}
 function toast(msg,tipo){var t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(tipo==='ok'?' t-ok':tipo==='err'?' t-err':tipo==='warn'?' t-warn':'');setTimeout(function(){t.className='toast';},4000);}
@@ -616,12 +626,12 @@ function renderOrdenesBody(){
       var gcol=gd.cuadra===true?'var(--success)':gd.cuadra===false?'var(--danger)':'var(--muted)';
       var gtxt=gd.cuadra===true?'\u2705 Gu\u00EDa #'+esc(gd.numeroGuia||'?')+' verificada: todo cuadra':gd.cuadra===false?'\uD83D\uDEA8 Gu\u00EDa #'+esc(gd.numeroGuia||'?')+': NO cuadra con la orden':'\u2139\uFE0F Gu\u00EDa #'+esc(gd.numeroGuia||'?')+' registrada sin comparar';
       h+='<div style="margin-top:6px;font-size:12px;font-weight:600;color:'+gcol+'">'+gtxt+(gd.fecha?' \u00B7 '+esc(gd.fecha):'')+(gd.pdfUrl?' \u00B7 <a href="'+esc(gd.pdfUrl)+'" target="_blank" style="color:var(--info)">ver gu\u00EDa</a>':'')+'</div>';
-      if(gd.cuadra===false&&gd.discrepancias&&gd.discrepancias.length){
-        gd.discrepancias.forEach(function(dd){h+='<div style="font-size:11px;color:var(--danger);padding-left:12px;margin-top:2px">\u2022 '+esc(dd)+'</div>';});
+      if(gd.discrepancias&&gd.discrepancias.length){
+        gd.discrepancias.forEach(function(dd){var ic=veoIcono(dd);h+='<div style="font-size:11px;color:'+ic.col+';padding-left:12px;margin-top:2px">'+ic.ic+' '+esc(dd)+'</div>';});
       }
       if(gd.revisarManualmente&&gd.revisarManualmente.length){
         h+='<div style="font-size:11px;color:var(--warning);font-weight:600;margin-top:4px">\uD83D\uDC40 Revisar a ojo (letra dudosa):</div>';
-        gd.revisarManualmente.forEach(function(dd){h+='<div style="font-size:11px;color:var(--warning);padding-left:12px;margin-top:2px">\u2022 '+esc(dd)+'</div>';});
+        gd.revisarManualmente.forEach(function(dd){h+='<div style="font-size:11px;color:var(--warning);padding-left:12px;margin-top:2px">\uD83D\uDD50 '+esc(dd)+'</div>';});
       }
     }
     h+='<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">';
