@@ -626,6 +626,9 @@ function renderOrdenesBody(){
       var gcol=gd.cuadra===true?'var(--success)':gd.cuadra===false?'var(--danger)':'var(--muted)';
       var gtxt=gd.cuadra===true?'\u2705 Gu\u00EDa #'+esc(gd.numeroGuia||'?')+' verificada: todo cuadra':gd.cuadra===false?'\uD83D\uDEA8 Gu\u00EDa #'+esc(gd.numeroGuia||'?')+': NO cuadra con la orden':'\u2139\uFE0F Gu\u00EDa #'+esc(gd.numeroGuia||'?')+' registrada sin comparar';
       h+='<div style="margin-top:6px;font-size:12px;font-weight:600;color:'+gcol+'">'+gtxt+(gd.fecha?' \u00B7 '+esc(gd.fecha):'')+(gd.pdfUrl?' \u00B7 <a href="'+esc(gd.pdfUrl)+'" target="_blank" style="color:var(--info)">ver gu\u00EDa</a>':'')+'</div>';
+      if(gd.cuadran&&gd.cuadran.length){
+        gd.cuadran.forEach(function(dd){h+='<div style="font-size:11px;color:var(--success);padding-left:12px;margin-top:2px">✅ '+esc(dd)+'</div>';});
+      }
       if(gd.discrepancias&&gd.discrepancias.length){
         gd.discrepancias.forEach(function(dd){var ic=veoIcono(dd);h+='<div style="font-size:11px;color:'+ic.col+';padding-left:12px;margin-top:2px">'+ic.ic+' '+esc(dd)+'</div>';});
       }
