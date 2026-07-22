@@ -899,7 +899,9 @@ var EST1_OPCIONES=['SIN CONTACTAR','CONTACTADO','NO CONTESTA','CERRADO','NO INTE
 var RESULTADO_MENU=[['CONTACTADO','Contactado'],['NO CONTESTA','No contesta'],['PRESUPUESTO ENVIADO','Presupuesto enviado'],['VENTA','Venta cerrada'],['NO INTERESADO','No interesado']];
 function getClientes(){if(!Array.isArray(DB.clientes))DB.clientes=[];return DB.clientes;}
 function est1De(cl){return ((cl.estado1||'').trim()||'SIN CONTACTAR').toUpperCase();}
-function proxVencido(cl){var d=diasRestantes(cl.proximoContacto);return d!==null&&d<0;}
+// Cliente finalizado: ya compro (CERRADO) o no interesado. El sistema no lo recuerda mas.
+function estaFinalizado(cl){var e=est1De(cl);return e==='CERRADO'||e==='NO INTERESADO';}
+function proxVencido(cl){if(estaFinalizado(cl))return false;var d=diasRestantes(cl.proximoContacto);return d!==null&&d<0;}
 function telWA(t){var n=String(t||'').replace(/[^0-9]/g,'');return n?('https://wa.me/'+n):'';}
 function usuarioPorNombre(n){return DB.usuarios.find(function(u){return u.nombre===n;});}
 // Guarda el ID de suscripción push de ESTE aparato dentro del usuario que
@@ -976,6 +978,22 @@ function notificarProximoContacto(cl){
     toast('Recordatorio enviado a '+dest.map(function(u){return u.nombre.split(' ')[0];}).join(', '),'ok');
   }catch(e){console.log('notif crm err',e);}
 }
+// Redes/fuentes que disparan el anuncio de "Nuevo lead" al grupo de WhatsApp
+var REDES_LEAD=['WHATSAPP','WHATSSAP','WSP','WA','FACEBOOK','FB','INSTAGRAM','IG','TIKTOK','TELEGRAM'];
+// Al agregar un cliente con red social conocida, avisa al webhook para que lo
+// anuncie en el grupo. Se dispara una sola vez por cliente (leadNotificado).
+function notificarNuevoLeadGrupo(cl){
+  try{
+    if(!cl||cl.leadNotificado||!cl.nombre)return;
+    var red=(cl.redSocial||'').toString().trim().toUpperCase();
+    if(REDES_LEAD.indexOf(red)<0)return;
+    cl.leadNotificado=true;cl.leadNotificadoFecha=fecha();
+    fetch('https://veoyoca-webhook.onrender.com/nuevo-lead-crm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      token:'veoyoca-leads-2026',
+      nombre:cl.nombre,telefono:cl.telefono||'',correo:cl.correo||'',producto:cl.producto||'',ciudad:cl.ciudad||'',notas:cl.notas||'',red:red,vendedor:cl.vendedor||''
+    })}).then(function(r){return r.json();}).then(function(d){if(d&&d.ok)toast('Lead anunciado en el grupo','ok');}).catch(function(e){console.log('nuevo-lead-crm err',e);});
+  }catch(e){console.log('notif lead grupo err',e);}
+}
 function chipCliente(txt,bg,col){return '<span class="card-vend" style="background:'+bg+';color:'+col+';margin-right:4px">'+esc(txt)+'</span>';}
 function renderVentas(c){
   var cls=getClientes();
@@ -1006,7 +1024,7 @@ function renderVentas(c){
     +'<button class="btn btn-ghost btn-sm" onclick="exportarClientesCSV()">CSV</button>'
     +'<button class="btn btn-green btn-sm" style="margin-left:auto" onclick="abrirCliente(null)">+ Nuevo cliente</button>'
     +'</div>';
-  var pendCt=cls.filter(function(x){var d=diasRestantes(x.proximoContacto);if(d===null||d>0)return false;return SESSION.rol==='admin'||x.vendedor===SESSION.nombre;});
+  var pendCt=cls.filter(function(x){if(estaFinalizado(x))return false;var d=diasRestantes(x.proximoContacto);if(d===null||d>0)return false;return SESSION.rol==='admin'||x.vendedor===SESSION.nombre;});
   var bannerCt=pendCt.length?'<div onclick="var s=document.getElementById(\'v-est1\');if(s){s.value=\'__VENC__\';filtrarVentas();}" style="background:var(--warning);color:#fff;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;justify-content:space-between;gap:8px"><span>\uD83D\uDCC5 '+pendCt.length+' contacto'+(pendCt.length>1?'s':'')+' para hoy o vencido'+(pendCt.length>1?'s':'')+(SESSION.rol==='admin'?' (todos)':' tuyos')+'</span><span style="font-size:11px;opacity:.85">Toca para ver \u2192</span></div>':'';
   c.innerHTML=statsBar+bannerCt+toolbar+'<div id="ventas-lista"></div>';
   filtrarVentas();
@@ -1020,7 +1038,7 @@ function clientesFiltrados(){
     var texto=((cl.nombre||'')+' '+(cl.telefono||'')+' '+(cl.producto||'')+' '+(cl.ciudad||'')+' '+(cl.tipoNegocio||'')).toLowerCase();
     var mb=!b||texto.indexOf(b)>=0;
     var mv=!fv||cl.vendedor===fv;
-    var me=!fe||(fe==='__VENC__'?(function(){var d=diasRestantes(cl.proximoContacto);return d!==null&&d<=0;})():est1De(cl)===fe);
+    var me=!fe||(fe==='__VENC__'?(function(){if(estaFinalizado(cl))return false;var d=diasRestantes(cl.proximoContacto);return d!==null&&d<=0;})():est1De(cl)===fe);
     return mb&&mv&&me;
   });
 }
@@ -1147,6 +1165,7 @@ function crmCampo(id,campo,valor){
   clearTimeout(CRM_SAVE_TIMER);
   CRM_SAVE_TIMER=setTimeout(function(){guardarDB();},900);
   if(campo==='proximoContacto'&&valor)notificarProximoContacto(cl);
+  if(campo==='redSocial'&&valor)notificarNuevoLeadGrupo(cl);
 }
 async function crmQuickAdd(inp){
   var nombre=(inp.value||'').trim();if(!nombre)return;
@@ -1281,6 +1300,7 @@ async function guardarCliente(){
   if(esNuevo)getClientes().push(cl);
   registrarBitacora(cl.id,(esNuevo?'CLIENTE CRM creado: ':'CLIENTE CRM editado: ')+nombre+' por '+SESSION.nombre);
   if(cl.proximoContacto&&cl.proximoContacto!==proxAntes)notificarProximoContacto(cl);
+  if(cl.redSocial)notificarNuevoLeadGrupo(cl);
   await guardarDB();
   cerrarModal('modal-cliente');
   if(TAB==='ventas')renderVentas(document.getElementById('content'));
