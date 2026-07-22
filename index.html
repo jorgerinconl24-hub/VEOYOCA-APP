@@ -226,7 +226,7 @@ table.crm{border-collapse:collapse;font-size:12px;min-width:1780px}
 <div class="sfield"><label>Cantidad de muebles</label><input type="number" id="c-cantidad" placeholder="0" min="0"></div></div>
 <div class="sfield-row"><div class="sfield"><label>Red social/Recomendado</label><input type="text" id="c-red" list="dl-red" placeholder="Ej: INSTAGRAM"></div>
 <div class="sfield"><label>Tipo de negocio</label><input type="text" id="c-tipo" list="dl-tipo" placeholder="Ej: CONCESIONARIO"></div></div>
-<div class="sfield-row"><div class="sfield"><label>Estado 1</label><select id="c-est1"><option value="SIN CONTACTAR">Sin contactar</option><option value="CONTACTADO">Contactado</option></select></div>
+<div class="sfield-row"><div class="sfield"><label>Estado 1</label><select id="c-est1"><option value="SIN CONTACTAR">Sin contactar</option><option value="CONTACTADO">Contactado</option><option value="NO CONTESTA">No contesta</option><option value="A COTIZAR">A cotizar</option><option value="CERRADO">Cerrado</option><option value="NO INTERESADO">No interesado</option></select></div>
 <div class="sfield"><label>Estado 2</label><select id="c-est2"><option value="">Sin estado</option><option value="PRESUPUESTO ENVIADO">Presupuesto enviado</option><option value="EN NEGOCIACION">En negociaci&#xF3;n</option><option value="COMPRO">Compr&#xF3;</option><option value="NO COMPRO">No compr&#xF3;</option></select></div></div>
 <div class="sfield-row"><div class="sfield"><label>&#xDA;ltimo contacto</label><input type="date" id="c-ultimo"></div>
 <div class="sfield"><label>Pr&#xF3;ximo contacto</label><input type="date" id="c-proximo"></div></div>
@@ -893,7 +893,10 @@ function enviarReporteGrupo(){
 // ═══════════════════════════════════════════════════════════
 var VENTAS_VISTA=localStorage.getItem('veo_ventas_vista')||'tabla';
 var CLIENTE_EDIT_ID=null;
-var EST1_OPCIONES=['SIN CONTACTAR','CONTACTADO'];
+var EST1_OPCIONES=['SIN CONTACTAR','CONTACTADO','NO CONTESTA','CERRADO','NO INTERESADO'];
+// Menu rapido "Resultado" [valor interno, etiqueta]. Alimenta el cierre del dia
+// y el resumen semanal (atendidos / presupuestos / ventas).
+var RESULTADO_MENU=[['CONTACTADO','Contactado'],['NO CONTESTA','No contesta'],['PRESUPUESTO ENVIADO','Presupuesto enviado'],['VENTA','Venta cerrada'],['NO INTERESADO','No interesado']];
 function getClientes(){if(!Array.isArray(DB.clientes))DB.clientes=[];return DB.clientes;}
 function est1De(cl){return ((cl.estado1||'').trim()||'SIN CONTACTAR').toUpperCase();}
 function proxVencido(cl){var d=diasRestantes(cl.proximoContacto);return d!==null&&d<0;}
@@ -1038,11 +1041,32 @@ function proxContactoHTML(cl){
   var txt=d<0?('vencido '+Math.abs(d)+'d'):d===0?'HOY':('en '+d+'d');
   return '<div style="font-size:11px;color:'+col+';font-weight:'+(d<=0?'700':'400')+';margin-top:3px">\uD83D\uDCC5 Pr\u00F3ximo contacto: '+esc(cl.proximoContacto)+' \u00B7 '+txt+'</div>';
 }
+var EST1_COLOR={'CONTACTADO':['#dcfce7','#166534'],'A COTIZAR':['#dbeafe','#1d4ed8'],'CERRADO':['#fef9c3','#854d0e'],'NO CONTESTA':['#ffedd5','#9a3412'],'NO INTERESADO':['#fee2e2','#991b1b'],'SIN CONTACTAR':['#f3f4f6','#6b7280']};
 function badgeEst1(cl){
   var e=est1De(cl);
-  if(e==='CONTACTADO')return '<span class="badge b-success">Contactado</span>';
-  if(e==='SIN CONTACTAR')return '<span class="badge b-muted">Sin contactar</span>';
-  return '<span class="badge b-info">'+esc(e)+'</span>';
+  var c=EST1_COLOR[e]||['#e0e7ff','#3730a3'];
+  return '<span class="badge" style="background:'+c[0]+';color:'+c[1]+'">'+esc(e==='SIN CONTACTAR'?'Sin contactar':e==='CONTACTADO'?'Contactado':e)+'</span>';
+}
+// Registra un resultado como seguimiento y marca al cliente como atendido hoy
+function _logRes(cl,res){
+  cl.ultimoContacto=fecha();
+  cl.ultimaEdicion=fecha()+' '+hora();cl.editadoPor=SESSION?SESSION.nombre:'';
+  if(!Array.isArray(cl.seguimientos))cl.seguimientos=[];
+  cl.seguimientos.push({texto:'Resultado: '+res,fecha:fecha(),hora:hora(),usuario:SESSION?SESSION.nombre:'',resultado:res});
+}
+function marcarResultado(id,res){
+  if(!res)return;
+  var cl=getClientes().find(function(x){return x.id===id;});if(!cl)return;
+  if(res==='CONTACTADO')cl.estado1='CONTACTADO';
+  else if(res==='NO CONTESTA')cl.estado1='NO CONTESTA';
+  else if(res==='PRESUPUESTO ENVIADO'){cl.estado2='PRESUPUESTO ENVIADO';if(est1De(cl)==='SIN CONTACTAR')cl.estado1='CONTACTADO';}
+  else if(res==='VENTA'){cl.estado1='CERRADO';cl.estado2='COMPRO';}
+  else if(res==='NO INTERESADO'){cl.estado1='NO INTERESADO';cl.estado2='NO COMPRO';}
+  _logRes(cl,res);
+  registrarBitacora(cl.id,'Resultado: '+res+' por '+(SESSION?SESSION.nombre:''));
+  guardarDB();
+  toast('Marcado: '+res,'ok');
+  filtrarVentas();
 }
 function clienteCardHTML(cl){
   var h='<div class="card"><div class="card-head"><div class="card-body">';
@@ -1062,6 +1086,7 @@ function clienteCardHTML(cl){
   h+='<div class="card-foot">';
   var wa=telWA(cl.telefono);
   if(wa)h+='<a href="'+wa+'" target="_blank" class="btn btn-green btn-sm" style="text-decoration:none">\uD83D\uDCAC WhatsApp</a>';
+  h+='<select class="btn btn-ghost btn-sm" style="padding:4px 6px" onchange="marcarResultado(\''+cl.id+'\',this.value)"><option value="">Resultado \u25BE</option>'+RESULTADO_MENU.map(function(o){return '<option value="'+esc(o[0])+'">'+esc(o[1])+'</option>';}).join('')+'</select>';
   h+='<button class="btn btn-ghost btn-sm" onclick="abrirCliente(\''+cl.id+'\',true)">+ Seguimiento</button>';
   h+='<button class="btn btn-ghost btn-sm" onclick="abrirCliente(\''+cl.id+'\')">Editar</button>';
   h+='</div></div>';
@@ -1079,7 +1104,7 @@ function filtrarVentas(){
     lista.forEach(function(cl){var e=est1De(cl);if(!grupos[e])grupos[e]=[];grupos[e].push(cl);});
     var h='<div class="kb-wrap">';
     Object.keys(grupos).forEach(function(e){
-      var col=e==='CONTACTADO'?'#16a34a':e==='SIN CONTACTAR'?'#6b7280':'#1d4ed8';
+      var col=(e==='CONTACTADO'||e==='CERRADO')?'#16a34a':e==='SIN CONTACTAR'?'#6b7280':e==='NO INTERESADO'?'#dc2626':e==='NO CONTESTA'?'#ea580c':'#1d4ed8';
       h+='<div class="kb-col"><div class="kb-head" style="color:'+col+'">'+esc(e)+'<span class="kb-count">'+grupos[e].length+'</span></div>';
       grupos[e].forEach(function(cl){
         h+='<div class="kb-card" onclick="abrirCliente(\''+cl.id+'\')">';
@@ -1106,10 +1131,19 @@ function filtrarVentas(){
 var CRM_SAVE_TIMER=null;
 function crmCampo(id,campo,valor){
   var cl=getClientes().find(function(x){return x.id===id;});if(!cl)return;
+  var prev=cl[campo];
   if(['ciudad','producto','redSocial','tipoNegocio'].indexOf(campo)>=0)valor=String(valor||'').trim().toUpperCase();
   if(campo==='cantidadMuebles')valor=valor?parseInt(valor):'';
   cl[campo]=valor;
   cl.ultimaEdicion=fecha()+' '+hora();cl.editadoPor=SESSION.nombre;
+  // Registrar en Estado 1 o Estado 2 cuenta como atendido hoy y alimenta el resumen semanal
+  if(campo==='estado1'&&valor&&valor!=='SIN CONTACTAR'&&valor!==prev){
+    _logRes(cl,valor==='CERRADO'?'VENTA':valor);
+  }
+  if(campo==='estado2'&&valor&&valor!==prev){
+    if(valor==='PRESUPUESTO ENVIADO')_logRes(cl,'PRESUPUESTO ENVIADO');
+    else if(valor==='COMPRO')_logRes(cl,'VENTA');
+  }
   clearTimeout(CRM_SAVE_TIMER);
   CRM_SAVE_TIMER=setTimeout(function(){guardarDB();},900);
   if(campo==='proximoContacto'&&valor)notificarProximoContacto(cl);
