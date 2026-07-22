@@ -1096,6 +1096,7 @@ function clienteCardHTML(cl){
   if(cl.tipoNegocio)h+=chipCliente(cl.tipoNegocio,'#f3e8ff','#7e22ce');
   if(cl.redSocial)h+=chipCliente(cl.redSocial,'#f3f4f6','#374151');
   if(cl.estado2)h+=chipCliente(cl.estado2,'var(--ibg)','var(--info)');
+  if(cl.visitoOficina)h+=chipCliente('🏢 Visitó oficina'+(cl.fechaVisita?' '+esc(cl.fechaVisita):''),'#dcfce7','#166534');
   h+='</div>';
   h+=proxContactoHTML(cl);
   var extra=cl.estatusObjecion||cl.planAccion||cl.notas||'';
@@ -1162,6 +1163,8 @@ function crmCampo(id,campo,valor){
     if(valor==='PRESUPUESTO ENVIADO')_logRes(cl,'PRESUPUESTO ENVIADO');
     else if(valor==='COMPRO')_logRes(cl,'VENTA');
   }
+  // Al marcar la visita a la oficina a mano, se registra la fecha automaticamente
+  if(campo==='visitoOficina'){ if(valor==='SÍ'){ if(!cl.fechaVisita)cl.fechaVisita=fecha(); } else { cl.fechaVisita=''; } }
   clearTimeout(CRM_SAVE_TIMER);
   CRM_SAVE_TIMER=setTimeout(function(){guardarDB();},900);
   if(campo==='proximoContacto'&&valor)notificarProximoContacto(cl);
@@ -1197,12 +1200,12 @@ function renderTablaCRM(el,lista){
   var vendArr=Object.keys(vends).sort();
   var EST2=['PRESUPUESTO ENVIADO','EN NEGOCIACION','COMPRO','NO COMPRO'];
   var h='<div class="crm-wrap"><table class="crm" id="tabla-crm"><thead><tr>';
-  ['Nombre','Tel\u00E9fono','Vendedor','Producto/Servicio','Ciudad','Red social','Tipo de negocio','Estatus/Objeci\u00F3n','Plan de acci\u00F3n','Cant.','Porqu\u00E9 compr\u00F3','Porqu\u00E9 NO compr\u00F3','\u00DAlt. contacto','Pr\u00F3x. contacto','Estado 1','Notas','Estado 2'].forEach(function(t,i){
+  ['Nombre','Tel\u00E9fono','Vendedor','Producto/Servicio','Ciudad','Red social','Tipo de negocio','Estatus/Objeci\u00F3n','Plan de acci\u00F3n','Cant.','Porqu\u00E9 compr\u00F3','Porqu\u00E9 NO compr\u00F3','\u00DAlt. contacto','Pr\u00F3x. contacto','Estado 1','Notas','Estado 2','Visit\u00F3 oficina'].forEach(function(t,i){
     h+='<th'+(i===0?' class="colfija"':'')+'>'+t+'</th>';
   });
   h+='</tr></thead><tbody>';
   // Fila de alta rapida, como la fila "Nuevo" de Notion
-  h+='<tr><td class="colfija" style="background:var(--ibg)"><input id="crm-nuevo" placeholder="+ Nuevo cliente (Enter)" onkeydown="if(event.key===\'Enter\')crmQuickAdd(this)"></td><td colspan="16" style="padding:8px 10px;font-size:11px;color:var(--muted);background:var(--ibg)">Escribe el nombre, presiona Enter y llena las casillas directamente \u2014 los cambios se guardan solos. Toca \uD83D\uDCC2 para abrir la ficha y los seguimientos.</td></tr>';
+  h+='<tr><td class="colfija" style="background:var(--ibg)"><input id="crm-nuevo" placeholder="+ Nuevo cliente (Enter)" onkeydown="if(event.key===\'Enter\')crmQuickAdd(this)"></td><td colspan="17" style="padding:8px 10px;font-size:11px;color:var(--muted);background:var(--ibg)">Escribe el nombre, presiona Enter y llena las casillas directamente \u2014 los cambios se guardan solos. Toca \uD83D\uDCC2 para abrir la ficha y los seguimientos.</td></tr>';
   lista.forEach(function(cl){
     var id=cl.id;
     h+='<tr>';
@@ -1223,6 +1226,7 @@ function renderTablaCRM(el,lista){
     h+='<td>'+celdaSelect(id,'estado1',est1De(cl),EST1_OPCIONES)+'</td>';
     h+='<td style="min-width:210px">'+celdaInput(id,'notas',cl.notas)+'</td>';
     h+='<td style="min-width:170px">'+celdaSelect(id,'estado2',cl.estado2||'',EST2,'\u2014')+'</td>';
+    h+='<td style="min-width:130px">'+celdaSelect(id,'visitoOficina',cl.visitoOficina||'',['S\u00cd'],'\u2014')+(cl.fechaVisita?'<div style="font-size:10px;color:var(--muted)">'+esc(cl.fechaVisita)+'</div>':'')+'</td>';
     h+='</tr>';
   });
   h+='</tbody></table></div>';
