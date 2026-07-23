@@ -178,6 +178,7 @@ table.crm{border-collapse:collapse;font-size:12px;min-width:1780px}
 <button class="nav-btn" onclick="goTab('ia',this)" id="nb-ia"><div class="nav-icon">&#x1F916;</div><div>IA</div></button>
 <button class="nav-btn" onclick="goTab('plan',this)" id="nb-plan"><div class="nav-icon">&#x1F5FA;</div><div>Rutas</div></button>
 <button class="nav-btn" onclick="goTab('ventas',this)" id="nb-ventas"><div class="nav-icon">&#x1F4BC;</div><div>Ventas</div></button>
+<button class="nav-btn" onclick="goTab('cotizar',this)" id="nb-cotizar"><div class="nav-icon">&#x1F3D7;&#xFE0F;</div><div>Cotizar</div></button>
 <button class="nav-btn" onclick="goTab('notif',this)" id="nb-notif" style="position:relative"><div class="nav-icon">&#x1F514;</div><div>Alertas</div></button>
 <button class="nav-btn" id="nb-admin" onclick="goTab('admin',this)" style="display:none"><div class="nav-icon">&#x2699;&#xFE0F;</div><div>Admin</div></button>
 </div></div>
@@ -408,15 +409,100 @@ function mostrarPerfil(){
   abrirModal('modal-perfil');
 }
 
+/* ═══════════════════════════════════════════════════════════════
+ * COTIZADOR DE RACKS (lista SOL 153, columna BL.GRIS.NEGRO, sin IVA)
+ * Mismo motor que el bot de WhatsApp. Lógica confirmada con Jorge.
+ * ═══════════════════════════════════════════════════════════════ */
+var RKV_MARCO_IND={2.00:{0.60:71.14,0.70:73.26,0.80:75.44,0.90:77.68,1.00:79.97,1.10:82.26,1.20:84.61},2.50:{0.60:106.03,0.70:108.53,0.80:111.11,0.90:113.75,1.00:116.45,1.10:119.23,1.20:122.00},3.00:{0.60:124.71,0.70:127.08,0.80:129.45,0.90:132.02,1.00:134.59,1.10:137.23,1.20:139.87},3.50:{0.60:136.90,0.70:139.40,0.80:141.97,0.90:144.61,1.00:147.32,1.10:150.09,1.20:152.87},4.00:{0.60:152.33,0.70:154.83,0.80:157.40,0.90:160.04,1.00:162.75,1.10:165.53,1.20:168.30},4.50:{0.60:171.01,0.70:173.38,0.80:175.75,0.90:178.32,1.00:180.89,1.10:183.53,1.20:186.17},5.00:{0.60:186.44,0.70:188.81,0.80:191.18,0.90:193.75,1.00:196.32,1.10:198.96,1.20:201.60},5.50:{0.60:201.88,0.70:204.24,0.80:206.61,0.90:209.19,1.00:211.76,1.10:214.40,1.20:217.04},6.00:{0.60:217.31,0.70:219.68,0.80:222.05,0.90:224.62,1.00:227.19,1.10:229.83,1.20:232.47}};
+var RKV_VIGA_IND_ESC={0.10:{1.25:27.80,1.50:32.43,1.75:37.07,2.00:41.70,2.25:46.34,2.50:62.16,2.75:67.91,3.00:73.67},0.125:{1.25:30.53,1.50:35.71,1.75:40.89,2.00:46.07,2.25:51.24,2.50:68.93,2.75:75.36,3.00:81.79},0.15:{1.25:34.62,1.50:40.61,1.75:46.61,2.00:52.61,2.25:58.61,2.50:79.08,2.75:86.53,3.00:93.97}};
+var RKV_VIGA_IND_CUA={0.10:{1.25:30.18,1.50:35.30,1.75:40.41,2.00:45.52,2.25:50.63,2.50:68.08,2.75:74.43,3.00:80.78},0.125:{1.25:32.91,1.50:38.57,1.75:44.22,2.00:49.88,2.25:55.54,2.50:74.85,2.75:81.88,3.00:88.90},0.15:{1.25:37.00,1.50:43.48,1.75:49.95,2.00:56.42,2.25:62.90,2.50:85.01,2.75:93.04,3.00:101.08}};
+var RKV_RES_IND={0.10:{1.25:4514,1.50:3761,1.75:3224,2.00:2821,2.25:2508,2.50:2257,2.75:2052,3.00:1880},0.125:{1.25:6480,1.50:5400,1.75:4629,2.00:4050,2.25:3601,2.50:3240,2.75:2945,3.00:2700},0.15:{1.25:8849,1.50:7375,1.75:6321,2.00:5531,2.25:4916,2.50:4424,2.75:4022,3.00:3687}};
+var RKV_MARCO_MINI={2.00:{0.60:46.40,0.70:48.28,0.80:50.19},2.50:{0.60:54.71,0.70:56.49,0.80:58.37},3.00:{0.60:61.31,0.70:63.08,0.80:64.96},3.50:{0.60:67.92,0.70:69.69,0.80:71.57},4.00:{0.60:93.25,0.70:95.70,0.80:98.32}};
+var RKV_VIGA_MINI_12={1.00:12.17,1.25:14.78,1.50:17.38,1.75:19.98,2.00:22.58,2.25:25.18,2.40:26.74};
+var RKV_VIGA_MINI_25={1.20:16.71,1.50:20.45,2.00:26.67,2.40:31.66};
+var RKV_RES_MINI_12={1.00:2500,1.25:2300,1.50:1900,1.75:1700,2.00:1500,2.25:1300,2.40:1200};
+var RKV_MARCO_LIGHT={1.20:{0.30:17.58,0.40:18.47,0.60:20.78,0.80:23.22,1.00:30.93},2.00:{0.30:24.90,0.40:25.44,0.60:27.75,0.80:30.19,1.00:37.90},2.40:{0.30:28.55,0.40:28.92,0.60:31.23,0.80:33.67,1.00:41.38}};
+var RKV_VIGA_LIGHT={1.25:{1.5:12.09,2.0:15.48},1.50:{1.5:14.15,2.0:18.21},1.75:{1.5:16.20,2.0:20.94},2.00:{1.5:18.26,2.0:23.68}};
+var RKV_RES_LIGHT={1.25:{1.5:470,2.0:620},1.50:{1.5:400,2.0:550},1.75:{1.5:320,2.0:470},2.00:{1.5:250,2.0:400}};
+var RKV_MODULO={'300-501':15.24,'300-502':9.72,'300-503':10.43,'300-504':13.86};
+function rkvSubir(v,ops){for(var i=0;i<ops.length;i++){if(v<=ops[i]+1e-9)return ops[i];}return null;}
+function rkvKeys(o){return Object.keys(o).map(Number).sort(function(a,b){return a-b;});}
+function rkv2(n){return Math.round(n*100)/100;}
+function rkvDescFondo(f){if(f>=0.80)return 0;if(f>=0.60)return 0.10;return 0.20;}
+function rkvNombreTipo(t){return t==='light'?'RACK LIGHT':(t==='mini'?'MINI RACK':'INDUSTRIAL');}
+function rkvVigaLight(largo,carga){var L=rkvSubir(largo,rkvKeys(RKV_RES_LIGHT));if(L===null)return null;var cals=[1.5,2.0];for(var i=0;i<cals.length;i++){if(RKV_RES_LIGHT[L][cals[i]]>=carga)return{largoViga:L,precio:RKV_VIGA_LIGHT[L][cals[i]],desc:'Viga rack light '+L.toFixed(2)+' '+cals[i].toFixed(1)+'mm'};}return null;}
+function rkvVigaMini(largo,carga){var L=rkvSubir(largo,rkvKeys(RKV_RES_MINI_12));if(L===null)return null;if(RKV_RES_MINI_12[L]>=carga)return{largoViga:L,precio:RKV_VIGA_MINI_12[L],desc:'Viga mini rack '+L.toFixed(2)+' 1.2mm'};if(RKV_RES_MINI_12[L]+500>=carga){var Lp=rkvSubir(L,rkvKeys(RKV_VIGA_MINI_25));if(Lp!==null)return{largoViga:L,precio:RKV_VIGA_MINI_25[Lp],desc:'Viga mini rack '+Lp.toFixed(2)+' 2.5mm (semipesada)'};}return null;}
+function rkvVigaInd(largo,carga,conMod){var L=rkvSubir(largo,rkvKeys(RKV_RES_IND[0.10]));if(L===null)return null;var tabla=conMod?RKV_VIGA_IND_ESC:RKV_VIGA_IND_CUA;var tv=conMod?'escalonada':'cuadrada';var secs=[0.10,0.125,0.15];for(var i=0;i<secs.length;i++){if(RKV_RES_IND[secs[i]][L]>=carga)return{largoViga:L,precio:tabla[secs[i]][L],desc:'Viga industrial '+tv+' '+L.toFixed(2)+' secc '+secs[i]};}return null;}
+function rkvMarco(tabla,alto,fondo){var A=rkvSubir(alto,rkvKeys(tabla));if(A===null)return null;var F=rkvSubir(fondo,rkvKeys(tabla[A]));if(F===null)return null;return{alto:A,fondo:F,precio:tabla[A][F]};}
+function rkvModsLight(largo,fondo){var d=rkvDescFondo(fondo),nFull=Math.floor(largo/0.40+1e-9),sobra=rkv2(largo-nFull*0.40),items=[];if(nFull>0)items.push({codigo:'300-504',tam:0.40,cant:nFull,precioUnit:rkv2(RKV_MODULO['300-504']*(1-d))});if(sobra>1e-9){var tam=sobra<=0.30+1e-9?0.30:0.40,cod=tam===0.30?'300-503':'300-504';items.push({codigo:cod,tam:sobra,cobradoComo:tam,cant:1,precioUnit:rkv2(RKV_MODULO[cod]*(1-d))});}return items;}
+function rkvModsMiniInd(largo,fondo,carga){var d=rkvDescFondo(fondo),cod=carga<=500?'300-502':'300-501',nFull=Math.floor(largo/0.20+1e-9),sobra=rkv2(largo-nFull*0.20),items=[];if(nFull>0)items.push({codigo:cod,tam:0.20,cant:nFull,precioUnit:rkv2(RKV_MODULO[cod]*(1-d))});if(sobra>1e-9)items.push({codigo:cod,tam:sobra,cobradoComo:0.20,cant:1,precioUnit:rkv2(RKV_MODULO[cod]*(1-d))});return items;}
+function rkvArmar(tipo,p){var marco,viga,mods;if(tipo==='light'){viga=rkvVigaLight(p.largo,p.cargaPorNivel);marco=rkvMarco(RKV_MARCO_LIGHT,p.alto,p.fondo);if(!viga||!marco)return null;if(p.conModulos)mods=rkvModsLight(p.largo,p.fondo);}else if(tipo==='mini'){viga=rkvVigaMini(p.largo,p.cargaPorNivel);marco=rkvMarco(RKV_MARCO_MINI,p.alto,p.fondo);if(!viga||!marco)return null;if(p.conModulos)mods=rkvModsMiniInd(p.largo,p.fondo,p.cargaPorNivel);}else{viga=rkvVigaInd(p.largo,p.cargaPorNivel,p.conModulos);marco=rkvMarco(RKV_MARCO_IND,p.alto,p.fondo);if(!viga||!marco)return null;if(p.conModulos)mods=rkvModsMiniInd(p.largo,p.fondo,p.cargaPorNivel);}var nMarcos=(tipo==='light')?2:(p.desglosada?1:2),nVigas=p.niveles*2,piezas=[];piezas.push({concepto:'Marco '+rkvNombreTipo(tipo).toLowerCase()+' '+marco.alto.toFixed(2)+'x'+marco.fondo.toFixed(2),cant:nMarcos,precioUnit:marco.precio,subtotal:rkv2(nMarcos*marco.precio)});piezas.push({concepto:viga.desc,cant:nVigas,precioUnit:viga.precio,subtotal:rkv2(nVigas*viga.precio)});if(p.conModulos&&mods){for(var i=0;i<mods.length;i++){var m=mods[i],ct=m.cant*p.niveles;var etq=m.cobradoComo?('Módulo '+m.codigo+' ('+m.tam.toFixed(2)+'→'+m.cobradoComo.toFixed(2)+')'):('Módulo '+m.codigo+' ('+m.tam.toFixed(2)+')');piezas.push({concepto:etq,cant:ct,precioUnit:m.precioUnit,subtotal:rkv2(ct*m.precioUnit)});}}var total=rkv2(piezas.reduce(function(s,x){return s+x.subtotal;},0));return{tipo:tipo,piezas:piezas,total:total,marco:marco,viga:viga};}
+function cotizarRack(params){var p={largo:+params.largo,alto:+params.alto,fondo:+params.fondo,niveles:+params.niveles,cargaPorNivel:+params.cargaPorNivel,conModulos:!!params.conModulos,desglosada:!!params.desglosada};var reqs=['largo','alto','fondo','niveles','cargaPorNivel'];for(var i=0;i<reqs.length;i++){if(!(p[reqs[i]]>0))return{ok:false,error:'Falta o es inválido: '+reqs[i]};}var notas=[],tipos=['light','mini','industrial'];for(var t=0;t<tipos.length;t++){var c=rkvArmar(tipos[t],p);if(c){if(c.marco.alto>p.alto+1e-9)notas.push('Alto '+p.alto.toFixed(2)+' no está en lista → marco de '+c.marco.alto.toFixed(2)+'.');if(c.marco.fondo>p.fondo+1e-9)notas.push('Fondo '+p.fondo.toFixed(2)+' no está en lista → marco de '+c.marco.fondo.toFixed(2)+'.');if(c.viga.largoViga>p.largo+1e-9)notas.push('Largo '+p.largo.toFixed(2)+' → viga estándar de '+c.viga.largoViga.toFixed(2)+'.');var precio1=rkv2(c.total*1.05),precio2=null,factorBs=null;if(params.tasaBCV>0&&params.tasaBinance>0){factorBs=params.tasaBinance/params.tasaBCV;precio2=rkv2(precio1*factorBs);}return{ok:true,tipo:c.tipo,tipoNombre:rkvNombreTipo(c.tipo),piezas:c.piezas,costo:c.total,precio1:precio1,precio2:precio2,factorBs:factorBs,tasaBCV:params.tasaBCV||null,tasaBinance:params.tasaBinance||null,notas:notas,params:p};}}return{ok:false,error:'Ningún tipo de rack del catálogo aguanta esa carga/medida. Revísalo manualmente.'};}
+var RKV_TASAS=null;
+function rkvCargarTasas(cb){fetch('https://veoyoca-webhook.onrender.com/tasas').then(function(r){return r.json();}).then(function(t){RKV_TASAS=t;if(cb)cb(t);}).catch(function(){if(cb)cb(null);});}
+function renderCotizar(c){
+  c.innerHTML='<div class="section-pad" style="max-width:520px;margin:0 auto">'
+    +'<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:14px">'
+    +'<div style="font-size:15px;font-weight:700;color:#1a1a2e;margin-bottom:4px">🏗️ Cotizador de racks</div>'
+    +'<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Ingresa las medidas y la carga por nivel. El sistema elige el rack más económico que aguante y te da los dos precios.</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+    +cot_campo('Largo (m)','ck-largo','2.00')+cot_campo('Alto (m)','ck-alto','3.00')
+    +cot_campo('Fondo/profundidad (m)','ck-fondo','0.80')+cot_campo('Niveles','ck-niveles','4')
+    +cot_campo('Carga por nivel (kg)','ck-carga','500')
+    +'<div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">¿Lleva módulos?</label><select id="ck-mod" style="width:100%;padding:9px;border:1px solid #d1d5db;border-radius:8px;font-size:14px"><option value="si">Sí, con módulos</option><option value="no">No, sin módulos</option></select></div>'
+    +'</div>'
+    +'<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;color:#374151"><input type="checkbox" id="ck-desg"> Cotización desglosada (cuerpo adicional, 1 marco)</label>'
+    +'<button class="btn btn-dark" style="width:100%;margin-top:14px" onclick="calcularCotizacion()">Calcular precio</button>'
+    +'</div>'
+    +'<div id="ck-resultado"></div>'
+    +'</div>';
+  rkvCargarTasas(null); // precarga las tasas del día
+}
+function cot_campo(label,id,ph){return '<div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">'+label+'</label><input type="number" step="0.01" id="'+id+'" placeholder="'+ph+'" style="width:100%;padding:9px;border:1px solid #d1d5db;border-radius:8px;font-size:14px"></div>';}
+function cot_val(id){var el=document.getElementById(id);return el?parseFloat(el.value):NaN;}
+function calcularCotizacion(){
+  var params={largo:cot_val('ck-largo'),alto:cot_val('ck-alto'),fondo:cot_val('ck-fondo'),niveles:cot_val('ck-niveles'),cargaPorNivel:cot_val('ck-carga'),conModulos:document.getElementById('ck-mod').value==='si',desglosada:document.getElementById('ck-desg').checked};
+  var res=document.getElementById('ck-resultado');
+  var reqs=['largo','alto','fondo','niveles','cargaPorNivel'];for(var i=0;i<reqs.length;i++){if(!(params[reqs[i]]>0)){res.innerHTML='<div style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:10px;padding:12px;font-size:13px">Completa todos los campos con números válidos.</div>';return;}}
+  res.innerHTML='<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px;text-align:center;font-size:13px;color:var(--muted)">Consultando tasas del día y calculando...</div>';
+  var hacer=function(t){
+    params.tasaBCV=t&&t.bcv?t.bcv:0;params.tasaBinance=t&&t.binance?t.binance:0;
+    var r=cotizarRack(params);
+    if(!r.ok){res.innerHTML='<div style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:10px;padding:12px;font-size:13px">⚠️ '+r.error+'</div>';return;}
+    res.innerHTML=cot_render(r);
+  };
+  if(RKV_TASAS)hacer(RKV_TASAS);else rkvCargarTasas(hacer);
+}
+function cot_render(r){
+  var p=r.params;
+  var filas='';for(var i=0;i<r.piezas.length;i++){var x=r.piezas[i];filas+='<tr><td style="padding:6px 4px;border-bottom:1px solid #f0f0f0">'+x.concepto+'</td><td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:center">'+x.cant+'</td><td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right">'+x.precioUnit.toFixed(2)+'</td><td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600">'+x.subtotal.toFixed(2)+'</td></tr>';}
+  var bs=r.precio2!=null?('<div style="flex:1;background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;padding:12px;text-align:center"><div style="font-size:11px;color:#4338ca;font-weight:600">PAGANDO EN BOLÍVARES</div><div style="font-size:22px;font-weight:800;color:#3730a3">$'+r.precio2.toFixed(2)+'</div><div style="font-size:10px;color:#6366f1">BCV '+r.tasaBCV+' · Binance '+r.tasaBinance+'</div></div>'):('<div style="flex:1;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:12px;text-align:center;font-size:12px;color:#c2410c">No se pudieron consultar las tasas ahora. Solo precio en dólares.</div>');
+  var notas=(r.notas&&r.notas.length)?('<div style="font-size:11px;color:var(--muted);margin-top:10px;font-style:italic">'+r.notas.join(' ')+'</div>'):'';
+  var texto='🏗️ *Cotización de rack* — '+r.tipoNombre+'\n'+p.largo.toFixed(2)+' largo × '+p.alto.toFixed(2)+' alto × '+p.fondo.toFixed(2)+' fondo · '+p.niveles+' niveles · '+p.cargaPorNivel+' kg/nivel · '+(p.conModulos?'con módulos':'sin módulos')+'\n\n💵 Precio: $'+r.precio1.toFixed(2)+' (USD)\n'+(r.precio2!=null?'💱 Pagando en Bs: $'+r.precio2.toFixed(2)+' (BCV '+r.tasaBCV+' · Binance '+r.tasaBinance+')\n':'')+'\nPrecios sin IVA.';
+  return '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px">'
+    +'<div style="font-size:13px;font-weight:700;color:#1a1a2e;margin-bottom:10px">Resultado — '+r.tipoNombre+'</div>'
+    +'<div style="display:flex;gap:10px;margin-bottom:12px">'
+    +'<div style="flex:1;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:12px;text-align:center"><div style="font-size:11px;color:#047857;font-weight:600">EN DÓLARES</div><div style="font-size:22px;font-weight:800;color:#065f46">$'+r.precio1.toFixed(2)+'</div><div style="font-size:10px;color:#10b981">costo '+r.costo.toFixed(2)+' +5%</div></div>'
+    +bs+'</div>'
+    +'<div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:4px">Desglose de piezas</div>'
+    +'<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="color:var(--muted)"><th style="text-align:left;padding:4px">Pieza</th><th style="padding:4px">Cant</th><th style="text-align:right;padding:4px">Unit</th><th style="text-align:right;padding:4px">Subtotal</th></tr></thead><tbody>'+filas+'</tbody></table>'
+    +notas
+    +'<button class="btn btn-ghost btn-sm" style="width:100%;margin-top:12px" onclick="cot_copiar(this)" data-msg="'+encodeURIComponent(texto)+'">📋 Copiar cotización</button>'
+    +'<div style="font-size:11px;color:var(--muted);text-align:center;margin-top:8px">Precios sin IVA</div>'
+    +'</div>';
+}
+function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg'));navigator.clipboard.writeText(msg).then(function(){toast('Cotización copiada','ok');}).catch(function(){toast('No se pudo copiar','err');});}
+
 function goTab(tab,btn){
   TAB=tab;document.querySelectorAll('.nav-btn').forEach(function(b){b.classList.remove('on');});if(btn)btn.classList.add('on');
-  var titulos={home:'Pedidos',entregar:'Despacho',nuevo:'Nuevo pedido',reportes:'Reportes',admin:'Administracion',plan:'Rutas',ia:'Plan IA',notif:'Alertas y Notificaciones',ventas:'Ventas / CRM'};
+  var titulos={home:'Pedidos',entregar:'Despacho',nuevo:'Nuevo pedido',reportes:'Reportes',admin:'Administracion',plan:'Rutas',ia:'Plan IA',notif:'Alertas y Notificaciones',ventas:'Ventas / CRM',cotizar:'Cotizador de Racks'};
   document.getElementById('topbar-sub').textContent=titulos[tab]||SESSION.nombre;
   var c=document.getElementById('content');
   c.onclick=function(e){var ed=e.target.getAttribute('data-edit');var en=e.target.getAttribute('data-entregar');var or=e.target.getAttribute('data-ordenes');if(ed)abrirEditar(ed);if(en)marcarEntregado(en);if(or)abrirOrdenes(or);if(!ed&&!en&&!or&&e.target.closest){var pv=e.target.closest('[data-prov-toggle]');if(pv)toggleProv(pv.getAttribute('data-prov-toggle'));}};
   if(tab==='home')renderHome(c);else if(tab==='entregar')renderEntregar(c);else if(tab==='nuevo')renderNuevo(c);
   else if(tab==='reportes')renderReportes(c);else if(tab==='admin')renderAdmin(c);
   else if(tab==='plan')renderPlanificacion(c);else if(tab==='ia')renderPlanIA(c);else if(tab==='notif')renderNotificaciones(c);else if(tab==='ventas')renderVentas(c);
+  else if(tab==='cotizar')renderCotizar(c);
 }
 
 function renderHome(c){
