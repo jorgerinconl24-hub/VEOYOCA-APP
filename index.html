@@ -1104,8 +1104,10 @@ function renderVentas(c){
   var contactados=cls.filter(function(x){return est1De(x)==='CONTACTADO';}).length;
   var presup=cls.filter(function(x){return (x.estado2||'')==='PRESUPUESTO ENVIADO';}).length;
   var vencidos=cls.filter(proxVencido).length;
+  var empresas=cls.filter(function(x){return esEmpresa(x.nombre);}).length;
   var statsBar='<div class="stats-bar">'
     +'<div class="stat"><div class="stat-v">'+cls.length+'</div><div class="stat-l">clientes</div></div>'
+    +'<div class="stat" onclick="var s=document.getElementById(\'v-est1\');if(s){s.value=\'__EMPRESA__\';filtrarVentas();}" style="cursor:pointer"><div class="stat-v" style="color:#fbbf24">⭐ '+empresas+'</div><div class="stat-l">empresas</div></div>'
     +'<div class="stat"><div class="stat-v" style="color:#86efac">'+contactados+'</div><div class="stat-l">contactados</div></div>'
     +'<div class="stat"><div class="stat-v" style="color:#93c5fd">'+presup+'</div><div class="stat-l">presupuestos</div></div>'
     +'<div class="stat"><div class="stat-v" style="color:#fca5a5">'+vencidos+'</div><div class="stat-l">seguim. vencidos</div></div>'
@@ -1115,7 +1117,7 @@ function renderVentas(c){
   var vopts='<option value="">Vendedor: todos</option>';Object.keys(vends).sort().forEach(function(v){vopts+='<option value="'+esc(v)+'">'+esc(v)+'</option>';});
   // Estados 1 presentes (los fijos + los que existan en los datos)
   var ests={};EST1_OPCIONES.forEach(function(e){ests[e]=1;});cls.forEach(function(x){ests[est1De(x)]=1;});
-  var eopts='<option value="">Estado: todos</option>';Object.keys(ests).forEach(function(e){eopts+='<option value="'+esc(e)+'">'+esc(e)+'</option>';});eopts+='<option value="__VENC__">Seguimiento vencido</option>';
+  var eopts='<option value="">Estado: todos</option>';Object.keys(ests).forEach(function(e){eopts+='<option value="'+esc(e)+'">'+esc(e)+'</option>';});eopts+='<option value="__VENC__">Seguimiento vencido</option><option value="__EMPRESA__">⭐ Solo empresas</option>';
   var toolbar='<div class="toolbar">'
     +'<input type="text" id="v-buscar" placeholder="Buscar nombre, tel\u00E9fono, producto..." oninput="filtrarVentas()">'
     +'<select id="v-vendedor" onchange="filtrarVentas()">'+vopts+'</select>'
@@ -1142,7 +1144,7 @@ function clientesFiltrados(){
     var texto=((cl.nombre||'')+' '+(cl.telefono||'')+' '+(cl.producto||'')+' '+(cl.ciudad||'')+' '+(cl.tipoNegocio||'')).toLowerCase();
     var mb=!b||texto.indexOf(b)>=0;
     var mv=!fv||cl.vendedor===fv;
-    var me=!fe||(fe==='__VENC__'?(function(){if(estaFinalizado(cl))return false;var d=diasRestantes(cl.proximoContacto);return d!==null&&d<=0;})():est1De(cl)===fe);
+    var me=!fe||(fe==='__VENC__'?(function(){if(estaFinalizado(cl))return false;var d=diasRestantes(cl.proximoContacto);return d!==null&&d<=0;})():fe==='__EMPRESA__'?esEmpresa(cl.nombre):est1De(cl)===fe);
     return mb&&mv&&me;
   });
 }
@@ -1190,9 +1192,20 @@ function marcarResultado(id,res){
   toast('Marcado: '+res,'ok');
   filtrarVentas();
 }
+// Detecta automáticamente si el nombre parece de EMPRESA (más potencial que una persona).
+function esEmpresa(nombre){
+  if(!nombre)return false;
+  var n=nombre.toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  if(/(^|\s)(c\.?a|s\.?a|s\.?r\.?l|rif|compania)(\.|\s|$)/.test(n))return true;
+  if(n.indexOf('&')>=0)return true;
+  var kw=['farmacia','farma','papeleria','market','supermercado','mercado','minimarket','ferreteria','bodega','bodegon','panaderia','pasteleria','licoreria','charcuteria','carniceria','fruteria','verduleria','pescaderia','distribuidora','distribuidor','comercial','comercializadora','inversiones','corporacion','empresa','tienda','boutique','express','expres','granja','restaurant','restaurante','pizzeria','luncheria','cafeteria','hotel','posada','agropecuaria','veterinaria','clinica','laboratorio','taller','repuesto','repuestos','autolavado','importaciones','exportaciones','textil','textiles','calzado','muebleria','muebles','deposito','almacen','mayorista','servicios','multiservicio','grupo','group','tecnologia','digital','publicidad','kiosco','quincalla','variedades','regalos','floristeria','heladeria','zapateria','jugueteria','libreria','optica','perfumeria','peluqueria','barberia','gimnasio','academia','colegio','escuela','instituto','fundacion','cooperativa','constructora','inmobiliaria','transporte','logistica','industrias','manufactura','fabrica','procesadora','envasadora','embotelladora','molino','hacienda','finca','agroindustrial','negocios','distribucion','suministros','abastos','abasto','burguer','burger','arepera','pollos','provee'];
+  for(var i=0;i<kw.length;i++){if(n.indexOf(kw[i])>=0)return true;}
+  return false;
+}
+function starEmp(cl){return esEmpresa(cl&&cl.nombre)?'<span title="Lead de empresa (prioridad)" style="color:#f59e0b">⭐</span> ':'';}
 function clienteCardHTML(cl){
   var h='<div class="card"><div class="card-head"><div class="card-body">';
-  h+='<div class="card-cliente">'+esc(cl.nombre||'Sin nombre')+'</div>';
+  h+='<div class="card-cliente">'+starEmp(cl)+esc(cl.nombre||'Sin nombre')+'</div>';
   h+='<div class="card-meta">'+(cl.telefono?'\uD83D\uDCDE '+esc(cl.telefono):'')+(cl.ciudad?(cl.telefono?' \u00B7 ':'')+esc(cl.ciudad):'')+'</div>';
   h+='<div style="margin-top:4px">';
   if(cl.vendedor)h+=chipCliente(cl.vendedor,'#e8f0fe','#1a1a2e');
@@ -1232,7 +1245,7 @@ function filtrarVentas(){
       h+='<div class="kb-col"><div class="kb-head" style="color:'+col+'">'+esc(e)+'<span class="kb-count">'+grupos[e].length+'</span></div>';
       grupos[e].forEach(function(cl){
         h+='<div class="kb-card" onclick="abrirCliente(\''+cl.id+'\')">';
-        h+='<div class="kb-nombre">'+esc(cl.nombre||'Sin nombre')+'</div>';
+        h+='<div class="kb-nombre">'+starEmp(cl)+esc(cl.nombre||'Sin nombre')+'</div>';
         h+='<div class="kb-meta">'+(cl.telefono?esc(cl.telefono):'')+(cl.vendedor?' \u00B7 '+esc(cl.vendedor):'')+'</div>';
         if(cl.producto)h+='<div class="kb-meta">'+esc(cl.producto)+'</div>';
         if(cl.estado2)h+='<div style="margin-top:4px">'+chipCliente(cl.estado2,'var(--ibg)','var(--info)')+'</div>';
@@ -1314,7 +1327,7 @@ function renderTablaCRM(el,lista){
   lista.forEach(function(cl){
     var id=cl.id;
     h+='<tr>';
-    h+='<td class="colfija"><div style="display:flex;align-items:center"><button onclick="abrirCliente(\''+id+'\')" title="Abrir ficha completa y seguimientos" style="border:none;background:none;font-size:13px;cursor:pointer;padding:0 2px 0 8px">\uD83D\uDCC2</button>'+celdaInput(id,'nombre',cl.nombre)+'</div></td>';
+    h+='<td class="colfija"><div style="display:flex;align-items:center"><button onclick="abrirCliente(\''+id+'\')" title="Abrir ficha completa y seguimientos" style="border:none;background:none;font-size:13px;cursor:pointer;padding:0 2px 0 8px">\uD83D\uDCC2</button>'+starEmp(cl)+celdaInput(id,'nombre',cl.nombre)+'</div></td>';
     h+='<td>'+celdaInput(id,'telefono',cl.telefono,'tel')+'</td>';
     h+='<td>'+celdaSelect(id,'vendedor',cl.vendedor||'',vendArr,'\u2014')+'</td>';
     h+='<td>'+celdaInput(id,'producto',cl.producto)+'</td>';
