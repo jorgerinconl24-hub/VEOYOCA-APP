@@ -439,7 +439,25 @@ function rkvModsMiniInd(largo,fondo,carga){var d=rkvDescFondo(fondo),cod=carga<=
 function rkvArmar(tipo,p){var marco,viga,mods;if(tipo==='light'){viga=rkvVigaLight(p.largo,p.cargaPorNivel);marco=rkvMarco(RKV_MARCO_LIGHT,p.alto,p.fondo);if(!viga||!marco)return null;if(p.conModulos)mods=rkvModsLight(p.largo,p.fondo);}else if(tipo==='mini'){viga=rkvVigaMini(p.largo,p.cargaPorNivel);marco=rkvMarco(RKV_MARCO_MINI,p.alto,p.fondo);if(!viga||!marco)return null;if(p.conModulos)mods=rkvModsMiniInd(p.largo,p.fondo,p.cargaPorNivel);}else{viga=rkvVigaInd(p.largo,p.cargaPorNivel,p.conModulos);marco=rkvMarco(RKV_MARCO_IND,p.alto,p.fondo);if(!viga||!marco)return null;if(p.conModulos)mods=rkvModsMiniInd(p.largo,p.fondo,p.cargaPorNivel);}var nMarcos=(tipo==='light')?2:(p.desglosada?1:2),nVigas=p.niveles*2,piezas=[];piezas.push({concepto:'Marco '+rkvNombreTipo(tipo).toLowerCase()+' '+marco.alto.toFixed(2)+'x'+marco.fondo.toFixed(2),cant:nMarcos,precioUnit:marco.precio,subtotal:rkv2(nMarcos*marco.precio)});piezas.push({concepto:viga.desc,cant:nVigas,precioUnit:viga.precio,subtotal:rkv2(nVigas*viga.precio)});if(p.conModulos&&mods){for(var i=0;i<mods.length;i++){var m=mods[i],ct=m.cant*p.niveles;var etq=m.cobradoComo?('Módulo '+m.codigo+' ('+m.tam.toFixed(2)+'→'+m.cobradoComo.toFixed(2)+')'):('Módulo '+m.codigo+' ('+m.tam.toFixed(2)+')');piezas.push({concepto:etq,cant:ct,precioUnit:m.precioUnit,subtotal:rkv2(ct*m.precioUnit)});}}var total=rkv2(piezas.reduce(function(s,x){return s+x.subtotal;},0));return{tipo:tipo,piezas:piezas,total:total,marco:marco,viga:viga};}
 function cotizarRack(params){var p={largo:+params.largo,alto:+params.alto,fondo:+params.fondo,niveles:+params.niveles,cargaPorNivel:+params.cargaPorNivel,conModulos:!!params.conModulos,desglosada:!!params.desglosada};var reqs=['largo','alto','fondo','niveles','cargaPorNivel'];for(var i=0;i<reqs.length;i++){if(!(p[reqs[i]]>0))return{ok:false,error:'Falta o es inválido: '+reqs[i]};}var notas=[],tipos=['light','mini','industrial'];for(var t=0;t<tipos.length;t++){var c=rkvArmar(tipos[t],p);if(c){if(c.marco.alto>p.alto+1e-9)notas.push('Alto '+p.alto.toFixed(2)+' no está en lista → marco de '+c.marco.alto.toFixed(2)+'.');if(c.marco.fondo>p.fondo+1e-9)notas.push('Fondo '+p.fondo.toFixed(2)+' no está en lista → marco de '+c.marco.fondo.toFixed(2)+'.');if(c.viga.largoViga>p.largo+1e-9)notas.push('Largo '+p.largo.toFixed(2)+' → viga estándar de '+c.viga.largoViga.toFixed(2)+'.');var precio1=rkv2(c.total*1.05),precio2=null,factorBs=null;if(params.tasaBCV>0&&params.tasaBinance>0){factorBs=params.tasaBinance/params.tasaBCV;precio2=rkv2(precio1*factorBs);}return{ok:true,tipo:c.tipo,tipoNombre:rkvNombreTipo(c.tipo),piezas:c.piezas,costo:c.total,precio1:precio1,precio2:precio2,factorBs:factorBs,tasaBCV:params.tasaBCV||null,tasaBinance:params.tasaBinance||null,notas:notas,params:p};}}return{ok:false,error:'Ningún tipo de rack del catálogo aguanta esa carga/medida. Revísalo manualmente.'};}
 var RKV_TASAS=null;
-function rkvCargarTasas(cb){fetch('https://veoyoca-webhook.onrender.com/tasas').then(function(r){return r.json();}).then(function(t){RKV_TASAS=t;if(cb)cb(t);}).catch(function(){if(cb)cb(null);});}
+// Plan B: si el webhook no responde, saca las tasas directo de las fuentes públicas (mismo +5 de colchón)
+function rkvTasasDirecto(cb){
+  var out={bcv:null,binance:null,binanceBase:null,factor:null};
+  fetch('https://ve.dolarapi.com/v1/dolares/oficial').then(function(r){return r.json();}).then(function(b){
+    out.bcv=Math.round((+b.promedio)*100)/100;
+    return fetch('https://criptoya.com/api/binancep2p/usdt/ves/1');
+  }).then(function(r){return r.json();}).then(function(n){
+    var ask=+n.ask,bid=+n.bid,prom=(ask&&bid)?(ask+bid)/2:(+n.totalAsk||ask||bid);
+    out.binanceBase=Math.round(prom*100)/100;
+    out.binance=Math.round((prom+5)*100)/100;
+    if(out.bcv>0&&out.binance>0)out.factor=Math.round((out.binance/out.bcv)*10000)/10000;
+    RKV_TASAS=out;if(cb)cb(out);
+  }).catch(function(){if(cb)cb(null);});
+}
+function rkvCargarTasas(cb){
+  fetch('https://veoyoca-webhook.onrender.com/tasas').then(function(r){return r.json();}).then(function(t){
+    if(t&&t.bcv>0&&t.binance>0){RKV_TASAS=t;if(cb)cb(t);}else rkvTasasDirecto(cb);
+  }).catch(function(){rkvTasasDirecto(cb);});
+}
 function renderCotizar(c){
   c.innerHTML='<div class="section-pad" style="max-width:520px;margin:0 auto">'
     +'<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:14px">'
