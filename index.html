@@ -232,7 +232,7 @@ table.crm{border-collapse:collapse;font-size:12px;min-width:1780px}
 <div class="sfield-row"><div class="sfield"><label>&#xDA;ltimo contacto</label><input type="date" id="c-ultimo"></div>
 <div class="sfield"><label>Pr&#xF3;ximo contacto</label><input type="date" id="c-proximo"></div></div>
 <div class="sfield"><label>Estatus/Objeci&#xF3;n</label><input type="text" id="c-objecion" placeholder="Ej: Esperando aprobaci&#xF3;n del due&#xF1;o"></div>
-<div class="sfield"><label>Plan de acci&#xF3;n</label><input type="text" id="c-plan" placeholder="Ej: Enviar cat&#xE1;logo y llamar el viernes"></div>
+<div class="sfield"><label>Plan de acci&#xF3;n</label><input type="text" id="c-plan" list="plan-opts" placeholder="Elige una opci&#xF3;n o escribe la tuya"><datalist id="plan-opts"><option value="ENVIAR OFERTA"></option><option value="ENVIAR FOTO/VIDEO TESTIMONIO DEL MUEBLE O TRABAJO REALIZADO"></option><option value="ENVIAR NUEVO PRECIO"></option><option value="ENVIAR EL PORTAFOLIO"></option><option value="PREGUNTAR SI QUIERE SEGUIR CON LA COMPRA"></option></datalist></div>
 <div class="sfield-row"><div class="sfield"><label>Porqu&#xE9; compr&#xF3;</label><input type="text" id="c-porque-si"></div>
 <div class="sfield"><label>Porqu&#xE9; NO compr&#xF3;</label><input type="text" id="c-porque-no"></div></div>
 <div class="sfield"><label>Notas</label><textarea id="c-notas" placeholder="Lead capturado por promoci&#xF3;n semanal..."></textarea></div>
@@ -1171,6 +1171,18 @@ function badgeEst1(cl){
   var c=EST1_COLOR[e]||['#e0e7ff','#3730a3'];
   return '<span class="badge" style="background:'+c[0]+';color:'+c[1]+'">'+esc(e==='SIN CONTACTAR'?'Sin contactar':e==='CONTACTADO'?'Contactado':e)+'</span>';
 }
+// Fecha de hoy + n días, en formato DD/MM/YYYY (igual que proximoContacto)
+function fechaMasDias(n){var d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()+n);return d.toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'});}
+// Auto-programa el próximo contacto según el resultado (ayuda a los vendedores).
+// Contactado→+2 días, No contesta→+1, Presupuesto enviado→+3.
+// Venta / No interesado: cliente cerrado, se limpia el próximo contacto (no más recordatorios).
+function autoAgendarProximo(cl,res){
+  if(res==='VENTA'||res==='NO INTERESADO'){cl.proximoContacto='';return '';}
+  var dias={'CONTACTADO':2,'NO CONTESTA':1,'PRESUPUESTO ENVIADO':3}[res];
+  if(dias==null)return null;
+  cl.proximoContacto=fechaMasDias(dias);
+  return cl.proximoContacto;
+}
 // Registra un resultado como seguimiento y marca al cliente como atendido hoy
 function _logRes(cl,res){
   cl.ultimoContacto=fecha();
@@ -1187,9 +1199,10 @@ function marcarResultado(id,res){
   else if(res==='VENTA'){cl.estado1='CERRADO';cl.estado2='COMPRO';}
   else if(res==='NO INTERESADO'){cl.estado1='NO INTERESADO';cl.estado2='NO COMPRO';}
   _logRes(cl,res);
+  var prox=autoAgendarProximo(cl,res);
   registrarBitacora(cl.id,'Resultado: '+res+' por '+(SESSION?SESSION.nombre:''));
   guardarDB();
-  toast('Marcado: '+res,'ok');
+  toast('Marcado: '+res+(prox?' · próx. contacto '+prox:''),'ok');
   filtrarVentas();
 }
 // Detecta automáticamente si el nombre parece de EMPRESA (más potencial que una persona).
@@ -1274,12 +1287,13 @@ function crmCampo(id,campo,valor){
   cl[campo]=valor;
   cl.ultimaEdicion=fecha()+' '+hora();cl.editadoPor=SESSION.nombre;
   // Registrar en Estado 1 o Estado 2 cuenta como atendido hoy y alimenta el resumen semanal
+  var logueado=false;
   if(campo==='estado1'&&valor&&valor!=='SIN CONTACTAR'&&valor!==prev){
-    _logRes(cl,valor==='CERRADO'?'VENTA':valor);
+    var r1=valor==='CERRADO'?'VENTA':valor;_logRes(cl,r1);autoAgendarProximo(cl,r1);logueado=true;
   }
   if(campo==='estado2'&&valor&&valor!==prev){
-    if(valor==='PRESUPUESTO ENVIADO')_logRes(cl,'PRESUPUESTO ENVIADO');
-    else if(valor==='COMPRO')_logRes(cl,'VENTA');
+    if(valor==='PRESUPUESTO ENVIADO'){_logRes(cl,'PRESUPUESTO ENVIADO');autoAgendarProximo(cl,'PRESUPUESTO ENVIADO');logueado=true;}
+    else if(valor==='COMPRO'){_logRes(cl,'VENTA');autoAgendarProximo(cl,'VENTA');logueado=true;}
   }
   // Al marcar la visita a la oficina a mano, se registra la fecha automaticamente
   if(campo==='visitoOficina'){ if(valor==='SÍ'){ if(!cl.fechaVisita)cl.fechaVisita=fecha(); } else { cl.fechaVisita=''; } }
@@ -1287,6 +1301,9 @@ function crmCampo(id,campo,valor){
   CRM_SAVE_TIMER=setTimeout(function(){guardarDB();},900);
   if(campo==='proximoContacto'&&valor)notificarProximoContacto(cl);
   if(campo==='redSocial'&&valor)notificarNuevoLeadGrupo(cl);
+  // Si se registró un resultado, refresca la lista para que se vea la fecha de
+  // "último contacto" marcada de una (y el badge/orden actualizado).
+  if(logueado)filtrarVentas();
 }
 async function crmQuickAdd(inp){
   var nombre=(inp.value||'').trim();if(!nombre)return;
@@ -1301,6 +1318,10 @@ async function crmQuickAdd(inp){
 }
 function celdaInput(id,campo,valor,tipo){
   return '<input type="'+(tipo||'text')+'" value="'+esc(valor==null?'':valor)+'" onchange="crmCampo(\''+id+'\',\''+campo+'\',this.value)">';
+}
+// Celda de Plan de acción: lista de opciones sugeridas + escritura libre (datalist "plan-opts")
+function celdaPlan(id,valor){
+  return '<input type="text" list="plan-opts" value="'+esc(valor==null?'':valor)+'" onchange="crmCampo(\''+id+'\',\'planAccion\',this.value)">';
 }
 function celdaFecha(id,campo,valor){
   return '<input type="date" value="'+fechaInput(valor)+'" onchange="crmCampo(\''+id+'\',\''+campo+'\',inputFecha(this.value))">';
@@ -1335,7 +1356,7 @@ function renderTablaCRM(el,lista){
     h+='<td>'+celdaInput(id,'redSocial',cl.redSocial)+'</td>';
     h+='<td>'+celdaInput(id,'tipoNegocio',cl.tipoNegocio)+'</td>';
     h+='<td style="min-width:170px">'+celdaInput(id,'estatusObjecion',cl.estatusObjecion)+'</td>';
-    h+='<td style="min-width:170px">'+celdaInput(id,'planAccion',cl.planAccion)+'</td>';
+    h+='<td style="min-width:170px">'+celdaPlan(id,cl.planAccion)+'</td>';
     h+='<td style="min-width:60px">'+celdaInput(id,'cantidadMuebles',cl.cantidadMuebles,'number')+'</td>';
     h+='<td style="min-width:150px">'+celdaInput(id,'porqueCompro',cl.porqueCompro)+'</td>';
     h+='<td style="min-width:150px">'+celdaInput(id,'porqueNoCompro',cl.porqueNoCompro)+'</td>';
