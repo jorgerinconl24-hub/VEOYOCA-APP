@@ -639,7 +639,7 @@ function presuPDF(p){
   doc.text('Dirección: '+(p.cliente.direccion||''),M,cy);cy+=14;
   doc.text('Teléfonos: '+(p.cliente.telefono||''),M,cy);
   var body=p.items.map(function(it){return [it.desc,fmtMoney(it.cant),fmtMoney(it.precio),fmtMoney(it.total)];});
-  doc.autoTable({startY:cy+16,head:[['Descripción','Cantidad','Precio Unitario','Total']],body:body,styles:{fontSize:9,cellPadding:4},headStyles:{fillColor:[26,26,46]},columnStyles:{0:{cellWidth:'auto'},1:{halign:'right',cellWidth:70},2:{halign:'right',cellWidth:90},3:{halign:'right',cellWidth:90}},margin:{left:M,right:M}});
+  doc.autoTable({startY:cy+16,head:[['Descripción','Cantidad','Precio Unitario','Total']],body:body,theme:'plain',styles:{fontSize:9,cellPadding:3,textColor:[0,0,0]},headStyles:{fontStyle:'bold',textColor:[0,0,0],lineColor:[0,0,0],lineWidth:{bottom:0.7}},bodyStyles:{textColor:[0,0,0]},columnStyles:{0:{cellWidth:'auto'},1:{halign:'right',cellWidth:70},2:{halign:'right',cellWidth:90},3:{halign:'right',cellWidth:90}},margin:{left:M,right:M}});
   var y=doc.lastAutoTable.finalY+22;
   if(p.nota){doc.setFontSize(9);doc.text('NOTA: '+p.nota,M,y,{maxWidth:W-2*M});y+=26;}
   doc.setFontSize(10);var tx=W-M-170,tv=W-M;
