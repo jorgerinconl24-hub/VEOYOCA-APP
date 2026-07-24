@@ -464,8 +464,21 @@ function rkvCargarTasas(cb){
     if(t&&t.bcv>0&&t.binance>0){RKV_TASAS=t;if(cb)cb(t);}else rkvTasasDirecto(cb);
   }).catch(function(){rkvTasasDirecto(cb);});
 }
+var COTIZAR_MODO='rack';
+function cotSetModo(m){COTIZAR_MODO=m;renderCotizar(document.getElementById('content'));}
 function renderCotizar(c){
-  c.innerHTML='<div class="section-pad" style="max-width:520px;margin:0 auto">'
+  var toggle='<div class="section-pad" style="max-width:640px;margin:0 auto 0"><div style="display:flex;gap:8px;margin-bottom:12px">'
+    +'<button class="btn '+(COTIZAR_MODO==='rack'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1" onclick="cotSetModo(\'rack\')">🏗️ Cotizar rack</button>'
+    +'<button class="btn '+(COTIZAR_MODO==='presu'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1" onclick="cotSetModo(\'presu\')">📄 Hacer presupuesto</button>'
+    +'<button class="btn '+(COTIZAR_MODO==='lista'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1" onclick="cotSetModo(\'lista\')">📋 Presupuestos</button>'
+    +'</div></div>';
+  if(COTIZAR_MODO==='presu'){c.innerHTML=toggle+cotUIpresu();presuInitForm();return;}
+  if(COTIZAR_MODO==='lista'){c.innerHTML=toggle+cotUIlista();return;}
+  c.innerHTML=toggle+cotUIrack();
+  rkvCargarTasas(null); // precarga las tasas del día
+}
+function cotUIrack(){
+  return '<div class="section-pad" style="max-width:520px;margin:0 auto">'
     +'<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:14px">'
     +'<div style="font-size:15px;font-weight:700;color:#1a1a2e;margin-bottom:4px">🏗️ Cotizador de racks</div>'
     +'<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Ingresa las medidas y la carga por nivel. El sistema elige el rack más económico que aguante y te da los dos precios.</div>'
@@ -480,7 +493,6 @@ function renderCotizar(c){
     +'</div>'
     +'<div id="ck-resultado"></div>'
     +'</div>';
-  rkvCargarTasas(null); // precarga las tasas del día
 }
 function cot_campo(label,id,ph){return '<div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">'+label+'</label><input type="number" step="0.01" id="'+id+'" placeholder="'+ph+'" style="width:100%;padding:9px;border:1px solid #d1d5db;border-radius:8px;font-size:14px"></div>';}
 function cot_val(id){var el=document.getElementById(id);return el?parseFloat(el.value):NaN;}
@@ -516,6 +528,145 @@ function cot_render(r){
     +'</div>';
 }
 function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg'));navigator.clipboard.writeText(msg).then(function(){toast('Cotización copiada','ok');}).catch(function(){toast('No se pudo copiar','err');});}
+
+/* ═══════════════════════════════════════════════════════════════
+ * PRESUPUESTADOR (documento formal al cliente) — con número de control,
+ * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
+ * ═══════════════════════════════════════════════════════════════ */
+var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
+var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
+function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function presuNroFmt(n){return ('0000000000'+(n||0)).slice(-10);}
+function presuNextNro(){var mx=0;(DB.presupuestosDoc||[]).forEach(function(p){if(p.nro>mx)mx=p.nro;});return mx+1;}
+function presuFind(nro){return (DB.presupuestosDoc||[]).find(function(p){return p.nro===nro;});}
+function presuCampo(label,id,ph){return '<div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">'+label+'</label><input type="text" id="'+id+'" placeholder="'+(ph||'')+'" style="width:100%;padding:9px;border:1px solid #d1d5db;border-radius:8px;font-size:14px"></div>';}
+function cotUIpresu(){
+  return '<div class="section-pad" style="max-width:640px;margin:0 auto">'
+    +'<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:14px">'
+    +'<div style="font-size:15px;font-weight:700;color:#1a1a2e;margin-bottom:4px">📄 Hacer presupuesto</div>'
+    +'<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Datos del cliente e ítems. Se arma el presupuesto con número de control e IVA 16%, para copiar o descargar en PDF.</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+    +presuCampo('Nombre del cliente *','pp-nombre','')+presuCampo('Teléfono *','pp-tel','04141234567')
+    +presuCampo('RIF','pp-rif','')+presuCampo('Dirección','pp-dir','')
+    +'</div>'
+    +'<div style="font-size:13px;font-weight:700;margin:14px 0 6px">Ítems (descripción · cantidad · precio unit. sin IVA)</div>'
+    +'<div id="pp-items"></div>'
+    +'<button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="presuAddItem()">+ Agregar ítem</button>'
+    +'<div style="margin-top:12px"><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Nota (opcional)</label><textarea id="pp-nota" rows="2" style="width:100%;padding:9px;border:1px solid #d1d5db;border-radius:8px;font-size:13px" placeholder="Ej: ESPALDAR EMPLAFONADO · COLOR BLANCO"></textarea></div>'
+    +'<div id="pp-tot" style="margin-top:12px;font-size:13px"></div>'
+    +'<button class="btn btn-dark" style="width:100%;margin-top:12px" onclick="presuGenerar()">Generar presupuesto</button>'
+    +'</div>'
+    +'<div id="pp-result"></div>'
+    +'</div>';
+}
+function presuInitForm(){PRESU_ITEMS=[{desc:'',cant:'',precio:''}];presuRenderItems();presuActualizarTotales();}
+function presuRenderItems(){
+  var el=document.getElementById('pp-items');if(!el)return;var h='';
+  PRESU_ITEMS.forEach(function(it,i){
+    h+='<div style="display:grid;grid-template-columns:1fr 62px 92px 26px;gap:5px;margin-bottom:6px;align-items:center">'
+      +'<input placeholder="Descripción" value="'+esc(it.desc||'')+'" oninput="presuSet('+i+',\'desc\',this.value)" style="padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px">'
+      +'<input type="number" step="0.01" placeholder="Cant" value="'+esc(it.cant||'')+'" oninput="presuSet('+i+',\'cant\',this.value)" style="padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px">'
+      +'<input type="number" step="0.01" placeholder="Precio" value="'+esc(it.precio||'')+'" oninput="presuSet('+i+',\'precio\',this.value)" style="padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px">'
+      +'<button title="Quitar" onclick="presuDelItem('+i+')" style="border:none;background:none;color:#dc2626;font-size:18px;cursor:pointer">×</button>'
+      +'</div>';
+  });
+  el.innerHTML=h;
+}
+function presuSet(i,k,v){if(PRESU_ITEMS[i]){PRESU_ITEMS[i][k]=v;presuActualizarTotales();}}
+function presuAddItem(){PRESU_ITEMS.push({desc:'',cant:'',precio:''});presuRenderItems();}
+function presuDelItem(i){PRESU_ITEMS.splice(i,1);if(!PRESU_ITEMS.length)PRESU_ITEMS.push({desc:'',cant:'',precio:''});presuRenderItems();presuActualizarTotales();}
+function presuTotales(){var sub=0;PRESU_ITEMS.forEach(function(it){var c=parseFloat(it.cant)||0,p=parseFloat(it.precio)||0;sub+=c*p;});var iva=sub*0.16;return {sub:sub,iva:iva,total:sub+iva};}
+function presuActualizarTotales(){var t=presuTotales();var el=document.getElementById('pp-tot');if(!el)return;
+  el.innerHTML='<div style="display:flex;justify-content:space-between"><span>Sub-Total:</span><b>'+fmtMoney(t.sub)+'</b></div>'
+    +'<div style="display:flex;justify-content:space-between"><span>IVA 16%:</span><b>'+fmtMoney(t.iva)+'</b></div>'
+    +'<div style="display:flex;justify-content:space-between;font-size:15px;color:#065f46;font-weight:700"><span>Total:</span><b>'+fmtMoney(t.total)+'</b></div>';
+}
+function presuGenerar(){
+  var nombre=(document.getElementById('pp-nombre').value||'').trim();
+  var telRaw=(document.getElementById('pp-tel').value||'').trim();
+  var tel=telRaw.replace(/[^0-9]/g,'');
+  if(!nombre){toast('El nombre del cliente es obligatorio','err');return;}
+  if(tel.length<7){toast('El teléfono del cliente es obligatorio','err');return;}
+  var items=PRESU_ITEMS.map(function(it){var c=parseFloat(it.cant)||0,p=parseFloat(it.precio)||0;return {desc:(it.desc||'').trim(),cant:c,precio:p,total:c*p};}).filter(function(it){return it.desc&&it.cant>0;});
+  if(!items.length){toast('Agrega al menos un ítem con descripción y cantidad','err');return;}
+  var t=presuTotales();
+  if(!Array.isArray(DB.presupuestosDoc))DB.presupuestosDoc=[];
+  var p={nro:presuNextNro(),vendedor:SESSION?SESSION.nombre:'',cliente:{nombre:nombre,telefono:tel,rif:(document.getElementById('pp-rif').value||'').trim(),direccion:(document.getElementById('pp-dir').value||'').trim()},items:items,nota:(document.getElementById('pp-nota').value||'').trim(),subtotal:t.sub,iva:t.iva,total:t.total,fecha:fecha(),hora:hora(),origen:'app'};
+  DB.presupuestosDoc.push(p);
+  registrarBitacora('presu'+p.nro,'PRESUPUESTO Nº'+p.nro+' generado para '+nombre+' por '+(SESSION?SESSION.nombre:''));
+  guardarDB();
+  document.getElementById('pp-result').innerHTML=presuResultHTML(p);
+  toast('Presupuesto Nº'+p.nro+' generado','ok');
+}
+function presuTexto(p){
+  var L=[];
+  L.push(PRESU_EMPRESA.nombre); L.push('RIF: '+PRESU_EMPRESA.rif);
+  L.push('*PRESUPUESTO Nº '+presuNroFmt(p.nro)+'*'); L.push('Fecha: '+(p.fecha||''));
+  L.push('');
+  L.push('*Cliente:* '+p.cliente.nombre); L.push('*Teléfono:* '+p.cliente.telefono);
+  if(p.cliente.rif)L.push('*RIF:* '+p.cliente.rif);
+  if(p.cliente.direccion)L.push('*Dirección:* '+p.cliente.direccion);
+  L.push(''); L.push('*ÍTEMS:*');
+  p.items.forEach(function(it){L.push('• '+it.desc+' — '+fmtMoney(it.cant)+' x '+fmtMoney(it.precio)+' = '+fmtMoney(it.total));});
+  L.push('');
+  L.push('Sub-Total: '+fmtMoney(p.subtotal)); L.push('IVA 16%: '+fmtMoney(p.iva));
+  L.push('*TOTAL: '+fmtMoney(p.total)+'*');
+  if(p.nota){L.push('');L.push('Nota: '+p.nota);}
+  L.push(''); L.push('Vendedor: '+(p.vendedor||''));
+  return L.join('\n');
+}
+function presuResultHTML(p){
+  return '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px">'
+    +'<div style="font-size:14px;font-weight:700;color:#065f46">✅ Presupuesto Nº '+presuNroFmt(p.nro)+'</div>'
+    +'<div style="font-size:12px;color:var(--muted);margin:4px 0 12px">Cliente: '+esc(p.cliente.nombre)+' · Total: '+fmtMoney(p.total)+'</div>'
+    +'<button class="btn btn-dark btn-sm" style="width:100%;margin-bottom:8px" onclick="presuDescargarPDF('+p.nro+')">📄 Descargar PDF</button>'
+    +'<button class="btn btn-ghost btn-sm" style="width:100%" onclick="presuCopiarTexto('+p.nro+')">📋 Copiar en texto</button>'
+    +'<pre style="white-space:pre-wrap;font-size:11px;color:#374151;background:#f9fafb;border-radius:8px;padding:10px;margin-top:10px;max-height:220px;overflow:auto">'+esc(presuTexto(p))+'</pre>'
+    +'</div>';
+}
+function presuCopiarTexto(nro){var p=presuFind(nro);if(!p){toast('No encontré ese presupuesto','err');return;}navigator.clipboard.writeText(presuTexto(p)).then(function(){toast('Presupuesto copiado','ok');}).catch(function(){toast('No se pudo copiar','err');});}
+function presuPDF(p){
+  var jsPDF=window.jspdf.jsPDF;var doc=new jsPDF({unit:'pt',format:'a4'});
+  var W=doc.internal.pageSize.getWidth(),M=40;
+  doc.setFont('helvetica','bold');doc.setFontSize(12);doc.text(PRESU_EMPRESA.nombre,M,48,{maxWidth:W-230});
+  doc.setFont('helvetica','normal');doc.setFontSize(8);doc.text('RIF: '+PRESU_EMPRESA.rif,M,62);
+  doc.setFont('helvetica','bold');doc.setFontSize(13);doc.text('Presupuesto Nro.',W-M,48,{align:'right'});
+  doc.setFontSize(11);doc.text(presuNroFmt(p.nro),W-M,64,{align:'right'});
+  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text('Fecha Emisión: '+(p.fecha||''),W-M,84,{align:'right'});
+  var cy=108;doc.setFontSize(9);
+  doc.text('Razón Social: '+(p.cliente.nombre||''),M,cy);cy+=14;
+  doc.text('RIF: '+(p.cliente.rif||''),M,cy);cy+=14;
+  doc.text('Dirección: '+(p.cliente.direccion||''),M,cy);cy+=14;
+  doc.text('Teléfonos: '+(p.cliente.telefono||''),M,cy);
+  var body=p.items.map(function(it){return [it.desc,fmtMoney(it.cant),fmtMoney(it.precio),fmtMoney(it.total)];});
+  doc.autoTable({startY:cy+16,head:[['Descripción','Cantidad','Precio Unitario','Total']],body:body,styles:{fontSize:9,cellPadding:4},headStyles:{fillColor:[26,26,46]},columnStyles:{0:{cellWidth:'auto'},1:{halign:'right',cellWidth:70},2:{halign:'right',cellWidth:90},3:{halign:'right',cellWidth:90}},margin:{left:M,right:M}});
+  var y=doc.lastAutoTable.finalY+22;
+  if(p.nota){doc.setFontSize(9);doc.text('NOTA: '+p.nota,M,y,{maxWidth:W-2*M});y+=26;}
+  doc.setFontSize(10);var tx=W-M-170,tv=W-M;
+  doc.text('Sub-Total:',tx,y);doc.text(fmtMoney(p.subtotal),tv,y,{align:'right'});y+=16;
+  doc.text('IVA 16%:',tx,y);doc.text(fmtMoney(p.iva),tv,y,{align:'right'});y+=16;
+  doc.setFont('helvetica','bold');doc.text('Total Operación:',tx,y);doc.text(fmtMoney(p.total),tv,y,{align:'right'});doc.setFont('helvetica','normal');
+  return doc;
+}
+function presuDescargarPDF(nro){var p=presuFind(nro);if(!p){toast('No encontré ese presupuesto','err');return;}toast('Generando PDF...','ok');cargarLibsPDF().then(function(){var doc=presuPDF(p);doc.save('Presupuesto-'+presuNroFmt(p.nro)+'.pdf');}).catch(function(){toast('No se pudo generar el PDF','err');});}
+function cotUIlista(){
+  var arr=(DB.presupuestosDoc||[]).slice();
+  if(SESSION&&SESSION.rol!=='admin')arr=arr.filter(function(p){return p.vendedor===SESSION.nombre;});
+  arr.sort(function(a,b){return b.nro-a.nro;});
+  if(!arr.length)return '<div class="section-pad" style="max-width:640px;margin:0 auto"><div class="empty"><div class="empty-icon">📄</div>Aún no hay presupuestos generados</div></div>';
+  var h='<div class="section-pad" style="max-width:640px;margin:0 auto">';
+  arr.forEach(function(p){
+    h+='<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin-bottom:8px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center"><b>Nº '+presuNroFmt(p.nro)+'</b><span style="font-size:11px;color:var(--muted)">'+esc(p.fecha||'')+'</span></div>'
+      +'<div style="font-size:13px;margin:2px 0">'+esc((p.cliente&&p.cliente.nombre)||'—')+' · '+fmtMoney(p.total)+'</div>'
+      +'<div style="font-size:11px;color:var(--muted)">Vendedor: '+esc(p.vendedor||'—')+(p.origen==='bot'?' · por WhatsApp':'')+'</div>'
+      +'<div style="display:flex;gap:6px;margin-top:8px">'
+      +'<button class="btn btn-dark btn-sm" style="flex:1" onclick="presuDescargarPDF('+p.nro+')">📄 PDF</button>'
+      +'<button class="btn btn-ghost btn-sm" style="flex:1" onclick="presuCopiarTexto('+p.nro+')">📋 Texto</button>'
+      +'</div></div>';
+  });
+  return h+'</div>';
+}
 
 function goTab(tab,btn){
   TAB=tab;document.querySelectorAll('.nav-btn').forEach(function(b){b.classList.remove('on');});if(btn)btn.classList.add('on');
