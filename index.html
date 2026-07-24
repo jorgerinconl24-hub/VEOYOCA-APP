@@ -2118,7 +2118,7 @@ async function initFirebase(){
     var snap=await fs.getDoc(fs.doc(_db,'veoyoca','data'));
     if(snap.exists()){var d=snap.data();DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];DB.clientes=d.clientes||[];}
     else{DB.usuarios=[{id:'admin',nombre:'Administrador',username:'admin',password:'admin123',rol:'admin',creado:fecha()}];await guardarDB();}
-    fs.onSnapshot(fs.doc(_db,'veoyoca','data'),function(snap){if(!snap.exists()||SAVING)return;var d=snap.data();DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];DB.clientes=d.clientes||[];if(TAB==='ventas'&&document.activeElement&&document.activeElement.closest&&document.activeElement.closest('#tabla-crm'))return;if(SESSION&&TAB){var nb=document.getElementById('nb-'+TAB);if(nb)goTab(TAB,nb);}});
+    fs.onSnapshot(fs.doc(_db,'veoyoca','data'),function(snap){if(!snap.exists()||SAVING)return;var d=snap.data();DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];DB.clientes=d.clientes||[];DB.presupuestosDoc=d.presupuestosDoc||[];if(TAB==='ventas'&&document.activeElement&&document.activeElement.closest&&document.activeElement.closest('#tabla-crm'))return;if(TAB==='cotizar')return;if(SESSION&&TAB){var nb=document.getElementById('nb-'+TAB);if(nb)goTab(TAB,nb);}});
     var sess=null;try{sess=JSON.parse(localStorage.getItem('veo_session')||'null');}catch(e){}
     if(sess){var u=DB.usuarios.find(function(x){return x.id===sess.id;});if(u){SESSION=u;mostrarApp();return;}}
     document.getElementById('splash').style.display='none';
