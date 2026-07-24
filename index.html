@@ -533,6 +533,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
+var APP_VERSION='v2 · presupuesto tabla negrita';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -557,6 +558,7 @@ function cotUIpresu(){
     +'<button class="btn btn-dark" style="width:100%;margin-top:12px" onclick="presuGenerar()">Generar presupuesto</button>'
     +'</div>'
     +'<div id="pp-result"></div>'
+    +'<div style="font-size:10px;color:#cbd5e1;text-align:center;margin-top:8px">'+APP_VERSION+'</div>'
     +'</div>';
 }
 function presuInitForm(){PRESU_ITEMS=[{desc:'',cant:'',precio:''}];presuRenderItems();presuActualizarTotales();}
