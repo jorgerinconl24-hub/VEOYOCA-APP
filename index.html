@@ -527,16 +527,32 @@ function cot_render(r){
     +'<div style="font-size:11px;color:var(--muted);text-align:center;margin-top:8px">Precios sin IVA</div>'
     +'</div>';
 }
-function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg'));navigator.clipboard.writeText(msg).then(function(){toast('Cotización copiada','ok');}).catch(function(){toast('No se pudo copiar','err');});}
+function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg'));copiarAlPortapapeles(msg,'Cotización copiada');}
 
 /* ═══════════════════════════════════════════════════════════════
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v3 · presupuestos se guardan';
+var APP_VERSION='v4 · copiar arreglado';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
+// Copia al portapapeles con respaldo (para navegadores/PWA que bloquean navigator.clipboard).
+function copiarAlPortapapeles(txt,okMsg){
+  okMsg=okMsg||'Copiado';
+  function fallback(){
+    try{
+      var ta=document.createElement('textarea');ta.value=txt;
+      ta.style.position='fixed';ta.style.top='-1000px';ta.style.left='0';ta.style.opacity='0';ta.setAttribute('readonly','');
+      document.body.appendChild(ta);ta.focus();ta.select();try{ta.setSelectionRange(0,txt.length);}catch(e){}
+      var ok=false;try{ok=document.execCommand('copy');}catch(e){}
+      document.body.removeChild(ta);
+      if(ok)toast(okMsg,'ok');else{try{window.prompt('Copia el texto (Ctrl/⌘+C):',txt);}catch(e){toast('No se pudo copiar en este dispositivo','err');}}
+    }catch(e){try{window.prompt('Copia el texto (Ctrl/⌘+C):',txt);}catch(e2){toast('No se pudo copiar','err');}}
+  }
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(function(){toast(okMsg,'ok');}).catch(function(){fallback();});}
+  else{fallback();}
+}
 function presuNroFmt(n){return ('0000000000'+(n||0)).slice(-10);}
 function presuNextNro(){var mx=0;(DB.presupuestosDoc||[]).forEach(function(p){if(p.nro>mx)mx=p.nro;});return mx+1;}
 function presuFind(nro){return (DB.presupuestosDoc||[]).find(function(p){return p.nro===nro;});}
@@ -626,7 +642,7 @@ function presuResultHTML(p){
     +'<pre style="white-space:pre-wrap;font-size:11px;color:#374151;background:#f9fafb;border-radius:8px;padding:10px;margin-top:10px;max-height:220px;overflow:auto">'+esc(presuTexto(p))+'</pre>'
     +'</div>';
 }
-function presuCopiarTexto(nro){var p=presuFind(nro);if(!p){toast('No encontré ese presupuesto','err');return;}navigator.clipboard.writeText(presuTexto(p)).then(function(){toast('Presupuesto copiado','ok');}).catch(function(){toast('No se pudo copiar','err');});}
+function presuCopiarTexto(nro){var p=presuFind(nro);if(!p){toast('No encontré ese presupuesto','err');return;}copiarAlPortapapeles(presuTexto(p),'Presupuesto copiado');}
 function presuPDF(p){
   var jsPDF=window.jspdf.jsPDF;var doc=new jsPDF({unit:'pt',format:'a4'});
   var W=doc.internal.pageSize.getWidth(),M=40;
