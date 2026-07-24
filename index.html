@@ -1288,6 +1288,14 @@ var CRM_SAVE_TIMER=null;
 function crmCampo(id,campo,valor){
   var cl=getClientes().find(function(x){return x.id===id;});if(!cl)return;
   var prev=cl[campo];
+  // No permitir teléfonos duplicados al editar en la tabla.
+  if(campo==='telefono'){
+    var _tn=(valor||'').replace(/[^0-9]/g,'');
+    if(_tn.length>=7){
+      var _dupc=getClientes().find(function(x){return x.id!==id && (x.telefono||'').replace(/[^0-9]/g,'')===_tn;});
+      if(_dupc){toast('⚠️ Ese teléfono ya está registrado en: '+(_dupc.nombre||'otro cliente'),'err');filtrarVentas();return;}
+    }
+  }
   if(['ciudad','producto','redSocial','tipoNegocio'].indexOf(campo)>=0)valor=String(valor||'').trim().toUpperCase();
   if(campo==='cantidadMuebles')valor=valor?parseInt(valor):'';
   cl[campo]=valor;
@@ -1431,6 +1439,12 @@ async function guardarCliente(){
   var proxAntes=esNuevo?'':(cl.proximoContacto||'');
   cl.nombre=nombre;
   cl.telefono=document.getElementById('c-telefono').value.trim();
+  // No permitir teléfonos duplicados: si ese número ya está en otro cliente, avisa y no guarda.
+  var _tel=(cl.telefono||'').replace(/[^0-9]/g,'');
+  if(_tel.length>=7){
+    var _dup=getClientes().find(function(x){return x.id!==cl.id && (x.telefono||'').replace(/[^0-9]/g,'')===_tel;});
+    if(_dup){toast('⚠️ Ese teléfono ya está registrado en: '+(_dup.nombre||'otro cliente'),'err');return;}
+  }
   cl.vendedor=document.getElementById('c-vendedor').value;
   cl.ciudad=document.getElementById('c-ciudad').value.trim().toUpperCase();
   cl.producto=document.getElementById('c-producto').value.trim().toUpperCase();
