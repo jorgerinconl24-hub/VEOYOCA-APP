@@ -537,7 +537,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v7 · estadísticas: ítems de PDF, pedidos y más preguntados';
+var APP_VERSION='v8 · columna Atención se llena para todos';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1486,11 +1486,22 @@ function autoAgendarProximo(cl,res){
 }
 // Marca la hora de la PRIMERA atención del cliente (solo la primera vez).
 function _marcarAtendido(cl){ if(cl && !cl.atendidoTS) cl.atendidoTS=Date.now(); }
+// Momento en que se agregó el cliente: usa creadoTS (exacto) o, si no lo tiene,
+// lo deduce de la fecha de creación (DD/MM/YYYY) para no dejar la columna vacía.
+function _creacionTS(cl){
+  if(cl&&cl.creadoTS) return cl.creadoTS;
+  var f=(cl&&cl.fechaCreacion||'').toString().trim();
+  var m=f.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(m){var d=new Date(+m[3],+m[2]-1,+m[1]);if(!isNaN(d.getTime()))return d.getTime();}
+  return 0;
+}
 // Texto del tiempo entre que se agregó el cliente y su primera atención (solo admins lo ven).
 function tiempoAtencionTxt(cl){
-  if(!cl||!cl.creadoTS) return '';               // clientes viejos sin la marca
+  if(!cl) return '';
+  var cts=_creacionTS(cl);
+  if(!cts) return '';                            // clientes muy viejos sin fecha
   if(!cl.atendidoTS) return 'sin atender aún';
-  var ms=cl.atendidoTS-cl.creadoTS; if(ms<0)ms=0;
+  var ms=cl.atendidoTS-cts; if(ms<0)ms=0;
   var min=Math.round(ms/60000);
   if(min<1) return 'atendido al instante';
   if(min<60) return 'atendido en '+min+' min';
