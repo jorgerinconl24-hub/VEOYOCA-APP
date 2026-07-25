@@ -467,13 +467,17 @@ function rkvCargarTasas(cb){
 var COTIZAR_MODO='rack';
 function cotSetModo(m){COTIZAR_MODO=m;renderCotizar(document.getElementById('content'));}
 function renderCotizar(c){
-  var toggle='<div class="section-pad" style="max-width:640px;margin:0 auto 0"><div style="display:flex;gap:8px;margin-bottom:12px">'
-    +'<button class="btn '+(COTIZAR_MODO==='rack'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1" onclick="cotSetModo(\'rack\')">🏗️ Cotizar rack</button>'
-    +'<button class="btn '+(COTIZAR_MODO==='presu'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1" onclick="cotSetModo(\'presu\')">📄 Hacer presupuesto</button>'
-    +'<button class="btn '+(COTIZAR_MODO==='lista'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1" onclick="cotSetModo(\'lista\')">📋 Presupuestos</button>'
+  var esAdmin=SESSION&&SESSION.rol==='admin';
+  if(COTIZAR_MODO==='stats'&&!esAdmin)COTIZAR_MODO='rack';
+  var toggle='<div class="section-pad" style="max-width:760px;margin:0 auto 0"><div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">'
+    +'<button class="btn '+(COTIZAR_MODO==='rack'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'rack\')">🏗️ Cotizar rack</button>'
+    +'<button class="btn '+(COTIZAR_MODO==='presu'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'presu\')">📄 Hacer presupuesto</button>'
+    +'<button class="btn '+(COTIZAR_MODO==='lista'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'lista\')">📋 Presupuestos</button>'
+    +(esAdmin?'<button class="btn '+(COTIZAR_MODO==='stats'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'stats\')">📊 Estadísticas</button>':'')
     +'</div></div>';
   if(COTIZAR_MODO==='presu'){c.innerHTML=toggle+cotUIpresu();presuInitForm();return;}
   if(COTIZAR_MODO==='lista'){c.innerHTML=toggle+cotUIlista();return;}
+  if(COTIZAR_MODO==='stats'){c.innerHTML=toggle+cotUIstats();return;}
   c.innerHTML=toggle+cotUIrack();
   rkvCargarTasas(null); // precarga las tasas del día
 }
@@ -533,7 +537,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v5 · varios presupuestos por cliente';
+var APP_VERSION='v7 · estadísticas: ítems de PDF, pedidos y más preguntados';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -685,6 +689,126 @@ function cotUIlista(){
       +'<button class="btn btn-ghost btn-sm" style="flex:1" onclick="presuCopiarTexto('+p.nro+')">📋 Texto</button>'
       +'</div></div>';
   });
+  return h+'</div>';
+}
+
+// ===== ESTADISTICAS DE PRESUPUESTOS (solo admin) =====
+function _statNorm(s){return (s||'').toString().trim().toLowerCase().replace(/\s+/g,' ');}
+function _statTel(t){return (t||'').toString().replace(/[^0-9]/g,'');}
+function _statCerrado(cl){return est1De(cl)==='CERRADO'||(cl.estado2||'')==='COMPRO';}
+function _statPct(a,b){if(!b)return '0%';return Math.round(a*100/b)+'%';}
+function _statNroP(n){return (n||'').toString().replace(/\D/g,'').replace(/^0+/,'')||'';}
+function cotUIstats(){
+  var clientes=DB.clientes||[];
+  // 1) Cotizaciones unificadas: presupuestador (app/bot) + PDFs que mandan los vendedores (con ítems leídos por IA)
+  var quotes=[],vistosNro={};
+  (DB.presupuestosDoc||[]).forEach(function(p){
+    var n=_statNroP(p.nro);if(n)vistosNro[n]=true;
+    quotes.push({tel:_statTel(p.cliente&&p.cliente.telefono),vendedor:p.vendedor||'',items:(p.items||[]),total:(+p.total||0),numero:n});
+  });
+  clientes.forEach(function(cl){
+    (cl.presupuestos||[]).forEach(function(e){
+      if(!e||!Array.isArray(e.items)||!e.items.length)return; // solo PDFs a los que se les leyeron ítems
+      var n=_statNroP(e.numero);if(n&&vistosNro[n])return; // ya contado desde presupuestosDoc
+      if(n)vistosNro[n]=true;
+      var tot=0;e.items.forEach(function(it){tot+=(+it.total||(+it.cant||0)*(+it.precio||0));});
+      quotes.push({tel:_statTel(cl.telefono),vendedor:e.vendedor||cl.vendedor||'',items:e.items,total:tot,numero:n});
+    });
+  });
+  var hayPreg=clientes.some(function(c){return _statNorm(c.producto);});
+  if(!quotes.length&&!hayPreg&&!clientes.some(_statCerrado))
+    return '<div class="section-pad" style="max-width:760px;margin:0 auto"><div class="empty"><div class="empty-icon">📊</div>Aún no hay datos para analizar</div></div>';
+  // 2) ¿cliente cerrado? por teléfono
+  var cerrado={};
+  clientes.forEach(function(cl){var t=_statTel(cl.telefono);if(!t)return;if(_statCerrado(cl))cerrado[t]=true;else if(!(t in cerrado))cerrado[t]=false;});
+  // 3) Agregación de cotizaciones (más cotizados + conversión + vendedores)
+  var prod={},vend={},telsCot={},telsCer={},quotesPorTel={},totPresu=0,montoCot=0,montoCer=0;
+  quotes.forEach(function(q){
+    totPresu++;var isC=!!cerrado[q.tel];
+    if(q.tel){telsCot[q.tel]=true;if(isC)telsCer[q.tel]=true;(quotesPorTel[q.tel]=quotesPorTel[q.tel]||[]).push(q);}
+    montoCot+=q.total;if(isC)montoCer+=q.total;
+    var v=q.vendedor||'Sin asignar';if(!vend[v])vend[v]={pres:0,cer:0,mCot:0,mCer:0};
+    vend[v].pres++;vend[v].mCot+=q.total;if(isC){vend[v].cer++;vend[v].mCer+=q.total;}
+    var vistos={};
+    (q.items||[]).forEach(function(it){
+      var k=_statNorm(it.desc);if(!k)return;
+      if(!prod[k])prod[k]={nombre:(it.desc||'').trim(),cotPres:0,cerPres:0,cant:0,mCot:0};
+      var pr=prod[k];pr.cant+=(+it.cant||0);pr.mCot+=(+it.total||(+it.cant||0)*(+it.precio||0));
+      if(!vistos[k]){vistos[k]=true;pr.cotPres++;if(isC)pr.cerPres++;}
+    });
+  });
+  // 4) Productos VENDIDOS (clientes cerrados): ítems del pedido si existen; si no, los de sus cotizaciones. Cuenta 1 vez por cliente.
+  var vendidos={};
+  clientes.forEach(function(cl){
+    if(!_statCerrado(cl))return;
+    var t=_statTel(cl.telefono),items=[];
+    if(Array.isArray(cl.ventaItems)&&cl.ventaItems.length)items=cl.ventaItems;
+    else (quotesPorTel[t]||[]).forEach(function(q){items=items.concat(q.items||[]);});
+    if(!items.length)return;
+    var vistos={};
+    items.forEach(function(it){
+      var k=_statNorm(it.desc);if(!k)return;
+      if(!vendidos[k])vendidos[k]={nombre:(it.desc||'').trim(),veces:0,cant:0,monto:0};
+      var vd=vendidos[k];vd.cant+=(+it.cant||0);vd.monto+=(+it.total||(+it.cant||0)*(+it.precio||0));
+      if(!vistos[k]){vistos[k]=true;vd.veces++;}
+    });
+  });
+  // 5) Productos más PREGUNTADOS (columna Producto/Servicio del CRM)
+  var preg={};
+  clientes.forEach(function(cl){var k=_statNorm(cl.producto);if(!k)return;if(!preg[k])preg[k]={nombre:(cl.producto||'').trim(),veces:0};preg[k].veces++;});
+  var nCot=Object.keys(telsCot).length,nCer=Object.keys(telsCer).length;
+
+  function tarjeta(v,l,col){return '<div class="stat" style="min-width:0"><div class="stat-v" style="color:'+col+'">'+v+'</div><div class="stat-l">'+l+'</div></div>';}
+  function tablaAbrir(t){return '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin-bottom:14px;overflow:auto"><div style="font-size:14px;font-weight:700;margin-bottom:8px">'+t+'</div>';}
+  var h='<div class="section-pad" style="max-width:760px;margin:0 auto">';
+  h+='<div style="font-size:12px;color:var(--muted);margin-bottom:10px">Analiza los presupuestos (app, WhatsApp y PDFs que mandan los vendedores) y las ventas cerradas por pedido. "Cerrado" = el cliente quedó en estado <b>CERRADO</b> en el CRM.</div>';
+  // Resumen
+  h+='<div class="stats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">'
+    +tarjeta(totPresu,'presupuestos','#1a1a2e')
+    +tarjeta(nCot,'clientes cotizados','#1d4ed8')
+    +tarjeta(nCer,'clientes cerrados','#16a34a')
+    +tarjeta(_statPct(nCer,nCot),'conversión','#7c3aed')
+    +tarjeta(fmtMoney(montoCot),'$ cotizado','#0369a1')
+    +tarjeta(fmtMoney(montoCer),'$ cerrado','#166534')
+    +'</div>';
+
+  // Tabla: productos mas PREGUNTADOS (columna Producto/Servicio)
+  var masPreg=Object.keys(preg).map(function(k){return preg[k];}).sort(function(a,b){return b.veces-a.veces;});
+  h+=tablaAbrir('❓ Productos más preguntados (columna Producto/Servicio)');
+  if(!masPreg.length)h+='<div style="font-size:12px;color:var(--muted)">Aún no hay productos en la columna Producto/Servicio de los clientes.</div>';
+  else{h+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:320px"><thead><tr style="text-align:left;border-bottom:2px solid #111"><th style="padding:6px 4px">Producto / Servicio</th><th style="padding:6px 4px;text-align:right">Veces preguntado</th></tr></thead><tbody>';
+    masPreg.forEach(function(pr){h+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px">'+esc(pr.nombre)+'</td><td style="padding:6px 4px;text-align:right;font-weight:600">'+pr.veces+'</td></tr>';});
+    h+='</tbody></table>';}
+  h+='</div>';
+
+  // Tabla: productos mas cotizados
+  var masCot=Object.keys(prod).map(function(k){return prod[k];}).sort(function(a,b){return b.cotPres-a.cotPres||b.cant-a.cant;}).slice(0,25);
+  h+=tablaAbrir('🔝 Productos más cotizados');
+  if(!masCot.length)h+='<div style="font-size:12px;color:var(--muted)">Aún no hay presupuestos con ítems para analizar.</div>';
+  else{h+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:520px"><thead><tr style="text-align:left;border-bottom:2px solid #111"><th style="padding:6px 4px">Producto</th><th style="padding:6px 4px;text-align:right">Veces cotizado</th><th style="padding:6px 4px;text-align:right">Cantidad</th><th style="padding:6px 4px;text-align:right">Veces cerrado</th><th style="padding:6px 4px;text-align:right">Conversión</th><th style="padding:6px 4px;text-align:right">$ cotizado</th></tr></thead><tbody>';
+    masCot.forEach(function(pr){h+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px">'+esc(pr.nombre)+'</td><td style="padding:6px 4px;text-align:right">'+pr.cotPres+'</td><td style="padding:6px 4px;text-align:right">'+fmtMoney(pr.cant)+'</td><td style="padding:6px 4px;text-align:right">'+pr.cerPres+'</td><td style="padding:6px 4px;text-align:right;font-weight:600">'+_statPct(pr.cerPres,pr.cotPres)+'</td><td style="padding:6px 4px;text-align:right">'+fmtMoney(pr.mCot)+'</td></tr>';});
+    h+='</tbody></table>';}
+  h+='</div>';
+
+  // Tabla: productos que mas se cierran (ventas reales)
+  var masVen=Object.keys(vendidos).map(function(k){return vendidos[k];}).sort(function(a,b){return b.veces-a.veces||b.cant-a.cant;}).slice(0,25);
+  h+=tablaAbrir('✅ Productos que más se cierran (ventas reales)');
+  if(!masVen.length)h+='<div style="font-size:12px;color:var(--muted)">Todavía no hay ventas cerradas con productos. En cuanto entren pedidos o se marquen clientes con presupuesto como <b>CERRADO</b>, aparecen aquí.</div>';
+  else{h+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:420px"><thead><tr style="text-align:left;border-bottom:2px solid #111"><th style="padding:6px 4px">Producto</th><th style="padding:6px 4px;text-align:right">Veces vendido</th><th style="padding:6px 4px;text-align:right">Cantidad vendida</th><th style="padding:6px 4px;text-align:right">$ vendido</th></tr></thead><tbody>';
+    masVen.forEach(function(pr){h+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px">'+esc(pr.nombre)+'</td><td style="padding:6px 4px;text-align:right">'+pr.veces+'</td><td style="padding:6px 4px;text-align:right">'+fmtMoney(pr.cant)+'</td><td style="padding:6px 4px;text-align:right">'+fmtMoney(pr.monto)+'</td></tr>';});
+    h+='</tbody></table>';}
+  h+='</div>';
+
+  // Tabla: supervision por vendedor
+  var vend2=Object.keys(vend).map(function(k){return {nombre:k,d:vend[k]};}).sort(function(a,b){return b.d.pres-a.d.pres;});
+  h+=tablaAbrir('🧑‍💼 Supervisión por vendedor');
+  h+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:520px"><thead><tr style="text-align:left;border-bottom:2px solid #111">'
+    +'<th style="padding:6px 4px">Vendedor</th><th style="padding:6px 4px;text-align:right">Presupuestos</th><th style="padding:6px 4px;text-align:right">Cerrados</th><th style="padding:6px 4px;text-align:right">Conversión</th><th style="padding:6px 4px;text-align:right">$ cotizado</th><th style="padding:6px 4px;text-align:right">$ cerrado</th></tr></thead><tbody>';
+  vend2.forEach(function(v){var d=v.d;h+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px">'+esc(v.nombre)+'</td><td style="padding:6px 4px;text-align:right">'+d.pres+'</td><td style="padding:6px 4px;text-align:right">'+d.cer+'</td><td style="padding:6px 4px;text-align:right;font-weight:600">'+_statPct(d.cer,d.pres)+'</td><td style="padding:6px 4px;text-align:right">'+fmtMoney(d.mCot)+'</td><td style="padding:6px 4px;text-align:right">'+fmtMoney(d.mCer)+'</td></tr>';});
+  h+='</tbody></table></div>';
+
+  h+='<div style="font-size:11px;color:#94a3b8;margin-bottom:6px">Los productos se agrupan por su descripción exacta (ignorando mayúsculas y espacios de más). "Veces vendido" cuenta 1 por cliente cerrado. Los presupuestos en PDF cuentan sus ítems solo si la IA logró leerlos.</div>';
+  h+='<div style="font-size:10px;color:#cbd5e1;text-align:center;margin-top:4px">'+APP_VERSION+'</div>';
   return h+'</div>';
 }
 
