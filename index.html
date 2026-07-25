@@ -533,7 +533,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v4 · copiar arreglado';
+var APP_VERSION='v5 · varios presupuestos por cliente';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -556,6 +556,8 @@ function copiarAlPortapapeles(txt,okMsg){
 function presuNroFmt(n){return ('0000000000'+(n||0)).slice(-10);}
 function presuNextNro(){var mx=0;(DB.presupuestosDoc||[]).forEach(function(p){if(p.nro>mx)mx=p.nro;});return mx+1;}
 function presuFind(nro){return (DB.presupuestosDoc||[]).find(function(p){return p.nro===nro;});}
+// Lista de presupuestos adjuntos a un cliente (varios). Migra el campo viejo (uno solo).
+function presuListaCliente(cl){var arr=Array.isArray(cl.presupuestos)?cl.presupuestos.slice():[];if(!arr.length&&cl.presupuestoUrl)arr=[{url:cl.presupuestoUrl,numero:'',fecha:cl.presupuestoFecha||''}];return arr;}
 function presuCampo(label,id,ph){return '<div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">'+label+'</label><input type="text" id="'+id+'" placeholder="'+(ph||'')+'" style="width:100%;padding:9px;border:1px solid #d1d5db;border-radius:8px;font-size:14px"></div>';}
 function cotUIpresu(){
   return '<div class="section-pad" style="max-width:640px;margin:0 auto">'
@@ -1418,7 +1420,7 @@ function clienteCardHTML(cl){
   if(cl.redSocial)h+=chipCliente(cl.redSocial,'#f3f4f6','#374151');
   if(cl.estado2)h+=chipCliente(cl.estado2,'var(--ibg)','var(--info)');
   if(cl.visitoOficina)h+=chipCliente('🏢 Visitó oficina'+(cl.fechaVisita?' '+esc(cl.fechaVisita):''),'#dcfce7','#166534');
-  if(cl.presupuestoUrl)h+='<a href="'+esc(cl.presupuestoUrl)+'" target="_blank" class="card-vend" style="background:#dbeafe;color:#1d4ed8;margin-right:4px;text-decoration:none">📄 Presupuesto</a>';
+  var _plC=presuListaCliente(cl);_plC.forEach(function(p,i){h+='<a href="'+esc(p.url)+'" target="_blank" class="card-vend" style="background:#dbeafe;color:#1d4ed8;margin-right:4px;text-decoration:none">📄 '+(p.numero?('Nº'+esc(p.numero)):('Presup. '+(i+1)))+'</a>';});
   h+='</div>';
   h+=proxContactoHTML(cl);
   if(SESSION&&SESSION.rol==='admin'){var _ta=tiempoAtencionTxt(cl);if(_ta)h+='<div style="font-size:11px;color:#7c3aed;font-weight:600;margin-top:3px">⏱ '+_ta+'</div>';}
@@ -1568,7 +1570,7 @@ function renderTablaCRM(el,lista){
     h+='<td style="min-width:210px">'+celdaInput(id,'notas',cl.notas)+'</td>';
     h+='<td style="min-width:170px">'+celdaSelect(id,'estado2',cl.estado2||'',EST2,'\u2014')+'</td>';
     h+='<td style="min-width:130px">'+celdaSelect(id,'visitoOficina',cl.visitoOficina||'',['S\u00cd'],'\u2014')+(cl.fechaVisita?'<div style="font-size:10px;color:var(--muted)">'+esc(cl.fechaVisita)+'</div>':'')+'</td>';
-    h+='<td style="min-width:110px">'+(cl.presupuestoUrl?'<a href="'+esc(cl.presupuestoUrl)+'" target="_blank" style="color:var(--info)">\ud83d\udcc4 Ver</a>'+(cl.presupuestoFecha?'<div style="font-size:10px;color:var(--muted)">'+esc(cl.presupuestoFecha)+'</div>':''):'\u2014')+'</td>';
+    var _plT=presuListaCliente(cl);h+='<td style="min-width:120px">'+(_plT.length?_plT.map(function(p){return '<a href="'+esc(p.url)+'" target="_blank" style="color:var(--info)">\ud83d\udcc4 '+(p.numero?('N\u00ba'+esc(p.numero)):'Ver')+'</a>'+(p.fecha?' <span style="font-size:10px;color:var(--muted)">'+esc(p.fecha)+'</span>':'');}).join('<br>'):'\u2014')+'</td>';
     if(SESSION.rol==='admin'){var _ta=tiempoAtencionTxt(cl);h+='<td style="min-width:130px;font-size:11px;color:#7c3aed;font-weight:600">'+(_ta?esc(_ta):'\u2014')+'</td>';}
     h+='</tr>';
   });
