@@ -217,8 +217,9 @@ td.mono{font-family:'IBM Plex Mono',monospace}
       </div>
       <div class="help">
         rueda · zoom<br>
-        arrastrar fondo · mover vista<br>
-        R · rotar 90°   ·   Supr · eliminar
+        clic derecho arrastrando · mover vista (siempre)<br>
+        espacio + arrastrar · mover vista<br>
+        R · rotar 90°   ·   Supr · eliminar   ·   Esc · cancelar
       </div>
       <input type="file" id="fplano" accept="image/*,application/pdf" hidden>
       <input type="file" id="fjson" accept="application/json" hidden>
@@ -250,8 +251,8 @@ td.mono{font-family:'IBM Plex Mono',monospace}
 <!-- calibración -->
 <div class="dlg" id="dcal">
   <h3>Distancia real</h3>
-  <p>Marcaste dos puntos sobre el plano. Escribe cuánto miden en la realidad, en metros.</p>
-  <input type="number" id="icaldist" step="0.01" min="0.01" value="10" autocomplete="off">
+  <p>Marcaste dos puntos sobre el plano. Escribe cuánto miden en la realidad, <b>en metros</b>. Si la cota del plano está en centímetros, divide entre 100.</p>
+  <input type="number" id="icaldist" step="0.01" min="0.01" placeholder="ej. 14.44" autocomplete="off">
   <div class="dlg-f">
     <button class="btn" id="bcalcancel">Cancelar</button>
     <button class="btn primary" id="bcalok">Aplicar escala</button>
@@ -489,14 +490,44 @@ function acotar(it){
 
 /* ===================== interacción 2D ===================== */
 const mouse={x:0,y:0};
-let arr=null, pan=null;
+let arr=null, pan=null, espacio=false;
+
+window.addEventListener('keydown',e=>{
+  if(e.code==='Space' && !/input|select|textarea/i.test(e.target.tagName)){
+    e.preventDefault(); espacio=true; cv.style.cursor='grab';
+  }
+  if(e.key==='Escape' && calib){
+    calib=false; calibPts=[]; $('#dcal').classList.remove('on');
+    $('#chEsc').textContent = escalaOK ? `Escala 1 px = ${plano.mpp.toFixed(4)} m` : 'Escala sin calibrar';
+    dib();
+  }
+});
+window.addEventListener('keyup',e=>{
+  if(e.code==='Space'){espacio=false; cv.style.cursor=calib?'crosshair':'crosshair'}
+});
+
+cv.addEventListener('contextmenu',e=>e.preventDefault());
 
 cv.addEventListener('mousedown',e=>{
   const r=cv.getBoundingClientRect(), sx=e.clientX-r.left, sy=e.clientY-r.top;
   const [wx,wy]=s2w(sx,sy);
+
+  // Botón derecho, botón central o barra espaciadora: mover la vista SIEMPRE,
+  // incluso a media calibración.
+  if(e.button===1 || e.button===2 || espacio){
+    e.preventDefault();
+    pan={sx,sy,px:view.px,py:view.py};
+    cv.style.cursor='grabbing';
+    return;
+  }
+  if(e.button!==0) return;
+
   if(calib){
     calibPts.push([wx,wy]);
-    if(calibPts.length===2){$('#dcal').classList.add('on');$('#icaldist').select()}
+    if(calibPts.length===2){
+      $('#dcal').classList.add('on');
+      $('#icaldist').value=''; $('#icaldist').focus();
+    }
     dib(); return;
   }
   const hit=[...items].reverse().find(it=>dentro(it,wx,wy));
@@ -513,9 +544,17 @@ cv.addEventListener('mousemove',e=>{
     panel(); dib();
   }else if(pan){
     view.px=pan.px+(mouse.x-pan.sx); view.py=pan.py+(mouse.y-pan.sy); dib();
-  }else if(calib&&calibPts.length===1) dib();
+  }else if(calib&&calibPts.length===1){
+    const d=Math.hypot(wx-calibPts[0][0], wy-calibPts[0][1]);
+    $('#chEsc').textContent=`Midiendo… clic en el otro extremo (${(d/plano.mpp).toFixed(0)} px)`;
+    dib();
+  }
 });
-window.addEventListener('mouseup',()=>{if(arr)cambio();arr=null;pan=null});
+window.addEventListener('mouseup',()=>{
+  if(arr)cambio();
+  arr=null; pan=null;
+  cv.style.cursor = espacio?'grab':'crosshair';
+});
 cv.addEventListener('wheel',e=>{
   e.preventDefault();
   const r=cv.getBoundingClientRect(), sx=e.clientX-r.left, sy=e.clientY-r.top;
@@ -644,12 +683,14 @@ $('#bopac').onclick=()=>{
 $('#bcal').onclick=()=>{
   if(!plano) return alert('Primero carga un plano.');
   calib=true; calibPts=[]; sel=null; panel();
-  $('#chEsc').textContent='Marca dos puntos de distancia conocida';
+  $('#chEsc').textContent='Clic en un extremo · clic derecho para mover la vista · clic en el otro extremo';
   $('#chEsc').classList.add('warn'); dib();
 };
 $('#bcalcancel').onclick=()=>{calib=false;calibPts=[];$('#dcal').classList.remove('on');dib()};
+$('#icaldist').addEventListener('keydown',e=>{if(e.key==='Enter')$('#bcalok').click()});
 $('#bcalok').onclick=()=>{
   const real=+$('#icaldist').value;
+  if(!(real>0)) return $('#icaldist').focus();
   const d=Math.hypot(calibPts[1][0]-calibPts[0][0], calibPts[1][1]-calibPts[0][1]);
   if(real>0 && d>0){
     const k=real/d;
