@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VEOYOCA · Planificador de espacios</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+:root{
+  --ink:#14181D;
+  --paper:#EEF1F4;
+  --surface:#FFFFFF;
+  --steel:#5B6B7A;
+  --steel-soft:#9AA6B2;
+  --blueprint:#2E5C8A;
+  --signal:#E8A33D;
+  --line:#D3DAE1;
+  --line-soft:#E5EAEF;
+  --danger:#B4472F;
+  --r:3px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:'Archivo',system-ui,sans-serif;
+  background:var(--paper);color:var(--ink);
+  font-size:13px;overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+.mono{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums}
+
+/* ---------- shell ---------- */
+.app{display:flex;flex-direction:column;height:100vh}
+.bar{
+  display:flex;align-items:center;gap:18px;
+  height:50px;flex:0 0 50px;padding:0 14px;
+  background:var(--ink);color:#DFE5EB;
+  border-bottom:1px solid #000;
+}
+.brand{display:flex;align-items:baseline;gap:8px}
+.brand b{font-weight:700;letter-spacing:.14em;font-size:13px}
+.brand span{font-size:10px;letter-spacing:.18em;color:var(--steel-soft);text-transform:uppercase}
+.bar-spacer{flex:1}
+
+.seg{display:flex;border:1px solid #333C46;border-radius:var(--r);overflow:hidden}
+.seg button{
+  font:600 11px/1 'Archivo',sans-serif;letter-spacing:.1em;text-transform:uppercase;
+  background:transparent;color:var(--steel-soft);border:0;padding:8px 16px;cursor:pointer;
+}
+.seg button.on{background:var(--signal);color:var(--ink)}
+
+.btn{
+  font:500 12px/1 'Archivo',sans-serif;
+  background:var(--surface);border:1px solid var(--line);color:var(--ink);
+  padding:8px 12px;border-radius:var(--r);cursor:pointer;
+}
+.btn:hover{border-color:var(--steel)}
+.btn:active{transform:translateY(1px)}
+.btn.dark{background:#232A32;border-color:#333C46;color:#DFE5EB}
+.btn.dark:hover{border-color:var(--steel)}
+.btn.primary{background:var(--blueprint);border-color:var(--blueprint);color:#fff}
+.btn.primary:hover{background:#24496D}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn:focus-visible,.seg button:focus-visible,select:focus-visible,input:focus-visible{
+  outline:2px solid var(--signal);outline-offset:1px
+}
+
+.body{display:flex;flex:1;min-height:0}
+.rail{
+  width:238px;flex:0 0 238px;background:var(--surface);
+  display:flex;flex-direction:column;min-height:0;
+}
+.rail-left{border-right:1px solid var(--line)}
+.rail-right{border-left:1px solid var(--line);width:262px;flex-basis:262px}
+.rail-scroll{overflow-y:auto;flex:1;min-height:0}
+
+.sec-title{
+  font:600 10px/1 'Archivo',sans-serif;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--steel);padding:14px 14px 8px;display:flex;justify-content:space-between;align-items:center;
+}
+.fam{padding:0 0 6px}
+.fam-h{
+  font:600 10px/1 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--steel);padding:10px 14px 6px;display:flex;align-items:center;gap:7px;
+}
+.swatch{width:9px;height:9px;border-radius:1px;flex:0 0 9px}
+.item{
+  display:flex;align-items:center;gap:9px;width:100%;text-align:left;
+  padding:7px 14px;background:none;border:0;cursor:pointer;border-left:2px solid transparent;
+}
+.item:hover{background:var(--paper);border-left-color:var(--signal)}
+.item-n{font-size:12px;line-height:1.25;flex:1}
+.item-d{font:400 10px/1 'IBM Plex Mono',monospace;color:var(--steel);margin-top:3px;display:block}
+
+/* ---------- stage ---------- */
+.stage{flex:1;position:relative;min-width:0;background:#DFE4E9}
+#c2d{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:crosshair}
+#c3d{position:absolute;inset:0;display:none}
+#c3d canvas{display:block}
+.stage.v3 #c2d{display:none}
+.stage.v3 #c3d{display:block}
+
+.hud{position:absolute;left:12px;bottom:12px;display:flex;gap:6px;flex-wrap:wrap;max-width:calc(100% - 24px)}
+.chip{
+  font:500 11px/1 'IBM Plex Mono',monospace;
+  background:rgba(20,24,29,.86);color:#DFE5EB;padding:7px 10px;border-radius:var(--r);
+  backdrop-filter:blur(6px);
+}
+.chip.warn{background:rgba(180,71,47,.92)}
+.toolbar{position:absolute;left:12px;top:12px;display:flex;gap:6px;flex-wrap:wrap}
+.help{position:absolute;right:12px;bottom:12px;text-align:right;font:400 10px/1.7 'IBM Plex Mono',monospace;color:#6B7885}
+
+/* ---------- properties ---------- */
+.props{padding:0 14px 14px}
+.row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.row label{font-size:11px;color:var(--steel);width:60px;flex:0 0 60px}
+input[type=text],input[type=number],select{
+  font:500 12px 'IBM Plex Mono',monospace;
+  border:1px solid var(--line);border-radius:var(--r);padding:6px 7px;
+  background:var(--surface);color:var(--ink);width:100%;min-width:0;
+}
+input[type=range]{width:100%;accent-color:var(--blueprint)}
+.empty{padding:12px 14px;font-size:12px;color:var(--steel);line-height:1.5}
+
+/* ---------- BOM ---------- */
+.bom{border-top:1px solid var(--line);display:flex;flex-direction:column;min-height:0;flex:1}
+.bom-scroll{overflow-y:auto;flex:1;min-height:0}
+table{width:100%;border-collapse:collapse}
+th{
+  font:600 9px/1 'Archivo',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--steel);
+  text-align:left;padding:5px 14px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface);
+}
+th.n,td.n{text-align:right}
+td{padding:6px 14px;border-bottom:1px solid var(--line-soft);font-size:11px;vertical-align:top}
+td.mono{font-family:'IBM Plex Mono',monospace}
+.total{
+  border-top:2px solid var(--ink);padding:11px 14px;
+  display:flex;justify-content:space-between;align-items:baseline;background:var(--paper);
+}
+.total b{font:600 18px 'IBM Plex Mono',monospace}
+.total span{font:600 9px/1 'Archivo',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--steel)}
+.foot{padding:10px 14px;display:flex;gap:6px;border-top:1px solid var(--line)}
+.foot .btn{flex:1;font-size:11px;padding:9px 6px}
+
+/* ---------- overlay ---------- */
+.ov{position:fixed;inset:0;background:rgba(20,24,29,.9);display:none;z-index:60;overflow-y:auto}
+.ov.on{display:block}
+.ov-in{max-width:1080px;margin:36px auto;padding:0 20px 60px}
+.ov-h{display:flex;align-items:center;gap:14px;margin-bottom:20px;color:#fff}
+.ov-h h2{font:700 19px 'Archivo',sans-serif;letter-spacing:-.01em}
+.ov-h .bar-spacer{flex:1}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+.shot{background:var(--surface);border-radius:var(--r);overflow:hidden}
+.shot img{width:100%;display:block;background:#000}
+.shot-f{display:flex;align-items:center;gap:9px;padding:9px 11px}
+.shot-f span{flex:1;font:500 11px 'IBM Plex Mono',monospace;color:var(--steel)}
+
+.dlg{
+  position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:70;
+  background:var(--surface);border-radius:var(--r);padding:18px;width:308px;
+  box-shadow:0 18px 50px rgba(20,24,29,.4);display:none;
+}
+.dlg.on{display:block}
+.dlg h3{font:600 13px 'Archivo',sans-serif;margin-bottom:5px}
+.dlg p{font-size:11px;color:var(--steel);line-height:1.5;margin-bottom:12px}
+.dlg-f{display:flex;gap:6px;margin-top:12px}
+.dlg-f .btn{flex:1}
+
+.narrow{display:none}
+@media(max-width:900px){
+  .rail{display:none}
+  .narrow{display:block;padding:14px;font-size:12px;line-height:1.6;background:var(--signal);color:var(--ink)}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="bar">
+    <div class="brand"><b>VEOYOCA</b><span>Planificador</span></div>
+    <div class="seg" role="group" aria-label="Vista">
+      <button id="m2d" class="on">Plano 2D</button>
+      <button id="m3d">Vista 3D</button>
+    </div>
+    <div class="bar-spacer"></div>
+    <input type="text" id="pnom" value="Proyecto sin título" style="width:190px;background:#232A32;border-color:#333C46;color:#DFE5EB;font-family:Archivo,sans-serif">
+    <button class="btn dark" id="bguardar">Guardar</button>
+    <button class="btn dark" id="babrir">Abrir</button>
+    <button class="btn primary" id="brender">Generar imágenes</button>
+  </header>
+
+  <div class="narrow">Esta herramienta necesita pantalla de escritorio para trabajar el plano. Ábrela en la laptop.</div>
+
+  <div class="body">
+
+    <aside class="rail rail-left">
+      <div class="sec-title">Catálogo</div>
+      <div class="rail-scroll" id="cat"></div>
+    </aside>
+
+    <main class="stage" id="stage">
+      <canvas id="c2d"></canvas>
+      <div id="c3d"></div>
+      <div class="toolbar">
+        <button class="btn" id="bplano">Cargar plano</button>
+        <button class="btn" id="bcal">Calibrar escala</button>
+        <button class="btn" id="bopac">Plano 60%</button>
+      </div>
+      <div class="hud">
+        <span class="chip" id="chEsc">Escala sin calibrar</span>
+        <span class="chip" id="chSel">Nada seleccionado</span>
+        <span class="chip" id="chArea">—</span>
+      </div>
+      <div class="help">
+        rueda · zoom<br>
+        arrastrar fondo · mover vista<br>
+        R · rotar 90°   ·   Supr · eliminar
+      </div>
+      <input type="file" id="fplano" accept="image/*,application/pdf" hidden>
+      <input type="file" id="fjson" accept="application/json" hidden>
+    </main>
+
+    <aside class="rail rail-right">
+      <div class="sec-title">Mueble seleccionado</div>
+      <div id="props"><p class="empty">Selecciona un mueble en el plano para ajustar posición, giro y cantidad.</p></div>
+
+      <div class="bom">
+        <div class="sec-title">Lista de materiales <span class="mono" id="bomN" style="font-size:10px">0</span></div>
+        <div class="bom-scroll">
+          <table>
+            <thead><tr><th>SKU</th><th class="n">Cant</th><th class="n">Subtotal</th></tr></thead>
+            <tbody id="bomB"></tbody>
+          </table>
+        </div>
+        <div class="total"><span>Total estimado</span><b class="mono" id="bomT">$0</b></div>
+        <div class="foot">
+          <button class="btn" id="bcsv">Exportar CSV</button>
+          <button class="btn" id="bvaciar">Vaciar</button>
+        </div>
+      </div>
+    </aside>
+
+  </div>
+</div>
+
+<!-- calibración -->
+<div class="dlg" id="dcal">
+  <h3>Distancia real</h3>
+  <p>Marcaste dos puntos sobre el plano. Escribe cuánto miden en la realidad, en metros.</p>
+  <input type="number" id="icaldist" step="0.01" min="0.01" value="10" autocomplete="off">
+  <div class="dlg-f">
+    <button class="btn" id="bcalcancel">Cancelar</button>
+    <button class="btn primary" id="bcalok">Aplicar escala</button>
+  </div>
+</div>
+
+<!-- renders -->
+<div class="ov" id="ov">
+  <div class="ov-in">
+    <div class="ov-h">
+      <h2 id="ovt">Imágenes del proyecto</h2>
+      <div class="bar-spacer"></div>
+      <button class="btn" id="bdlall">Descargar todas</button>
+      <button class="btn dark" id="bovx">Cerrar</button>
+    </div>
+    <div class="grid" id="ovg"></div>
+  </div>
+</div>
+
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+}}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+
+if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+/* =====================================================================
+   CATÁLOGO — reemplaza medidas y precios por los tuyos reales.
+   Todas las dimensiones en METROS. precio en USD.
+   Para usar un modelo propio: agrega  glb:'https://.../mueble.glb'
+   y el visor lo carga en vez de generar la geometría paramétrica.
+   ===================================================================== */
+const FAMILIAS = {
+  gondola:  {nom:'Góndolas',      color:'#2E5C8A'},
+  estante:  {nom:'Estanterías',   color:'#5B6B7A'},
+  mostrador:{nom:'Mostradores',   color:'#8A6A3E'},
+  vitrina:  {nom:'Vitrinas',      color:'#3E7F86'},
+  farmacia: {nom:'Farmacia',      color:'#7A5C8A'},
+  frio:     {nom:'Refrigeración', color:'#6B8FBF'}
+};
+
+const CATALOGO = [
+  {sku:'GC-100-180', fam:'gondola',  nom:'Góndola central',      an:1.00, fo:0.90, al:1.80, ent:8,  tipo:'gondola_c', precio:485},
+  {sku:'GC-100-220', fam:'gondola',  nom:'Góndola central alta', an:1.00, fo:0.90, al:2.20, ent:10, tipo:'gondola_c', precio:560},
+  {sku:'GP-100-180', fam:'gondola',  nom:'Góndola de pared',     an:1.00, fo:0.45, al:1.80, ent:5,  tipo:'gondola_p', precio:325},
+  {sku:'GP-100-220', fam:'gondola',  nom:'Góndola pared alta',   an:1.00, fo:0.50, al:2.20, ent:6,  tipo:'gondola_p', precio:390},
+  {sku:'GE-090-180', fam:'gondola',  nom:'Góndola esquinera',    an:0.90, fo:0.90, al:1.80, ent:5,  tipo:'gondola_p', precio:410},
+
+  {sku:'ES-092-200', fam:'estante',  nom:'Estantería metálica',  an:0.92, fo:0.45, al:2.00, ent:5,  tipo:'estante',   precio:215},
+  {sku:'ES-092-250', fam:'estante',  nom:'Estantería depósito',  an:0.92, fo:0.60, al:2.50, ent:6,  tipo:'estante',   precio:290},
+
+  {sku:'MO-150-095', fam:'mostrador',nom:'Mostrador recto',      an:1.50, fo:0.60, al:0.95, ent:2,  tipo:'mostrador', precio:340},
+  {sku:'MO-100-VI',  fam:'mostrador',nom:'Mostrador vitrina',    an:1.00, fo:0.60, al:1.10, ent:2,  tipo:'most_vit',  precio:420},
+  {sku:'CJ-180-095', fam:'mostrador',nom:'Puesto de caja',       an:1.80, fo:0.70, al:0.95, ent:1,  tipo:'caja',      precio:520},
+
+  {sku:'VI-100-200', fam:'vitrina',  nom:'Vitrina alta',         an:1.00, fo:0.45, al:2.00, ent:5,  tipo:'vitrina',   precio:610},
+  {sku:'VT-120-180', fam:'vitrina',  nom:'Vitrina torre',        an:1.20, fo:0.50, al:1.80, ent:4,  tipo:'vitrina',   precio:575},
+
+  {sku:'FA-100-220', fam:'farmacia', nom:'Módulo farmacia',      an:1.00, fo:0.35, al:2.20, ent:7,  tipo:'gondola_p', precio:365},
+  {sku:'FE-060-150', fam:'farmacia', nom:'Exhibidor inclinado',  an:0.60, fo:0.40, al:1.50, ent:5,  tipo:'exhibidor', precio:245},
+
+  {sku:'RE-150-200', fam:'frio',     nom:'Refrigerador vertical',an:1.50, fo:0.80, al:2.00, ent:4,  tipo:'refri',     precio:1850},
+  {sku:'RE-250-ISL', fam:'frio',     nom:'Congelador isla',      an:2.50, fo:0.90, al:0.90, ent:1,  tipo:'isla',      precio:2100}
+];
+const porSku = Object.fromEntries(CATALOGO.map(c=>[c.sku,c]));
+
+/* ===================== estado ===================== */
+let items = [];          // {id, sku, x, y, rot}
+let sel = null;
+let uid = 1;
+const view = {z:46, px:0, py:0};
+let plano = null;        // {img, mpp, x, y}
+let planoOpac = .6;
+let calib = false, calibPts = [], escalaOK = false;
+
+const $ = s=>document.querySelector(s);
+const cv = $('#c2d'), ctx = cv.getContext('2d');
+
+/* ===================== catálogo UI ===================== */
+(function(){
+  const c = $('#cat');
+  for(const [k,f] of Object.entries(FAMILIAS)){
+    const lista = CATALOGO.filter(i=>i.fam===k);
+    if(!lista.length) continue;
+    const d = document.createElement('div'); d.className='fam';
+    d.innerHTML = `<div class="fam-h"><i class="swatch" style="background:${f.color}"></i>${f.nom}</div>`;
+    lista.forEach(it=>{
+      const b = document.createElement('button');
+      b.className='item';
+      b.innerHTML = `<i class="swatch" style="background:${f.color};opacity:.5"></i>
+        <span class="item-n">${it.nom}
+        <span class="item-d">${it.sku} · ${it.an.toFixed(2)}×${it.fo.toFixed(2)}×${it.al.toFixed(2)}</span></span>`;
+      b.onclick = ()=>agregar(it.sku);
+      d.appendChild(b);
+    });
+    c.appendChild(d);
+  }
+})();
+
+function agregar(sku){
+  const [wx,wy] = s2w(cv.clientWidth/2, cv.clientHeight/2);
+  items.push({id:uid++, sku, x:round(wx), y:round(wy), rot:0});
+  sel = items[items.length-1];
+  cambio();
+}
+const round = v=>Math.round(v/0.05)*0.05;
+
+/* ===================== transformaciones ===================== */
+function w2s(x,y){return [x*view.z+view.px, y*view.z+view.py]}
+function s2w(x,y){return [(x-view.px)/view.z, (y-view.py)/view.z]}
+function dims(it){const c=porSku[it.sku];return [c.an,c.fo]}
+
+function esquinas(it){
+  const [an,fo]=dims(it), r=it.rot*Math.PI/180, c=Math.cos(r), s=Math.sin(r);
+  return [[-an/2,-fo/2],[an/2,-fo/2],[an/2,fo/2],[-an/2,fo/2]]
+    .map(([a,b])=>[it.x+a*c-b*s, it.y+a*s+b*c]);
+}
+function dentro(it,wx,wy){
+  const [an,fo]=dims(it), r=-it.rot*Math.PI/180;
+  const dx=wx-it.x, dy=wy-it.y;
+  const lx=dx*Math.cos(r)-dy*Math.sin(r), ly=dx*Math.sin(r)+dy*Math.cos(r);
+  return Math.abs(lx)<=an/2 && Math.abs(ly)<=fo/2;
+}
+function bbox(){
+  if(plano) return {x0:plano.x, y0:plano.y,
+    x1:plano.x+plano.img.width*plano.mpp, y1:plano.y+plano.img.height*plano.mpp};
+  if(!items.length) return {x0:-10,y0:-7.5,x1:10,y1:7.5};
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  items.forEach(it=>esquinas(it).forEach(([a,b])=>{
+    x0=Math.min(x0,a);y0=Math.min(y0,b);x1=Math.max(x1,a);y1=Math.max(y1,b);}));
+  return {x0:x0-3,y0:y0-3,x1:x1+3,y1:y1+3};
+}
+
+/* ===================== dibujo 2D ===================== */
+function resize(){
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio||1;
+  cv.width = r.width*d; cv.height = r.height*d;
+  ctx.setTransform(d,0,0,d,0,0);
+  dib();
+}
+window.addEventListener('resize',()=>{resize();if(rnd)r3size()});
+
+function dib(){
+  const W=cv.clientWidth, H=cv.clientHeight;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#DFE4E9'; ctx.fillRect(0,0,W,H);
+
+  // retícula métrica
+  const paso = view.z<22?5:1;
+  const [ax,ay]=s2w(0,0), [bx,by]=s2w(W,H);
+  ctx.lineWidth=1;
+  for(let x=Math.floor(ax/paso)*paso;x<bx;x+=paso){
+    const sx=w2s(x,0)[0];
+    ctx.strokeStyle = Math.abs(x%5)<1e-6 ? '#C3CCD5' : '#D6DCE2';
+    ctx.beginPath();ctx.moveTo(sx,0);ctx.lineTo(sx,H);ctx.stroke();
+  }
+  for(let y=Math.floor(ay/paso)*paso;y<by;y+=paso){
+    const sy=w2s(0,y)[1];
+    ctx.strokeStyle = Math.abs(y%5)<1e-6 ? '#C3CCD5' : '#D6DCE2';
+    ctx.beginPath();ctx.moveTo(0,sy);ctx.lineTo(W,sy);ctx.stroke();
+  }
+
+  // plano del arquitecto
+  if(plano){
+    ctx.save(); ctx.globalAlpha=planoOpac;
+    const [sx,sy]=w2s(plano.x,plano.y);
+    ctx.drawImage(plano.img,sx,sy,plano.img.width*plano.mpp*view.z,plano.img.height*plano.mpp*view.z);
+    ctx.restore();
+  }
+
+  // muebles
+  items.forEach(it=>{
+    const c=porSku[it.sku], f=FAMILIAS[c.fam], e=esquinas(it).map(([a,b])=>w2s(a,b));
+    ctx.beginPath(); ctx.moveTo(e[0][0],e[0][1]);
+    for(let i=1;i<4;i++)ctx.lineTo(e[i][0],e[i][1]);
+    ctx.closePath();
+    ctx.fillStyle=f.color+'2E'; ctx.fill();
+    ctx.strokeStyle=f.color; ctx.lineWidth=it===sel?2:1.25; ctx.stroke();
+    // marca de frente (dónde se exhibe)
+    ctx.beginPath();
+    ctx.moveTo((e[0][0]+e[1][0])/2,(e[0][1]+e[1][1])/2);
+    ctx.lineTo((e[2][0]+e[3][0])/2,(e[2][1]+e[3][1])/2);
+    ctx.strokeStyle=f.color+'55'; ctx.lineWidth=1; ctx.stroke();
+    if(view.z>34){
+      const [cx,cy]=w2s(it.x,it.y);
+      ctx.fillStyle=f.color; ctx.font='500 9px "IBM Plex Mono",monospace';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(it.sku,cx,cy);
+    }
+  });
+
+  if(sel) acotar(sel);
+
+  // calibración en curso
+  if(calib && calibPts.length){
+    ctx.strokeStyle='#E8A33D'; ctx.lineWidth=2; ctx.setLineDash([5,4]);
+    ctx.beginPath();
+    const p0=w2s(...calibPts[0]); ctx.moveTo(...p0);
+    const p1 = calibPts[1]?w2s(...calibPts[1]):[mouse.x,mouse.y];
+    ctx.lineTo(...p1); ctx.stroke(); ctx.setLineDash([]);
+    [p0,p1].forEach(p=>{ctx.fillStyle='#E8A33D';ctx.beginPath();ctx.arc(p[0],p[1],4,0,7);ctx.fill()});
+  }
+}
+
+// cotas tipo dibujo técnico
+function acotar(it){
+  const [an,fo]=dims(it), e=esquinas(it).map(([a,b])=>w2s(a,b));
+  ctx.strokeStyle='#E8A33D'; ctx.fillStyle='#14181D'; ctx.lineWidth=1;
+  ctx.font='500 10px "IBM Plex Mono",monospace';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  const cota=(p,q,txt,off)=>{
+    const dx=q[0]-p[0], dy=q[1]-p[1], L=Math.hypot(dx,dy)||1;
+    const nx=-dy/L*off, ny=dx/L*off;
+    const a=[p[0]+nx,p[1]+ny], b=[q[0]+nx,q[1]+ny];
+    ctx.beginPath();ctx.moveTo(...a);ctx.lineTo(...b);
+    ctx.moveTo(p[0],p[1]);ctx.lineTo(...a);
+    ctx.moveTo(q[0],q[1]);ctx.lineTo(...b);
+    ctx.stroke();
+    const m=[(a[0]+b[0])/2,(a[1]+b[1])/2];
+    const w=ctx.measureText(txt).width+7;
+    ctx.fillStyle='#EEF1F4';ctx.fillRect(m[0]-w/2,m[1]-7,w,14);
+    ctx.fillStyle='#14181D';ctx.fillText(txt,m[0],m[1]);
+  };
+  cota(e[0],e[1],an.toFixed(2),-20);
+  cota(e[1],e[2],fo.toFixed(2),-20);
+  e.forEach(p=>{ctx.fillStyle='#E8A33D';ctx.beginPath();ctx.arc(p[0],p[1],3,0,7);ctx.fill()});
+}
+
+/* ===================== interacción 2D ===================== */
+const mouse={x:0,y:0};
+let arr=null, pan=null;
+
+cv.addEventListener('mousedown',e=>{
+  const r=cv.getBoundingClientRect(), sx=e.clientX-r.left, sy=e.clientY-r.top;
+  const [wx,wy]=s2w(sx,sy);
+  if(calib){
+    calibPts.push([wx,wy]);
+    if(calibPts.length===2){$('#dcal').classList.add('on');$('#icaldist').select()}
+    dib(); return;
+  }
+  const hit=[...items].reverse().find(it=>dentro(it,wx,wy));
+  if(hit){sel=hit;arr={dx:wx-hit.x,dy:wy-hit.y};panel();dib()}
+  else{sel=null;pan={sx,sy,px:view.px,py:view.py};panel();dib()}
+});
+cv.addEventListener('mousemove',e=>{
+  const r=cv.getBoundingClientRect();
+  mouse.x=e.clientX-r.left; mouse.y=e.clientY-r.top;
+  const [wx,wy]=s2w(mouse.x,mouse.y);
+  if(arr&&sel){
+    sel.x = e.shiftKey?wx-arr.dx:round(wx-arr.dx);
+    sel.y = e.shiftKey?wy-arr.dy:round(wy-arr.dy);
+    panel(); dib();
+  }else if(pan){
+    view.px=pan.px+(mouse.x-pan.sx); view.py=pan.py+(mouse.y-pan.sy); dib();
+  }else if(calib&&calibPts.length===1) dib();
+});
+window.addEventListener('mouseup',()=>{if(arr)cambio();arr=null;pan=null});
+cv.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const r=cv.getBoundingClientRect(), sx=e.clientX-r.left, sy=e.clientY-r.top;
+  const [wx,wy]=s2w(sx,sy);
+  view.z = Math.min(240, Math.max(6, view.z*(e.deltaY<0?1.12:.893)));
+  view.px = sx-wx*view.z; view.py = sy-wy*view.z;
+  dib();
+},{passive:false});
+
+window.addEventListener('keydown',e=>{
+  if(/input|select|textarea/i.test(e.target.tagName)) return;
+  if(!sel) return;
+  if(e.key==='r'||e.key==='R'){sel.rot=(sel.rot+90)%360;cambio()}
+  if(e.key==='Delete'||e.key==='Backspace'){
+    e.preventDefault(); items=items.filter(i=>i!==sel); sel=null; cambio();
+  }
+});
+
+/* ===================== panel de propiedades ===================== */
+function panel(){
+  const p=$('#props');
+  if(!sel){
+    p.innerHTML='<p class="empty">Selecciona un mueble en el plano para ajustar posición, giro y cantidad.</p>';
+    $('#chSel').textContent='Nada seleccionado'; return;
+  }
+  const c=porSku[sel.sku];
+  $('#chSel').textContent=`${sel.sku} · x ${sel.x.toFixed(2)} y ${sel.y.toFixed(2)} · ${sel.rot}°`;
+  p.innerHTML=`
+    <div class="props">
+      <div style="font-weight:600;margin-bottom:2px">${c.nom}</div>
+      <div class="mono" style="font-size:10px;color:var(--steel);margin-bottom:12px">
+        ${c.sku} · ${c.an.toFixed(2)}×${c.fo.toFixed(2)}×${c.al.toFixed(2)} m · ${c.ent} entrepaños · $${c.precio}
+      </div>
+      <div class="row"><label>Pos. X</label><input type="number" id="px" step="0.05" value="${sel.x.toFixed(2)}"></div>
+      <div class="row"><label>Pos. Y</label><input type="number" id="py" step="0.05" value="${sel.y.toFixed(2)}"></div>
+      <div class="row"><label>Giro</label><input type="number" id="pr" step="15" value="${sel.rot}"></div>
+      <div class="row"><label>Repetir</label><input type="number" id="pn" min="1" max="40" value="6">
+        <button class="btn" id="brep" style="white-space:nowrap">Fila</button></div>
+      <button class="btn" id="bdup" style="width:100%;margin-top:4px">Duplicar</button>
+      <button class="btn" id="bdel" style="width:100%;margin-top:6px;color:var(--danger)">Eliminar</button>
+    </div>`;
+  $('#px').oninput=e=>{sel.x=+e.target.value;dib();};
+  $('#py').oninput=e=>{sel.y=+e.target.value;dib();};
+  $('#pr').oninput=e=>{sel.rot=+e.target.value;dib();};
+  $('#px').onchange=$('#py').onchange=$('#pr').onchange=cambio;
+  $('#bdup').onclick=()=>{items.push({...sel,id:uid++,x:sel.x+0.3,y:sel.y+0.3});sel=items[items.length-1];cambio()};
+  $('#bdel').onclick=()=>{items=items.filter(i=>i!==sel);sel=null;cambio()};
+  $('#brep').onclick=()=>{
+    const n=Math.max(1,Math.min(40,+$('#pn').value||1)), an=porSku[sel.sku].an;
+    const r=sel.rot*Math.PI/180;
+    for(let i=1;i<n;i++)
+      items.push({id:uid++,sku:sel.sku,rot:sel.rot,
+        x:sel.x+Math.cos(r)*an*i, y:sel.y+Math.sin(r)*an*i});
+    cambio();
+  };
+}
+
+/* ===================== lista de materiales ===================== */
+function bom(){
+  const g={};
+  items.forEach(i=>g[i.sku]=(g[i.sku]||0)+1);
+  const b=$('#bomB'); b.innerHTML='';
+  let tot=0;
+  Object.entries(g).sort().forEach(([sku,n])=>{
+    const c=porSku[sku], st=c.precio*n; tot+=st;
+    b.insertAdjacentHTML('beforeend',
+      `<tr><td><b class="mono" style="font-size:10px">${sku}</b><br><span style="color:var(--steel)">${c.nom}</span></td>
+       <td class="n mono">${n}</td><td class="n mono">$${st.toLocaleString('es-VE')}</td></tr>`);
+  });
+  if(!items.length) b.innerHTML='<tr><td colspan="3" style="color:var(--steel);padding:14px">Sin muebles colocados.</td></tr>';
+  $('#bomT').textContent='$'+tot.toLocaleString('es-VE');
+  $('#bomN').textContent=items.length;
+
+  const bb=bbox(), area=(bb.x1-bb.x0)*(bb.y1-bb.y0);
+  $('#chArea').textContent = escalaOK
+    ? `Área ${area.toFixed(1)} m² · ${items.length} muebles`
+    : `${items.length} muebles`;
+}
+
+function cambio(){panel();bom();dib();if(stage.classList.contains('v3'))build3D();}
+const stage=$('#stage');
+
+/* ===================== plano ===================== */
+$('#bplano').onclick=()=>$('#fplano').click();
+$('#fplano').onchange=async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  try{
+    const img = f.type==='application/pdf' ? await pdfAImagen(f) : await archivoAImagen(f);
+    plano={img, mpp:0.01, x:0, y:0};
+    const bb=bbox(); ajustarVista(bb);
+    escalaOK=false; $('#chEsc').textContent='Escala sin calibrar — usa Calibrar escala';
+    $('#chEsc').classList.add('warn');
+    cambio();
+  }catch(err){
+    alert('No se pudo abrir el archivo. Si es PDF con muchas capas, exporta la página como PNG y súbela.');
+    console.error(err);
+  }
+  e.target.value='';
+};
+function archivoAImagen(f){
+  return new Promise((ok,no)=>{
+    const i=new Image(); i.onload=()=>ok(i); i.onerror=no; i.src=URL.createObjectURL(f);
+  });
+}
+async function pdfAImagen(f){
+  const buf=await f.arrayBuffer();
+  const doc=await pdfjsLib.getDocument({data:buf}).promise;
+  const pg=await doc.getPage(1);
+  const vp=pg.getViewport({scale:2.5});
+  const c=document.createElement('canvas'); c.width=vp.width; c.height=vp.height;
+  await pg.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+  return archivoAImagen(await new Promise(r=>c.toBlob(r,'image/png')));
+}
+function ajustarVista(bb){
+  const W=cv.clientWidth||900, H=cv.clientHeight||600;
+  view.z=Math.min(W/(bb.x1-bb.x0), H/(bb.y1-bb.y0))*0.88;
+  view.px=W/2-(bb.x0+bb.x1)/2*view.z;
+  view.py=H/2-(bb.y0+bb.y1)/2*view.z;
+}
+$('#bopac').onclick=()=>{
+  planoOpac = planoOpac>=.85?.3 : planoOpac>=.55?1 : .6;
+  $('#bopac').textContent='Plano '+Math.round(planoOpac*100)+'%'; dib();
+};
+
+/* ===================== calibración ===================== */
+$('#bcal').onclick=()=>{
+  if(!plano) return alert('Primero carga un plano.');
+  calib=true; calibPts=[]; sel=null; panel();
+  $('#chEsc').textContent='Marca dos puntos de distancia conocida';
+  $('#chEsc').classList.add('warn'); dib();
+};
+$('#bcalcancel').onclick=()=>{calib=false;calibPts=[];$('#dcal').classList.remove('on');dib()};
+$('#bcalok').onclick=()=>{
+  const real=+$('#icaldist').value;
+  const d=Math.hypot(calibPts[1][0]-calibPts[0][0], calibPts[1][1]-calibPts[0][1]);
+  if(real>0 && d>0){
+    const k=real/d;
+    plano.mpp*=k; plano.x*=k; plano.y*=k;
+    items.forEach(i=>{i.x*=k;i.y*=k});
+    escalaOK=true;
+    $('#chEsc').textContent=`Escala 1 px = ${plano.mpp.toFixed(4)} m`;
+    $('#chEsc').classList.remove('warn');
+    ajustarVista(bbox());
+  }
+  calib=false; calibPts=[]; $('#dcal').classList.remove('on'); cambio();
+};
+
+/* =====================================================================
+   3D — geometría paramétrica desde las medidas reales del catálogo
+   ===================================================================== */
+let rnd, esc, cam, ctrl, grupo, piso, raf;
+
+const MAT = {
+  metal:  new THREE.MeshStandardMaterial({color:0x8A97A4,roughness:.52,metalness:.42}),
+  metal2: new THREE.MeshStandardMaterial({color:0xA6B2BD,roughness:.46,metalness:.38}),
+  madera: new THREE.MeshStandardMaterial({color:0xB08858,roughness:.75,metalness:.05}),
+  vidrio: new THREE.MeshStandardMaterial({color:0xBBD8DE,roughness:.06,metalness:0,transparent:true,opacity:.24}),
+  frio:   new THREE.MeshStandardMaterial({color:0xDDE6EC,roughness:.3,metalness:.5}),
+  piso:   new THREE.MeshStandardMaterial({color:0xE4E8EC,roughness:.92,metalness:0})
+};
+const caja=(w,h,d,m,x=0,y=0,z=0)=>{
+  const g=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
+  g.position.set(x,y,z); g.castShadow=true; g.receiveShadow=true; return g;
+};
+
+function mueble(c){
+  const g=new THREE.Group(), {an:A,fo:F,al:H,ent:N}=c, t=0.025;
+  const poste=(x,z)=>caja(0.04,H,0.04,MAT.metal,x,H/2,z);
+
+  if(c.tipo==='gondola_c'||c.tipo==='gondola_p'){
+    const doble = c.tipo==='gondola_c';
+    g.add(caja(A,H,t,MAT.metal2,0,H/2,doble?0:-F/2+t/2));       // respaldo
+    g.add(caja(A,0.12,F,MAT.metal,0,0.06,0));                    // base
+    const nl = doble?Math.ceil(N/2):N, fo = doble?F/2-t/2:F-t;
+    for(let s=0;s<(doble?2:1);s++){
+      const dir = s===0?1:-1;
+      for(let i=1;i<=nl;i++){
+        const y = 0.12 + (H-0.30)*i/(nl+1);
+        g.add(caja(A-0.03, t, fo, MAT.metal2, 0, y, doble?dir*(F/4):0));
+      }
+    }
+    g.add(poste(-A/2,-F/2)); g.add(poste(A/2,-F/2));
+    g.add(poste(-A/2,F/2));  g.add(poste(A/2,F/2));
+  }
+  else if(c.tipo==='estante'){
+    [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([a,b])=>g.add(poste(a*(A/2-.02),b*(F/2-.02))));
+    for(let i=0;i<N;i++) g.add(caja(A,t,F,MAT.metal2,0,0.08+(H-0.14)*i/(N-1||1),0));
+  }
+  else if(c.tipo==='mostrador'||c.tipo==='caja'){
+    g.add(caja(A,H-0.05,F-0.06,MAT.madera,0,(H-0.05)/2,0));
+    g.add(caja(A+0.05,0.05,F,MAT.metal2,0,H-0.025,0));
+    if(c.tipo==='caja') g.add(caja(0.4,0.28,0.34,MAT.frio,A/2-0.3,H+0.14,0));
+  }
+  else if(c.tipo==='most_vit'){
+    g.add(caja(A,0.55,F,MAT.madera,0,0.275,0));
+    g.add(caja(A,H-0.60,F,MAT.vidrio,0,0.55+(H-0.60)/2,0));
+    g.add(caja(A+0.04,0.04,F+0.04,MAT.metal,0,H-0.02,0));
+  }
+  else if(c.tipo==='vitrina'){
+    g.add(caja(A,0.10,F,MAT.metal,0,0.05,0));
+    g.add(caja(A,H-0.14,t,MAT.metal2,0,H/2,-F/2+t/2));
+    g.add(caja(A-0.06,H-0.20,F-0.05,MAT.vidrio,0,H/2,0.02));
+    for(let i=1;i<=N;i++) g.add(caja(A-0.10,t,F-0.08,MAT.metal2,0,0.10+(H-0.24)*i/(N+1),0));
+    [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([a,b])=>g.add(poste(a*(A/2-.02),b*(F/2-.02))));
+  }
+  else if(c.tipo==='exhibidor'){
+    g.add(caja(A,0.10,F,MAT.metal,0,0.05,0));
+    g.add(caja(A,H,t,MAT.metal2,0,H/2,-F/2+t/2));
+    for(let i=1;i<=N;i++){
+      const s=caja(A-0.02,t,F*0.8,MAT.metal2,0,0.10+(H-0.22)*i/(N+1),0.04);
+      s.rotation.x=-0.28; g.add(s);
+    }
+  }
+  else if(c.tipo==='refri'){
+    g.add(caja(A,H,F,MAT.frio,0,H/2,0));
+    g.add(caja(A-0.10,H-0.35,0.04,MAT.vidrio,0,H/2-0.05,F/2));
+    for(let i=1;i<=N;i++) g.add(caja(A-0.14,t,F-0.16,MAT.metal2,0,0.16+(H-0.45)*i/(N+1),0));
+  }
+  else if(c.tipo==='isla'){
+    g.add(caja(A,H-0.12,F,MAT.frio,0,(H-0.12)/2,0));
+    g.add(caja(A-0.08,0.04,F-0.08,MAT.vidrio,0,H-0.06,0));
+  }
+  else g.add(caja(A,H,F,MAT.metal2,0,H/2,0));
+
+  return g;
+}
+
+const cacheGLB=new Map();
+async function cargarGLB(url){
+  if(cacheGLB.has(url)) return cacheGLB.get(url).clone();
+  const {GLTFLoader}=await import('three/addons/loaders/GLTFLoader.js');
+  const gl=await new GLTFLoader().loadAsync(url);
+  gl.scene.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true}});
+  cacheGLB.set(url,gl.scene);
+  return gl.scene.clone();
+}
+
+function init3D(){
+  const cont=$('#c3d');
+  rnd=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+  rnd.setPixelRatio(Math.min(devicePixelRatio,2));
+  rnd.shadowMap.enabled=true; rnd.shadowMap.type=THREE.PCFSoftShadowMap;
+  rnd.outputColorSpace=THREE.SRGBColorSpace;
+  cont.appendChild(rnd.domElement);
+
+  esc=new THREE.Scene(); esc.background=new THREE.Color(0xD8DEE4);
+  esc.fog=new THREE.Fog(0xD8DEE4,45,120);
+
+  cam=new THREE.PerspectiveCamera(42,1,0.1,400);
+  cam.position.set(14,12,16);
+  ctrl=new OrbitControls(cam,rnd.domElement);
+  ctrl.enableDamping=true; ctrl.maxPolarAngle=Math.PI/2.05; ctrl.target.set(0,1,0);
+
+  esc.add(new THREE.HemisphereLight(0xffffff,0x9AA5B1,1.05));
+  const dl=new THREE.DirectionalLight(0xfff4e2,1.5);
+  dl.position.set(16,26,10); dl.castShadow=true;
+  dl.shadow.mapSize.set(2048,2048);
+  const s=dl.shadow.camera; s.left=-30;s.right=30;s.top=30;s.bottom=-30;s.far=90;
+  esc.add(dl);
+  esc.add(new THREE.DirectionalLight(0xdce8f5,0.35).translateX(-14).translateY(12));
+
+  grupo=new THREE.Group(); esc.add(grupo);
+  r3size();
+  (function loop(){raf=requestAnimationFrame(loop);ctrl.update();rnd.render(esc,cam)})();
+}
+function r3size(){
+  const c=$('#c3d'), w=c.clientWidth||900, h=c.clientHeight||600;
+  rnd.setSize(w,h); cam.aspect=w/h; cam.updateProjectionMatrix();
+}
+
+async function build3D(){
+  if(!rnd) return;
+  grupo.clear();
+  const bb=bbox(), cx=(bb.x0+bb.x1)/2, cy=(bb.y0+bb.y1)/2;
+
+  // piso con el plano del arquitecto proyectado
+  const pw=bb.x1-bb.x0, ph=bb.y1-bb.y0;
+  let matPiso=MAT.piso;
+  if(plano){
+    const tx=new THREE.CanvasTexture(planoACanvas());
+    tx.colorSpace=THREE.SRGBColorSpace;
+    matPiso=new THREE.MeshStandardMaterial({map:tx,roughness:.94,metalness:0});
+  }
+  piso=new THREE.Mesh(new THREE.PlaneGeometry(pw,ph),matPiso);
+  piso.rotation.x=-Math.PI/2; piso.receiveShadow=true;
+  grupo.add(piso);
+
+  for(const it of items){
+    const c=porSku[it.sku];
+    let m;
+    try{ m = c.glb ? await cargarGLB(c.glb) : mueble(c); }
+    catch(e){ console.warn('GLB falló, uso paramétrico:',c.sku); m=mueble(c); }
+    m.position.set(it.x-cx, 0, it.y-cy);
+    m.rotation.y = -it.rot*Math.PI/180;
+    grupo.add(m);
+  }
+  ctrl.target.set(0,1,0);
+}
+function planoACanvas(){
+  const c=document.createElement('canvas');
+  c.width=plano.img.width; c.height=plano.img.height;
+  const x=c.getContext('2d');
+  x.fillStyle='#F2F4F6'; x.fillRect(0,0,c.width,c.height);
+  x.globalAlpha=.85; x.drawImage(plano.img,0,0);
+  return c;
+}
+
+/* ===================== cambio de vista ===================== */
+$('#m2d').onclick=()=>{
+  stage.classList.remove('v3');
+  $('#m2d').classList.add('on'); $('#m3d').classList.remove('on');
+  resize();
+};
+$('#m3d').onclick=()=>{
+  stage.classList.add('v3');
+  $('#m3d').classList.add('on'); $('#m2d').classList.remove('on');
+  if(!rnd) init3D();
+  r3size(); build3D(); encuadrar();
+};
+function encuadrar(){
+  const bb=bbox(), w=bb.x1-bb.x0, h=bb.y1-bb.y0, d=Math.max(w,h);
+  cam.position.set(d*0.62, d*0.55, d*0.72);
+  ctrl.target.set(0,1.1,0); ctrl.update();
+}
+
+/* ===================== renders ===================== */
+const VISTAS=[
+  {n:'Perspectiva noreste', f:d=>[ d*.66, d*.52,  d*.66], t:[0,1.1,0]},
+  {n:'Perspectiva noroeste',f:d=>[-d*.66, d*.52,  d*.66], t:[0,1.1,0]},
+  {n:'Perspectiva sureste', f:d=>[ d*.66, d*.52, -d*.66], t:[0,1.1,0]},
+  {n:'Perspectiva suroeste',f:d=>[-d*.66, d*.52, -d*.66], t:[0,1.1,0]},
+  {n:'Nivel de vista, entrada', f:d=>[0, 1.65, d*.55], t:[0,1.55,-d*.2]},
+  {n:'Planta 3D',           f:d=>[0.01, d*1.15, 0.01],  t:[0,0,0]}
+];
+
+$('#brender').onclick=async()=>{
+  if(!items.length) return alert('Coloca al menos un mueble antes de generar imágenes.');
+  if(!rnd){ stage.classList.add('v3'); init3D(); r3size(); }
+  await build3D();
+
+  const bb=bbox(), d=Math.max(bb.x1-bb.x0, bb.y1-bb.y0);
+  const W=1600, H=1000;
+  const rw=rnd.domElement.width, rh=rnd.domElement.height;
+  rnd.setSize(W,H,false); cam.aspect=W/H;
+
+  const g=$('#ovg'); g.innerHTML='';
+  const nom=($('#pnom').value||'proyecto').replace(/[^\w\d]+/g,'-').toLowerCase();
+  window._shots=[];
+
+  VISTAS.forEach((v,i)=>{
+    cam.position.set(...v.f(d));
+    cam.lookAt(...v.t); cam.updateProjectionMatrix();
+    rnd.render(esc,cam);
+    const url=rnd.domElement.toDataURL('image/png');
+    window._shots.push({url,name:`${nom}-${i+1}.png`});
+    g.insertAdjacentHTML('beforeend',
+      `<div class="shot"><img src="${url}" alt="${v.n}">
+       <div class="shot-f"><span>${i+1} · ${v.n}</span>
+       <button class="btn" data-i="${i}">Descargar</button></div></div>`);
+  });
+
+  g.querySelectorAll('button[data-i]').forEach(b=>b.onclick=()=>bajar(window._shots[+b.dataset.i]));
+  rnd.setSize(rw,rh,false); r3size(); encuadrar();
+  $('#ovt').textContent=$('#pnom').value||'Imágenes del proyecto';
+  $('#ov').classList.add('on');
+};
+function bajar({url,name}){const a=document.createElement('a');a.href=url;a.download=name;a.click()}
+$('#bdlall').onclick=()=>(window._shots||[]).forEach((s,i)=>setTimeout(()=>bajar(s),i*260));
+$('#bovx').onclick=()=>$('#ov').classList.remove('on');
+$('#ov').addEventListener('click',e=>{if(e.target.id==='ov')$('#ov').classList.remove('on')});
+
+/* ===================== guardar / abrir / CSV ===================== */
+$('#bguardar').onclick=()=>{
+  const data={v:1, nombre:$('#pnom').value, items, escala:plano?plano.mpp:null, escalaOK};
+  const b=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(b);
+  a.download=(data.nombre||'proyecto').replace(/[^\w\d]+/g,'-').toLowerCase()+'.json';
+  a.click();
+};
+$('#babrir').onclick=()=>$('#fjson').click();
+$('#fjson').onchange=async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  try{
+    const d=JSON.parse(await f.text());
+    items=d.items||[]; uid=Math.max(0,...items.map(i=>i.id))+1;
+    $('#pnom').value=d.nombre||'Proyecto';
+    sel=null; ajustarVista(bbox()); cambio();
+  }catch(err){alert('Ese archivo no es un proyecto válido.')}
+  e.target.value='';
+};
+$('#bcsv').onclick=()=>{
+  const g={}; items.forEach(i=>g[i.sku]=(g[i.sku]||0)+1);
+  let csv='SKU,Descripcion,Ancho,Fondo,Alto,Cantidad,Precio unitario,Subtotal\n', tot=0;
+  Object.entries(g).sort().forEach(([sku,n])=>{
+    const c=porSku[sku], st=c.precio*n; tot+=st;
+    csv+=`${sku},"${c.nom}",${c.an},${c.fo},${c.al},${n},${c.precio},${st}\n`;
+  });
+  csv+=`,,,,,,TOTAL,${tot}\n`;
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download=($('#pnom').value||'materiales').replace(/[^\w\d]+/g,'-').toLowerCase()+'-materiales.csv';
+  a.click();
+};
+$('#bvaciar').onclick=()=>{
+  if(items.length && confirm('Se eliminan todos los muebles colocados. ¿Continuar?')){
+    items=[];sel=null;cambio();
+  }
+};
+
+/* ===================== arranque ===================== */
+resize(); panel(); bom();
+</script>
+</body>
+</html>
