@@ -680,7 +680,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v11 · SIN CONTACTAR primero en el CRM';
+var APP_VERSION='v12 · columna Pedido en el CRM';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -705,6 +705,8 @@ function presuNextNro(){var mx=0;(DB.presupuestosDoc||[]).forEach(function(p){if
 function presuFind(nro){return (DB.presupuestosDoc||[]).find(function(p){return p.nro===nro;});}
 // Lista de presupuestos adjuntos a un cliente (varios). Migra el campo viejo (uno solo).
 function presuListaCliente(cl){var arr=Array.isArray(cl.presupuestos)?cl.presupuestos.slice():[];if(!arr.length&&cl.presupuestoUrl)arr=[{url:cl.presupuestoUrl,numero:'',fecha:cl.presupuestoFecha||''}];return arr;}
+// Lista de pedidos adjuntos a un cliente (un pedido = venta cerrada).
+function pedidoListaCliente(cl){var arr=Array.isArray(cl.pedidos)?cl.pedidos.slice():[];if(!arr.length&&cl.pedidoUrl)arr=[{url:cl.pedidoUrl,numero:'',fecha:cl.pedidoFecha||''}];return arr;}
 function presuCampo(label,id,ph){return '<div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">'+label+'</label><input type="text" id="'+id+'" placeholder="'+(ph||'')+'" style="width:100%;padding:9px;border:1px solid #d1d5db;border-radius:8px;font-size:14px"></div>';}
 function cotUIpresu(){
   return '<div class="section-pad" style="max-width:640px;margin:0 auto">'
@@ -1576,7 +1578,7 @@ function renderVentas(c){
     +'</div>';
   var pendCt=cls.filter(function(x){if(estaFinalizado(x))return false;var d=diasRestantes(x.proximoContacto);if(d===null||d>0)return false;return SESSION.rol==='admin'||x.vendedor===SESSION.nombre;});
   var bannerCt=pendCt.length?'<div onclick="var s=document.getElementById(\'v-est1\');if(s){s.value=\'__VENC__\';filtrarVentas();}" style="background:var(--warning);color:#fff;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;justify-content:space-between;gap:8px"><span>\uD83D\uDCC5 '+pendCt.length+' contacto'+(pendCt.length>1?'s':'')+' para hoy o vencido'+(pendCt.length>1?'s':'')+(SESSION.rol==='admin'?' (todos)':' tuyos')+'</span><span style="font-size:11px;opacity:.85">Toca para ver \u2192</span></div>':'';
-  c.innerHTML=statsBar+bannerCt+toolbar+'<div id="ventas-lista"></div>';
+  c.innerHTML=statsBar+bannerCt+toolbar+'<div style="font-size:10px;color:#cbd5e1;text-align:right;padding:2px 10px">'+APP_VERSION+'</div><div id="ventas-lista"></div>';
   filtrarVentas();
 }
 function cambiarVistaVentas(v){VENTAS_VISTA=v;localStorage.setItem('veo_ventas_vista',v);renderVentas(document.getElementById('content'));}
@@ -1703,6 +1705,7 @@ function clienteCardHTML(cl){
   if(cl.estado2)h+=chipCliente(cl.estado2,'var(--ibg)','var(--info)');
   if(cl.visitoOficina)h+=chipCliente('🏢 Visitó oficina'+(cl.fechaVisita?' '+esc(cl.fechaVisita):''),'#dcfce7','#166534');
   var _plC=presuListaCliente(cl);_plC.forEach(function(p,i){h+='<a href="'+esc(p.url)+'" target="_blank" class="card-vend" style="background:#dbeafe;color:#1d4ed8;margin-right:4px;text-decoration:none">📄 '+(p.numero?('Nº'+esc(p.numero)):('Presup. '+(i+1)))+'</a>';});
+  var _pedC=pedidoListaCliente(cl);_pedC.forEach(function(p,i){h+='<a href="'+esc(p.url)+'" target="_blank" class="card-vend" style="background:#dcfce7;color:#166534;margin-right:4px;text-decoration:none">🛒 '+(p.numero?('Pedido Nº'+esc(p.numero)):('Pedido '+(i+1)))+'</a>';});
   h+='</div>';
   h+=proxContactoHTML(cl);
   if(SESSION&&SESSION.rol==='admin'){var _ta=tiempoAtencionTxt(cl);if(_ta)h+='<div style="font-size:11px;color:#7c3aed;font-weight:600;margin-top:3px">⏱ '+_ta+'</div>';}
@@ -1823,14 +1826,14 @@ function renderTablaCRM(el,lista){
   var vendArr=Object.keys(vends).sort();
   var EST2=['PRESUPUESTO ENVIADO','EN NEGOCIACION','COMPRO','NO COMPRO'];
   var h='<div class="crm-wrap"><table class="crm" id="tabla-crm"><thead><tr>';
-  var _cols=['Nombre','Tel\u00E9fono','Vendedor','Estado 1','Producto/Servicio','Ciudad','Red social','Tipo de negocio','Estatus/Objeci\u00F3n','Plan de acci\u00F3n','Cant.','Porqu\u00E9 compr\u00F3','Porqu\u00E9 NO compr\u00F3','\u00DAlt. contacto','Pr\u00F3x. contacto','Notas','Estado 2','Visit\u00F3 oficina','Presupuesto'];
+  var _cols=['Nombre','Tel\u00E9fono','Vendedor','Estado 1','Producto/Servicio','Ciudad','Red social','Tipo de negocio','Estatus/Objeci\u00F3n','Plan de acci\u00F3n','Cant.','Porqu\u00E9 compr\u00F3','Porqu\u00E9 NO compr\u00F3','\u00DAlt. contacto','Pr\u00F3x. contacto','Notas','Estado 2','Visit\u00F3 oficina','Presupuesto','Pedido'];
   if(SESSION.rol==='admin')_cols.push('\u23F1 Atenci\u00F3n');
   _cols.forEach(function(t,i){
     h+='<th'+(i===0?' class="colfija"':'')+'>'+t+'</th>';
   });
   h+='</tr></thead><tbody>';
   // Fila de alta rapida, como la fila "Nuevo" de Notion
-  h+='<tr><td class="colfija" style="background:var(--ibg)"><input id="crm-nuevo" placeholder="+ Nuevo cliente (Enter)" onkeydown="if(event.key===\'Enter\')crmQuickAdd(this)"></td><td colspan="'+(SESSION.rol==='admin'?19:18)+'" style="padding:8px 10px;font-size:11px;color:var(--muted);background:var(--ibg)">Escribe el nombre, presiona Enter y llena las casillas directamente \u2014 los cambios se guardan solos. Toca \uD83D\uDCC2 para abrir la ficha y los seguimientos.</td></tr>';
+  h+='<tr><td class="colfija" style="background:var(--ibg)"><input id="crm-nuevo" placeholder="+ Nuevo cliente (Enter)" onkeydown="if(event.key===\'Enter\')crmQuickAdd(this)"></td><td colspan="'+(SESSION.rol==='admin'?20:19)+'" style="padding:8px 10px;font-size:11px;color:var(--muted);background:var(--ibg)">Escribe el nombre, presiona Enter y llena las casillas directamente \u2014 los cambios se guardan solos. Toca \uD83D\uDCC2 para abrir la ficha y los seguimientos.</td></tr>';
   lista.forEach(function(cl){
     var id=cl.id;
     h+='<tr>';
@@ -1853,6 +1856,7 @@ function renderTablaCRM(el,lista){
     h+='<td style="min-width:170px">'+celdaSelect(id,'estado2',cl.estado2||'',EST2,'\u2014')+'</td>';
     h+='<td style="min-width:130px">'+celdaSelect(id,'visitoOficina',cl.visitoOficina||'',['S\u00cd'],'\u2014')+(cl.fechaVisita?'<div style="font-size:10px;color:var(--muted)">'+esc(cl.fechaVisita)+'</div>':'')+'</td>';
     var _plT=presuListaCliente(cl);h+='<td style="min-width:120px">'+(_plT.length?_plT.map(function(p){return '<a href="'+esc(p.url)+'" target="_blank" style="color:var(--info)">\ud83d\udcc4 '+(p.numero?('N\u00ba'+esc(p.numero)):'Ver')+'</a>'+(p.fecha?' <span style="font-size:10px;color:var(--muted)">'+esc(p.fecha)+'</span>':'');}).join('<br>'):'\u2014')+'</td>';
+    var _pedT=pedidoListaCliente(cl);h+='<td style="min-width:120px">'+(_pedT.length?_pedT.map(function(p){return '<a href="'+esc(p.url)+'" target="_blank" style="color:#166534;font-weight:600">\ud83d\uded2 '+(p.numero?('N\u00ba'+esc(p.numero)):'Ver')+'</a>'+(p.fecha?' <span style="font-size:10px;color:var(--muted)">'+esc(p.fecha)+'</span>':'');}).join('<br>'):'\u2014')+'</td>';
     if(SESSION.rol==='admin'){var _ta=tiempoAtencionTxt(cl);h+='<td style="min-width:130px;font-size:11px;color:#7c3aed;font-weight:600">'+(_ta?esc(_ta):'\u2014')+'</td>';}
     h+='</tr>';
   });
