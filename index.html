@@ -680,7 +680,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v10 · lista de precios actualizable desde Excel';
+var APP_VERSION='v11 · SIN CONTACTAR primero en el CRM';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1594,6 +1594,10 @@ function clientesFiltrados(){
 }
 function ordenarClientes(lista){
   lista.sort(function(a,b){
+    // Los SIN CONTACTAR van primero (arriba), los más nuevos de esos arriba del todo.
+    var sa=est1De(a)==='SIN CONTACTAR'?0:1, sb=est1De(b)==='SIN CONTACTAR'?0:1;
+    if(sa!==sb)return sa-sb;
+    if(sa===0){var ta=_creacionTS(a),tb=_creacionTS(b);if(ta!==tb)return tb-ta;return (a.nombre||'').localeCompare(b.nombre||'');}
     var da=diasRestantes(a.proximoContacto),db2=diasRestantes(b.proximoContacto);
     if(da===null&&db2===null)return (a.nombre||'').localeCompare(b.nombre||'');
     if(da===null)return 1;if(db2===null)return -1;
