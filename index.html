@@ -618,6 +618,7 @@ function renderCotizar(c){
   var toggle='<div class="section-pad" style="max-width:760px;margin:0 auto 0"><div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">'
     +'<button class="btn '+(COTIZAR_MODO==='rack'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'rack\')">🏗️ Cotizar rack</button>'
     +'<button class="btn '+(COTIZAR_MODO==='presu'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'presu\')">📄 Hacer presupuesto</button>'
+    +'<button class="btn '+(COTIZAR_MODO==='tasa'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'tasa\')">🧮 Calculadora de tasa</button>'
     +'<button class="btn '+(COTIZAR_MODO==='precios'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'precios\')">🏷️ Lista de precios</button>'
     +'<button class="btn '+(COTIZAR_MODO==='lista'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'lista\')">📋 Presupuestos</button>'
     +(esAdmin?'<button class="btn '+(COTIZAR_MODO==='stats'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'stats\')">📊 Estadísticas</button>':'')
@@ -625,9 +626,33 @@ function renderCotizar(c){
   if(COTIZAR_MODO==='presu'){c.innerHTML=toggle+cotUIpresu();presuInitForm();return;}
   if(COTIZAR_MODO==='lista'){c.innerHTML=toggle+cotUIlista();return;}
   if(COTIZAR_MODO==='stats'){c.innerHTML=toggle+cotUIstats();return;}
+  if(COTIZAR_MODO==='tasa'){c.innerHTML=toggle+cotUItasa();if(RKV_TASAS)tasaCalc();rkvCargarTasas(function(){tasaCalc();});return;}
   if(COTIZAR_MODO==='precios'){c.innerHTML=toggle+'<div id="precios-cont"></div>';preciosRender();preciosCargarDyn();rkvCargarTasas(function(){preciosRender();});return;}
   c.innerHTML=toggle+cotUIrack();
   rkvCargarTasas(null); // precarga las tasas del día
+}
+// ── Calculadora de tasa: precio en $ → precio en $ pagando en Bs ──
+function cotUItasa(){
+  return '<div class="section-pad" style="max-width:520px;margin:0 auto">'
+    +'<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px">'
+    +'<div style="font-size:15px;font-weight:700;color:#1a1a2e;margin-bottom:2px">🧮 Calculadora de tasa</div>'
+    +'<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Escribe un precio en dólares y te doy el precio en dólares pagando en Bs (con la tasa del día). Útil cuando das un descuento que no está en la lista.</div>'
+    +'<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Precio en dólares ($)</label>'
+    +'<input type="number" step="0.01" inputmode="decimal" id="tasa-usd" oninput="tasaCalc()" placeholder="Ej: 250" style="width:100%;padding:12px;border:1px solid #d1d5db;border-radius:8px;font-size:18px;font-weight:700">'
+    +'<div id="tasa-result" style="margin-top:14px"></div>'
+    +'<div id="tasa-info" style="font-size:11px;color:var(--muted);text-align:center;margin-top:10px">Consultando tasas del día…</div>'
+    +'</div></div>';
+}
+function tasaCalc(){
+  var t=RKV_TASAS;var info=document.getElementById('tasa-info');
+  if(!t||!(t.bcv>0)||!(t.binance>0)){if(info)info.innerHTML='<span style="color:#c2410c">No pude consultar las tasas ahora. Intenta de nuevo.</span>';return;}
+  if(info)info.textContent='Tasas del día: BCV '+t.bcv+' · Binance '+t.binance;
+  var el=document.getElementById('tasa-result');if(!el)return;
+  var usd=parseFloat((document.getElementById('tasa-usd')||{value:''}).value)||0;
+  if(usd<=0){el.innerHTML='';return;}
+  var bs=Math.round(usd*(t.binance/t.bcv)*100)/100;
+  el.innerHTML='<div style="display:flex;gap:8px"><div style="flex:1;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:12px;text-align:center"><div style="font-size:11px;color:#047857;font-weight:600">EN DÓLARES</div><div style="font-size:20px;font-weight:800;color:#065f46">$'+usd.toFixed(2)+'</div></div><div style="flex:1;background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;padding:12px;text-align:center"><div style="font-size:11px;color:#4338ca;font-weight:600">PAGANDO EN BOLÍVARES</div><div style="font-size:20px;font-weight:800;color:#3730a3">$'+bs.toFixed(2)+'</div></div></div>'
+    +'<button class="btn btn-ghost btn-sm" style="width:100%;margin-top:10px" onclick="copiarAlPortapapeles(\'Precio: $'+usd.toFixed(2)+' (USD) · Pagando en Bs: $'+bs.toFixed(2)+'\',\'Copiado\')">📋 Copiar</button>';
 }
 function cotUIrack(){
   return '<div class="section-pad" style="max-width:520px;margin:0 auto">'
@@ -685,7 +710,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v16 · desglosada con 2 marcos';
+var APP_VERSION='v17 · calculadora de tasa';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
