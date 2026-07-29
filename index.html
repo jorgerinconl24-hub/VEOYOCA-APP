@@ -711,7 +711,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v19 · instalación solo en pedidos que la llevan';
+var APP_VERSION='v20 · transporte (retira / envío)';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -993,7 +993,7 @@ function goTab(tab,btn){
   var titulos={home:'Pedidos',entregar:'Despacho',nuevo:'Nuevo pedido',reportes:'Reportes',admin:'Administracion',plan:'Rutas',ia:'Plan IA',notif:'Alertas y Notificaciones',ventas:'Ventas / CRM',cotizar:'Cotizador de Racks'};
   document.getElementById('topbar-sub').textContent=titulos[tab]||SESSION.nombre;
   var c=document.getElementById('content');
-  c.onclick=function(e){var ed=e.target.getAttribute('data-edit');var en=e.target.getAttribute('data-entregar');var or=e.target.getAttribute('data-ordenes');var ins=e.target.getAttribute('data-instalacion');if(ed)abrirEditar(ed);if(en)marcarEntregado(en);if(or)abrirOrdenes(or);if(ins)abrirInstalacion(ins);if(!ed&&!en&&!or&&!ins&&e.target.closest){var pv=e.target.closest('[data-prov-toggle]');if(pv)toggleProv(pv.getAttribute('data-prov-toggle'));}};
+  c.onclick=function(e){var ed=e.target.getAttribute('data-edit');var en=e.target.getAttribute('data-entregar');var or=e.target.getAttribute('data-ordenes');var ins=e.target.getAttribute('data-instalacion');var tr=e.target.getAttribute('data-transporte');if(ed)abrirEditar(ed);if(en)marcarEntregado(en);if(or)abrirOrdenes(or);if(ins)abrirInstalacion(ins);if(tr)transporteToggle(tr);if(!ed&&!en&&!or&&!ins&&!tr&&e.target.closest){var pv=e.target.closest('[data-prov-toggle]');if(pv)toggleProv(pv.getAttribute('data-prov-toggle'));}};
   if(tab==='home')renderHome(c);else if(tab==='entregar')renderEntregar(c);else if(tab==='nuevo')renderNuevo(c);
   else if(tab==='reportes')renderReportes(c);else if(tab==='admin')renderAdmin(c);
   else if(tab==='plan')renderPlanificacion(c);else if(tab==='ia')renderPlanIA(c);else if(tab==='notif')renderNotificaciones(c);else if(tab==='ventas')renderVentas(c);
@@ -1075,6 +1075,7 @@ function cardHTML(p,conEntregar){
     h+='<div style="font-size:11px;color:#d97706;margin-top:4px">⚠️ Falta: '+faltantes.join(', ')+'</div>';
   }
   h+=instChipHTML(p);
+  h+=transporteChipHTML(p);
   h+='<div class="card-desc">'+(p.descripcion||'')+'</div></div>'+badgeHTML(p)+'</div><div class="card-foot">';
   h+='<button class="btn btn-ghost btn-sm" data-ordenes="'+pid+'">\u00D3rdenes'+(r.total?' ('+r.listas+'/'+r.total+')':'')+'</button>';
   if(p.instalacion&&p.instalacion.lleva)h+='<button class="btn btn-ghost btn-sm" data-instalacion="'+pid+'">\uD83D\uDD27 Instalaci\u00F3n</button>';
@@ -1301,6 +1302,19 @@ var INST_PID=null;
 var INST_ESTADOS=['POR AGENDAR','AGENDADA','EN PROCESO','TERMINADA'];
 function instObj(p){if(!p.instalacion)p.instalacion={lleva:false,instaladores:[],fecha:'',tiempoEstim:'',materiales:[],estado:'POR AGENDAR',notas:'',fotos:[],fechaTerminada:''};return p.instalacion;}
 function pedidoInst(){return DB.pedidos.find(function(x){return x.id===INST_PID;});}
+// Chip de transporte (clic para cambiar entre "Retira en sitio" y "Envío").
+function transporteChipHTML(p){
+  var t=p.transporte||'';
+  var cfg=t==='retira'?{txt:'🏪 Retira en sitio',bg:'#dbeafe',col:'#1d4ed8'}:t==='envio'?{txt:'🚚 Envío',bg:'#ffedd5','col':'#9a3412'}:{txt:'🚚 Transporte: definir',bg:'#f3f4f6',col:'#6b7280'};
+  return '<div style="margin-top:4px"><span data-transporte="'+p.id+'" title="Tocar para cambiar" style="cursor:pointer;display:inline-block;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;background:'+cfg.bg+';color:'+cfg.col+'">'+cfg.txt+'</span></div>';
+}
+function transporteToggle(id){
+  var p=DB.pedidos.find(function(x){return x.id===id;});if(!p)return;
+  var next=(p.transporte==='retira')?'envio':'retira';
+  p.transporte=next;guardarDB();
+  toast(next==='retira'?'🏪 Retira en sitio':'🚚 Envío (nosotros llevamos)','ok');
+  goTab(TAB,document.getElementById('nb-'+TAB));
+}
 function instChipHTML(p){
   var it=p.instalacion;if(!it||!it.lleva)return '';
   var mapa={'POR AGENDAR':['#fef9c3','#854d0e'],'AGENDADA':['#dbeafe','#1d4ed8'],'EN PROCESO':['#fed7aa','#9a3412'],'TERMINADA':['#dcfce7','#166534']};
