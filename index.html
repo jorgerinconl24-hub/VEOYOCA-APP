@@ -680,7 +680,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v12 · columna Pedido en el CRM';
+var APP_VERSION='v13 · importar pedidos + adjuntar PDF a órdenes';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1190,6 +1190,7 @@ function renderOrdenesBody(){
     h+='<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">';
     if(!recib)h+='<button class="btn btn-green btn-sm" onclick="ordRecibida('+i+')">\u2713 Marcar recibida</button>';
     if(o.pdfUrl)h+='<a href="'+esc(o.pdfUrl)+'" target="_blank" class="btn btn-blue btn-sm" style="text-decoration:none">📄 Ver PDF</a>';
+    h+='<input type="file" id="ord-file-'+i+'" accept=".pdf,image/*" style="display:none" onchange="ordAdjuntarPDF('+i+',this)"><button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'ord-file-'+i+'\').click()">📎 '+(o.pdfUrl?'Cambiar PDF':'Adjuntar PDF')+'</button>';
     h+='<button class="btn btn-red btn-sm" style="margin-left:auto" onclick="ordEliminar('+i+')">Eliminar</button></div>';
     h+='</div>';
   });
@@ -1226,6 +1227,27 @@ function ordEliminar(i){
   if(!confirm('Eliminar esta orden del pedido?'))return;
   var p=pedidoOrd();if(!p)return;
   p.ordenes.splice(i,1);renderOrdenesBody();
+}
+// Adjuntar (o cambiar) el PDF/foto de una orden desde la app: se sube al webhook y este a Cloudinary.
+function ordAdjuntarPDF(i,inp){
+  var file=inp.files&&inp.files[0];if(!file){return;}
+  if(file.size>20*1024*1024){toast('El archivo es muy grande (máx 20MB)','err');inp.value='';return;}
+  var p=pedidoOrd();if(!p||!p.ordenes[i]){inp.value='';return;}
+  toast('Subiendo PDF...','ok');
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var mt=file.type||'application/pdf';
+    var nombre=('orden_'+(p.numero||'')+'_'+(p.ordenes[i].numeroOC||i));
+    fetch('https://veoyoca-webhook.onrender.com/subir-pdf-orden',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify({data:e.target.result,mediaType:mt,nombre:nombre})})
+      .then(function(r){return r.json();})
+      .then(function(res){
+        if(res&&res.ok&&res.url){var pp=pedidoOrd();if(pp&&pp.ordenes[i]){pp.ordenes[i].pdfUrl=res.url;guardarDB();renderOrdenesBody();toast('PDF adjuntado ✓','ok');}}
+        else{toast('No se pudo subir: '+((res&&res.error)||'error'),'err');}
+      })
+      .catch(function(){toast('Error de conexión al subir el PDF','err');});
+  };
+  reader.readAsDataURL(file);
+  inp.value='';
 }
 function ordAgregar(){
   var p=pedidoOrd();if(!p)return;
@@ -2033,7 +2055,7 @@ function renderAdmin(c){
   if(SESSION.rol!=='admin'){c.innerHTML='<div class="empty">Acceso denegado</div>';return;}
   var html='<div class="section-pad"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="sec-label" style="margin:0">Usuarios ('+DB.usuarios.length+')</div><button class="btn btn-dark btn-sm" data-nuevo-usuario="1">+ Agregar</button></div><div class="admin-section">';
   DB.usuarios.forEach(function(u){html+='<div class="admin-row"><div class="admin-info"><div class="admin-name">'+u.nombre+'</div><div class="admin-meta">@'+u.username+' - '+u.creado+(u.telefono?' \u00B7 \uD83D\uDCF1':'')+(u.correo?' \u00B7 \u2709\uFE0F':'')+'</div></div><span class="role-badge '+(u.rol==='admin'?'role-admin':'role-emp')+'">'+u.rol+'</span>';html+='<button class="btn btn-ghost btn-sm" data-edit-user="'+u.id+'">Editar</button>';if(u.id!==SESSION.id){html+='<button class="btn btn-red btn-sm" data-del-user="'+u.id+'">Eliminar</button>';}else{html+='<span style="font-size:11px;color:var(--muted)">T&#xFA;</span>';}html+='</div>';});
-  html+='</div><div class="sec-label" style="margin-top:20px">Sistema</div><div class="admin-section"><div class="admin-row"><div class="admin-info"><div class="admin-name">Total pedidos</div></div><strong>'+DB.pedidos.length+'</strong></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Base de datos</div></div><span style="color:var(--success);font-weight:600">Firebase activo</span></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Exportar</div></div><button class="btn btn-ghost btn-sm" data-exportar="json">JSON</button><button class="btn btn-ghost btn-sm" data-exportar="csv" style="margin-left:6px">CSV</button></div><div class="admin-row"><div class="admin-info"><div class="admin-name" style="color:var(--danger)">Borrar todos los pedidos</div><div class="admin-meta">No se puede deshacer</div></div><button class="btn btn-red btn-sm" data-borrar-pedidos="1">Borrar</button></div></div></div>';
+  html+='</div><div class="sec-label" style="margin-top:20px">Sistema</div><div class="admin-section"><div class="admin-row"><div class="admin-info"><div class="admin-name">Total pedidos</div></div><strong>'+DB.pedidos.length+'</strong></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Base de datos</div></div><span style="color:var(--success);font-weight:600">Firebase activo</span></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Exportar</div></div><button class="btn btn-ghost btn-sm" data-exportar="json">JSON</button><button class="btn btn-ghost btn-sm" data-exportar="csv" style="margin-left:6px">CSV</button></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Importar pedidos (Excel)</div><div class="admin-meta">Reemplaza TODOS los pedidos por los del archivo (Hoja1)</div></div><input type="file" id="ped-file" accept=".xlsx,.xls" style="display:none" onchange="importarPedidosExcel(this)"><button class="btn btn-blue btn-sm" onclick="document.getElementById(\'ped-file\').click()">Importar</button></div><div class="admin-row"><div class="admin-info"><div class="admin-name" style="color:var(--danger)">Borrar todos los pedidos</div><div class="admin-meta">No se puede deshacer</div></div><button class="btn btn-red btn-sm" data-borrar-pedidos="1">Borrar</button></div></div></div>';
   c.innerHTML=html;
   c.onclick=function(e){var t=e.target;if(t.getAttribute('data-nuevo-usuario'))abrirNuevoUsuario();var eu=t.getAttribute('data-edit-user');if(eu)editarUsuario(eu);var du=t.getAttribute('data-del-user');if(du)eliminarUsuario(du);var ex=t.getAttribute('data-exportar');if(ex==='json')exportarJSON();if(ex==='csv')exportarCSV();if(t.getAttribute('data-borrar-pedidos'))borrarPedidos();};
 }
@@ -2042,6 +2064,93 @@ function editarUsuario(id){var u=DB.usuarios.find(function(x){return x.id===id;}
 async function guardarUsuario(){var nombre=document.getElementById('u-nombre').value.trim();var user=document.getElementById('u-user').value.trim().toLowerCase();var pass=document.getElementById('u-pass').value;var rol=document.getElementById('u-rol').value;var eid=document.getElementById('u-id').value;if(!nombre||!user||!pass){toast('Todos los campos son obligatorios','err');return;}if(DB.usuarios.find(function(x){return x.username===user&&x.id!==eid;})){toast('El usuario ya existe','err');return;}var tel=(document.getElementById('u-telefono')||{value:''}).value.trim().replace(/[^0-9]/g,'');var correo=(document.getElementById('u-correo')||{value:''}).value.trim();if(eid){var u=DB.usuarios.find(function(x){return x.id===eid;});if(u){u.nombre=nombre;u.username=user;u.password=pass;u.rol=rol;u.telefono=tel;u.correo=correo;}}else{DB.usuarios.push({id:uid(),nombre:nombre,username:user,password:pass,rol:rol,telefono:tel,correo:correo,creado:fecha()});}await guardarDB();cerrarModal('modal-usuario');goTab('admin',document.getElementById('nb-admin'));toast('Usuario guardado','ok');}
 async function eliminarUsuario(id){if(!confirm('Eliminar este usuario?'))return;DB.usuarios=DB.usuarios.filter(function(x){return x.id!==id;});await guardarDB();goTab('admin',document.getElementById('nb-admin'));toast('Usuario eliminado','warn');}
 async function borrarPedidos(){if(!confirm('Borrar TODOS los pedidos?'))return;DB.pedidos=[];await guardarDB();goTab('admin',document.getElementById('nb-admin'));toast('Pedidos eliminados','warn');}
+// ---- Importar pedidos desde el Excel "RESUMEN DE PEDIDOS" (Hoja1), reemplazando todos ----
+function _ddmmyyyyUTC(d){return ('0'+d.getUTCDate()).slice(-2)+'/'+('0'+(d.getUTCMonth()+1)).slice(-2)+'/'+d.getUTCFullYear();}
+function _pedFechaExcel(v){
+  if(v==null||v==='')return '';
+  if(typeof v==='number'){if(v>30000&&v<70000){return _ddmmyyyyUTC(new Date(Date.UTC(1899,11,30)+Math.round(v)*86400000));}return '';}
+  if(v instanceof Date)return _ddmmyyyyUTC(new Date(Date.UTC(v.getFullYear(),v.getMonth(),v.getDate())));
+  var s=String(v).trim();var digs=s.match(/\d+/g);if(!digs)return '';
+  var dd,mm,yy;
+  if(digs.length>=3){dd=digs[0];mm=digs[1];yy=digs[2];}
+  else if(digs.length===2){dd=digs[0];var rest=digs[1];mm=rest.slice(0,2);yy=rest.slice(2);}
+  else return s;
+  if(yy.length>4)yy=yy.slice(0,2)+yy.slice(-2);
+  if(yy.length===3)yy='2026';
+  if(yy.length===2)yy='20'+yy;
+  dd=parseInt(dd,10);mm=parseInt(mm,10);yy=parseInt(yy,10);
+  if(!dd||!mm||!yy)return s;
+  return ('0'+dd).slice(-2)+'/'+('0'+mm).slice(-2)+'/'+yy;
+}
+function _pedNorm(s){return (s||'').toString().toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();}
+function importarPedidosExcel(inp){
+  var file=inp.files&&inp.files[0];if(!file)return;
+  toast('Leyendo Excel...','ok');
+  cargarLibsXLSX().then(function(){
+    var reader=new FileReader();
+    reader.onload=function(e){
+      try{
+        var wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+        var ws=wb.Sheets['Hoja1']||wb.Sheets[wb.SheetNames[0]];
+        if(!ws){toast('No encontré la Hoja1 en el Excel','err');return;}
+        var rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true});
+        // Detectar la fila de encabezados y mapear columnas por su nombre (robusto al desfase).
+        var hdr=-1,col={};
+        for(var i=0;i<rows.length;i++){
+          var r=rows[i]||[];var hasPed=false,hasCli=false;
+          for(var j=0;j<r.length;j++){var t=_pedNorm(r[j]);if(t.indexOf('PEDIDO')>=0)hasPed=true;if(t.indexOf('CLIENTE')>=0)hasCli=true;}
+          if(hasPed&&hasCli){hdr=i;
+            for(var j2=0;j2<r.length;j2++){var t2=_pedNorm(r[j2]);
+              if(col.numero==null&&t2.indexOf('PEDIDO')>=0)col.numero=j2;
+              else if(col.cliente==null&&t2.indexOf('CLIENTE')>=0&&t2.indexOf('ENTREGA')<0)col.cliente=j2;
+              else if(col.ciudad==null&&t2.indexOf('CIUDAD')>=0)col.ciudad=j2;
+              else if(col.inicio==null&&t2.indexOf('INICIO')>=0)col.inicio=j2;
+              else if(col.limite==null&&t2.indexOf('ENTREGA AL CLIENTE')>=0)col.limite=j2;
+              else if(col.orden==null&&t2.indexOf('ORDEN')>=0)col.orden=j2;
+              else if(col.prov==null&&t2.indexOf('PROVEEDOR')>=0&&t2.indexOf('ENTREGA')<0)col.prov=j2;
+              else if(col.fprov==null&&t2.indexOf('ENTREGA DEL PROVEEDOR')>=0)col.fprov=j2;
+              else if(col.obs==null&&t2.indexOf('OBSERVACION')>=0)col.obs=j2;
+              else if(col.cobrar==null&&t2.indexOf('COBRAR')>=0)col.cobrar=j2;
+            }
+            break;
+          }
+        }
+        if(hdr<0||col.numero==null||col.cliente==null){toast('No reconocí las columnas (PEDIDO, CLIENTE…) en la Hoja1.','err');return;}
+        var nuevos=[];
+        for(var k=hdr+1;k<rows.length;k++){
+          var row=rows[k]||[];
+          var B=row[col.numero],C=row[col.cliente];
+          var numDig=B==null?'':String(B).replace(/\D/g,'');
+          if(!numDig)continue; // totales / filas sin número
+          if(C==null||String(C).trim()==='')continue;
+          var numero=(typeof B==='number')?String(Math.round(B)):String(B).trim();
+          var ciudad=col.ciudad!=null&&row[col.ciudad]?String(row[col.ciudad]).trim():'';
+          var inicio=col.inicio!=null?_pedFechaExcel(row[col.inicio]):'';
+          var limite=col.limite!=null?_pedFechaExcel(row[col.limite]):'';
+          var oc=col.orden!=null&&row[col.orden]!=null;
+          var ordenNum=oc?((typeof row[col.orden]==='number')?String(Math.round(row[col.orden])):String(row[col.orden]).trim()):'';
+          var proveedor=col.prov!=null&&row[col.prov]?String(row[col.prov]).trim():'';
+          var fechaProv=col.fprov!=null?_pedFechaExcel(row[col.fprov]):'';
+          var obs=col.obs!=null&&row[col.obs]?String(row[col.obs]).trim():'';
+          var cobrar=(col.cobrar!=null&&typeof row[col.cobrar]==='number')?row[col.cobrar]:null;
+          var desc=obs+((cobrar&&cobrar>0)?((obs?'\n':'')+'Pendiente por cobrar: $'+cobrar):'');
+          var ordenes=[];
+          if(ordenNum||proveedor)ordenes.push({id:uid(),tipo:'OC',proveedor:proveedor,numeroOC:ordenNum,fechaEmision:inicio||fecha(),fechaEstimadaEntrega:fechaProv,fechaRecepcion:null,estado:'PENDIENTE',pdfUrl:'',items:[]});
+          nuevos.push({id:uid(),numero:numero,cliente:String(C).trim(),ciudad:ciudad,vendedor:'',proveedor:'',ordenCompra:'',fechaEntregaProv:'',ordenes:ordenes,fechaLimite:limite,estatus:'PENDIENTE',descripcion:desc,creadoPor:SESSION?SESSION.username:'import',creadoPorNombre:SESSION?SESSION.nombre:'Importación',fechaCreacion:inicio||fecha(),horaCreacion:hora()});
+        }
+        if(!nuevos.length){toast('No pude leer pedidos. Revisa que la Hoja1 tenga las columnas PEDIDO y CLIENTE.','err');return;}
+        if(!confirm('Encontré '+nuevos.length+' pedidos en el Excel.\n\nEsto BORRA los '+DB.pedidos.length+' pedidos actuales y los reemplaza por estos '+nuevos.length+'. ¿Continuar?'))return;
+        DB.pedidos=nuevos;
+        registrarBitacora('import','Importados '+nuevos.length+' pedidos desde Excel (reemplazo total) por '+(SESSION?SESSION.nombre:''));
+        guardarDB();
+        toast(nuevos.length+' pedidos importados ✓','ok');
+        goTab('admin',document.getElementById('nb-admin'));
+      }catch(err){toast('Error leyendo el Excel: '+(err&&err.message||''),'err');}
+    };
+    reader.readAsArrayBuffer(file);
+  }).catch(function(){toast('No pude cargar el lector de Excel (revisa tu internet)','err');});
+  inp.value='';
+}
 function exportarJSON(){var a=document.createElement('a');a.href='data:application/json;charset=utf-8,'+encodeURIComponent(JSON.stringify({pedidos:DB.pedidos,bitacora:DB.bitacora},null,2));a.download='veoyoca_'+fecha().replace(/\//g,'-')+'.json';a.click();}
 function exportarCSV(){var rows=[['ID','Numero','Cliente','Ciudad','Vendedor','Estado','Fecha limite','Ordenes','Ordenes recibidas','Descripcion']];DB.pedidos.forEach(function(p){var r=resumenOrdenes(p);var ords=getOrdenes(p).map(function(o){return tipoLabel(o.tipo)+' '+(o.proveedor||'')+(o.numeroOC?' #'+o.numeroOC:'')+' ['+(o.estado||'PENDIENTE')+']';}).join(' | ');rows.push([p.id,p.numero||'',p.cliente||'',p.ciudad||'',p.vendedor||'',p.estatus||'',p.fechaLimite||'',ords,r.listas+'/'+r.total,p.descripcion||'']);});var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download='pedidos_'+fecha().replace(/\//g,'-')+'.csv';a.click();}
 
