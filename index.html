@@ -201,6 +201,10 @@ table.crm{border-collapse:collapse;font-size:12px;min-width:1780px}
 <div class="sfield"><label>Nota / Observaci&#xF3;n</label><input type="text" id="e-nota" placeholder="Observaci&#xF3;n adicional"></div>
 <div style="background:var(--ibg);border:1px solid #bfdbfe;border-radius:10px;padding:10px 12px;font-size:12px;color:var(--info)">Las &#xF3;rdenes de compra, inventario y fabricaci&#xF3;n de este pedido se gestionan desde el bot&#xF3;n <strong>&#xD3;rdenes</strong> en la tarjeta del pedido.</div>
 <div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal('modal-edit')">Cancelar</button><button class="btn btn-blue" onclick="guardarEdicion()">Guardar cambios</button></div></div></div></div>
+<div class="overlay" id="modal-instalacion"><div class="sheet"><div class="sheet-handle"></div>
+<div class="sheet-head"><h2 id="inst-titulo">&#x1F527; Instalaci&#xF3;n</h2><button class="sheet-close" onclick="cerrarModal('modal-instalacion')">&#x2715;</button></div>
+<div class="sheet-body" id="instalacion-body"></div>
+<div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal('modal-instalacion')">Cerrar</button><button class="btn btn-blue" onclick="guardarInstalacion()">Guardar</button></div></div></div>
 <div class="overlay" id="modal-ordenes"><div class="sheet"><div class="sheet-handle"></div>
 <div class="sheet-head"><h2 id="ord-titulo">&#xD3;rdenes del pedido</h2><button class="sheet-close" onclick="cerrarModal('modal-ordenes')">&#x2715;</button></div>
 <div class="sheet-body" id="ordenes-body"></div>
@@ -381,7 +385,7 @@ function chipOrden(o){
 
 async function guardarDB(){
   if(SAVING||!_db)return;SAVING=true;mostrarBadge('syncing');
-  try{var {setDoc,doc}=window._firestore;await setDoc(doc(_db,'veoyoca','data'),{usuarios:DB.usuarios,pedidos:DB.pedidos,bitacora:DB.bitacora.slice(-500),clientes:DB.clientes||[],presupuestosDoc:DB.presupuestosDoc||[],ofertasPrecios:DB.ofertasPrecios||{},updatedAt:Date.now()},{merge:true});mostrarBadge('ok');}
+  try{var {setDoc,doc}=window._firestore;await setDoc(doc(_db,'veoyoca','data'),{usuarios:DB.usuarios,pedidos:DB.pedidos,bitacora:DB.bitacora.slice(-500),clientes:DB.clientes||[],presupuestosDoc:DB.presupuestosDoc||[],ofertasPrecios:DB.ofertasPrecios||{},instaladores:DB.instaladores||[],updatedAt:Date.now()},{merge:true});mostrarBadge('ok');}
   catch(e){mostrarBadge('err');toast('Error: '+e.message,'err');}SAVING=false;
 }
 
@@ -680,7 +684,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v13 · importar pedidos + adjuntar PDF a órdenes';
+var APP_VERSION='v14 · módulo de instalaciones';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -962,7 +966,7 @@ function goTab(tab,btn){
   var titulos={home:'Pedidos',entregar:'Despacho',nuevo:'Nuevo pedido',reportes:'Reportes',admin:'Administracion',plan:'Rutas',ia:'Plan IA',notif:'Alertas y Notificaciones',ventas:'Ventas / CRM',cotizar:'Cotizador de Racks'};
   document.getElementById('topbar-sub').textContent=titulos[tab]||SESSION.nombre;
   var c=document.getElementById('content');
-  c.onclick=function(e){var ed=e.target.getAttribute('data-edit');var en=e.target.getAttribute('data-entregar');var or=e.target.getAttribute('data-ordenes');if(ed)abrirEditar(ed);if(en)marcarEntregado(en);if(or)abrirOrdenes(or);if(!ed&&!en&&!or&&e.target.closest){var pv=e.target.closest('[data-prov-toggle]');if(pv)toggleProv(pv.getAttribute('data-prov-toggle'));}};
+  c.onclick=function(e){var ed=e.target.getAttribute('data-edit');var en=e.target.getAttribute('data-entregar');var or=e.target.getAttribute('data-ordenes');var ins=e.target.getAttribute('data-instalacion');if(ed)abrirEditar(ed);if(en)marcarEntregado(en);if(or)abrirOrdenes(or);if(ins)abrirInstalacion(ins);if(!ed&&!en&&!or&&!ins&&e.target.closest){var pv=e.target.closest('[data-prov-toggle]');if(pv)toggleProv(pv.getAttribute('data-prov-toggle'));}};
   if(tab==='home')renderHome(c);else if(tab==='entregar')renderEntregar(c);else if(tab==='nuevo')renderNuevo(c);
   else if(tab==='reportes')renderReportes(c);else if(tab==='admin')renderAdmin(c);
   else if(tab==='plan')renderPlanificacion(c);else if(tab==='ia')renderPlanIA(c);else if(tab==='notif')renderNotificaciones(c);else if(tab==='ventas')renderVentas(c);
@@ -1043,8 +1047,10 @@ function cardHTML(p,conEntregar){
   if(faltantes.length){
     h+='<div style="font-size:11px;color:#d97706;margin-top:4px">⚠️ Falta: '+faltantes.join(', ')+'</div>';
   }
+  h+=instChipHTML(p);
   h+='<div class="card-desc">'+(p.descripcion||'')+'</div></div>'+badgeHTML(p)+'</div><div class="card-foot">';
   h+='<button class="btn btn-ghost btn-sm" data-ordenes="'+pid+'">\u00D3rdenes'+(r.total?' ('+r.listas+'/'+r.total+')':'')+'</button>';
+  h+='<button class="btn btn-ghost btn-sm" data-instalacion="'+pid+'">\uD83D\uDD27 Instalaci\u00F3n'+((p.instalacion&&p.instalacion.lleva)?' \u2713':'')+'</button>';
   if(canEdit)h+='<button class="btn btn-ghost btn-sm" data-edit="'+pid+'">Editar</button>';
   if(p.pdfUrl)h+='<a href="'+p.pdfUrl+'" target="_blank" class="btn btn-blue btn-sm" style="text-decoration:none">📄 Ver PDF</a>';
   if(conEntregar&&p.estatus!=='ENTREGADO'){h+='<input type="text" id="nota-'+pid+'" placeholder="Nota de entrega..."><button class="btn btn-green btn-sm" data-entregar="'+pid+'">Entregar</button>';}
@@ -1260,6 +1266,78 @@ function ordAgregar(){
   if(!fval)toast('Orden agregada SIN fecha estimada \u2014 compl\u00E9tala pronto, se notificar\u00E1 hasta que la tenga','warn');
   renderOrdenesBody();
 }
+// ═══════════════ INSTALACIÓN POR PEDIDO ═══════════════
+var INST_PID=null;
+var INST_ESTADOS=['POR AGENDAR','AGENDADA','EN PROCESO','TERMINADA'];
+function instObj(p){if(!p.instalacion)p.instalacion={lleva:false,instaladores:[],fecha:'',tiempoEstim:'',materiales:[],estado:'POR AGENDAR',notas:'',fotos:[],fechaTerminada:''};return p.instalacion;}
+function pedidoInst(){return DB.pedidos.find(function(x){return x.id===INST_PID;});}
+function instChipHTML(p){
+  var it=p.instalacion;if(!it||!it.lleva)return '';
+  var mapa={'POR AGENDAR':['#fef9c3','#854d0e'],'AGENDADA':['#dbeafe','#1d4ed8'],'EN PROCESO':['#fed7aa','#9a3412'],'TERMINADA':['#dcfce7','#166534']};
+  var col=mapa[it.estado]||['#f3f4f6','#374151'];
+  var extra=(it.estado==='TERMINADA')?((it.fotos&&it.fotos.length)?(' · 📷 '+it.fotos.length):''):(it.fecha?(' · '+it.fecha):'');
+  return '<div style="margin-top:4px"><span class="card-vend" style="background:'+col[0]+';color:'+col[1]+'">🔧 Instalación · '+esc(it.estado||'')+esc(extra)+'</span></div>';
+}
+function abrirInstalacion(id){var p=DB.pedidos.find(function(x){return x.id===id;});if(!p)return;INST_PID=id;instObj(p);document.getElementById('inst-titulo').textContent='🔧 Instalación — #'+(p.numero||id.substring(0,6))+' · '+(p.cliente||'');renderInstalacionBody();abrirModal('modal-instalacion');}
+function renderInstalacionBody(){
+  var p=pedidoInst();if(!p){return;}var it=instObj(p);
+  var h='<div style="display:flex;align-items:center;justify-content:space-between;background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin-bottom:12px">';
+  h+='<div><div style="font-weight:700;font-size:14px">¿Este pedido lleva instalación?</div><div style="font-size:11px;color:var(--muted)">Actívalo para planificarla</div></div>';
+  h+='<label style="display:flex;align-items:center;gap:6px;font-weight:700;font-size:13px;cursor:pointer"><input type="checkbox" '+(it.lleva?'checked':'')+' onchange="instSetLleva(this.checked)" style="width:18px;height:18px"> '+(it.lleva?'SÍ':'NO')+'</label></div>';
+  if(!it.lleva){document.getElementById('instalacion-body').innerHTML=h;return;}
+  // Estado
+  h+='<div class="sfield"><label>Estado de la instalación</label><select id="inst-estado" onchange="instSet(\'estado\',this.value)">'+INST_ESTADOS.map(function(e){return '<option value="'+e+'"'+(it.estado===e?' selected':'')+'>'+e+'</option>';}).join('')+'</select></div>';
+  // Instaladores
+  h+='<div class="sec-label">Instaladores</div>';
+  var lst=DB.instaladores||[];
+  if(!lst.length)h+='<div style="font-size:12px;color:var(--muted);margin-bottom:10px">No hay instaladores. Agrégalos en <b>Administración → Instaladores</b>.</div>';
+  else{h+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">';lst.forEach(function(ins,ix){var on=(it.instaladores||[]).indexOf(ins.nombre)>=0;h+='<button onclick="instToggleInstalador('+ix+')" class="btn btn-sm '+(on?'btn-dark':'btn-ghost')+'" style="font-size:12px">'+(on?'✓ ':'')+esc(ins.nombre)+'</button>';});h+='</div>';}
+  // Fecha + tiempo
+  h+='<div class="sfield-row"><div class="sfield"><label>Día de la instalación</label><input type="date" id="inst-fecha" value="'+esc(fechaInput(it.fecha))+'" onchange="instSet(\'fecha\',inputFecha(this.value))"></div><div class="sfield"><label>Tiempo estimado</label><input type="text" id="inst-tiempo" value="'+esc(it.tiempoEstim||'')+'" placeholder="Ej: 4 horas, 2 días" oninput="instSet(\'tiempoEstim\',this.value)"></div></div>';
+  // Materiales itemizados
+  h+='<div class="sec-label">Materiales necesarios</div><div id="inst-materiales">';
+  (it.materiales||[]).forEach(function(m,i){h+='<div style="display:grid;grid-template-columns:1fr 70px 26px;gap:6px;margin-bottom:6px"><input placeholder="Material" value="'+esc(m.desc||'')+'" oninput="instMat('+i+',\'desc\',this.value)" style="padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px"><input type="text" placeholder="Cant" value="'+esc(m.cant||'')+'" oninput="instMat('+i+',\'cant\',this.value)" style="padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px"><button onclick="instMatDel('+i+')" style="border:none;background:none;color:#dc2626;font-size:18px;cursor:pointer">×</button></div>';});
+  h+='</div><button class="btn btn-ghost btn-sm" onclick="instMatAdd()">+ Agregar material</button>';
+  // Notas
+  h+='<div class="sfield" style="margin-top:12px"><label>Notas de la instalación</label><textarea id="inst-notas" rows="2" oninput="instSet(\'notas\',this.value)" style="width:100%;padding:9px;border:1px solid #d1d5db;border-radius:8px;font-size:13px" placeholder="Detalles, referencias, contacto en sitio...">'+esc(it.notas||'')+'</textarea></div>';
+  // Fotos de inspección
+  h+='<div class="sec-label">Fotos de inspección ('+((it.fotos||[]).length)+')</div>';
+  h+='<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Sube las fotos cuando la instalación esté terminada (para supervisión).</div>';
+  if((it.fotos||[]).length){h+='<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px">';it.fotos.forEach(function(u,i){h+='<div style="position:relative"><a href="'+esc(u)+'" target="_blank"><img src="'+esc(u)+'" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb"></a><button onclick="instFotoDel('+i+')" style="position:absolute;top:-6px;right:-6px;background:#dc2626;color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:12px;cursor:pointer">×</button></div>';});h+='</div>';}
+  h+='<input type="file" id="inst-foto-file" accept="image/*" multiple style="display:none" onchange="instFotoSubir(this)"><button class="btn btn-blue btn-sm" onclick="document.getElementById(\'inst-foto-file\').click()">📷 Adjuntar fotos</button>';
+  document.getElementById('instalacion-body').innerHTML=h;
+}
+function instSetLleva(v){var p=pedidoInst();if(!p)return;var it=instObj(p);it.lleva=!!v;if(v&&it.estado!=='TERMINADA'&&(!it.estado||it.estado==='POR AGENDAR')&&it.fecha)it.estado='AGENDADA';renderInstalacionBody();}
+function instSet(campo,valor){var p=pedidoInst();if(!p)return;var it=instObj(p);it[campo]=valor;if(campo==='estado'&&valor==='TERMINADA'&&!it.fechaTerminada)it.fechaTerminada=fecha();if(campo==='fecha'&&valor&&it.estado==='POR AGENDAR')it.estado='AGENDADA';}
+function instToggleInstalador(ix){var p=pedidoInst();if(!p)return;var it=instObj(p);var ins=(DB.instaladores||[])[ix];if(!ins)return;if(!Array.isArray(it.instaladores))it.instaladores=[];var pos=it.instaladores.indexOf(ins.nombre);if(pos>=0)it.instaladores.splice(pos,1);else it.instaladores.push(ins.nombre);renderInstalacionBody();}
+function instMat(i,k,v){var p=pedidoInst();if(!p)return;var it=instObj(p);if(it.materiales[i])it.materiales[i][k]=v;}
+function instMatAdd(){var p=pedidoInst();if(!p)return;var it=instObj(p);if(!Array.isArray(it.materiales))it.materiales=[];it.materiales.push({desc:'',cant:''});renderInstalacionBody();}
+function instMatDel(i){var p=pedidoInst();if(!p)return;var it=instObj(p);it.materiales.splice(i,1);renderInstalacionBody();}
+function instFotoDel(i){var p=pedidoInst();if(!p)return;var it=instObj(p);it.fotos.splice(i,1);guardarDB();renderInstalacionBody();}
+function instFotoSubir(inp){
+  var files=inp.files;if(!files||!files.length)return;var p=pedidoInst();if(!p)return;var it=instObj(p);
+  toast('Subiendo '+files.length+' foto(s)...','ok');
+  var arr=Array.prototype.slice.call(files);
+  var subir=function(idx){
+    if(idx>=arr.length){guardarDB();renderInstalacionBody();toast('Foto(s) adjuntada(s) ✓','ok');return;}
+    var file=arr[idx];
+    if(file.size>20*1024*1024){toast('Una foto supera 20MB, se omitió','warn');subir(idx+1);return;}
+    var reader=new FileReader();
+    reader.onload=function(e){
+      fetch('https://veoyoca-webhook.onrender.com/subir-pdf-orden',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify({data:e.target.result,mediaType:file.type||'image/jpeg',nombre:'instalacion_'+(p.numero||'')})})
+        .then(function(r){return r.json();}).then(function(res){if(res&&res.ok&&res.url){if(!Array.isArray(it.fotos))it.fotos=[];it.fotos.push(res.url);}subir(idx+1);})
+        .catch(function(){toast('Error subiendo una foto','err');subir(idx+1);});
+    };
+    reader.readAsDataURL(file);
+  };
+  subir(0);inp.value='';
+}
+async function guardarInstalacion(){
+  var p=pedidoInst();if(!p)return;var it=instObj(p);
+  it.materiales=(it.materiales||[]).filter(function(m){return (m.desc||'').trim();});
+  await guardarDB();cerrarModal('modal-instalacion');goTab(TAB,document.getElementById('nb-'+TAB));toast('Instalación guardada','ok');
+}
+// ═══════════════ FIN INSTALACIÓN ═══════════════
 async function guardarOrdenes(){
   var p=pedidoOrd();if(!p)return;
   // Sincronizar campos legados con la primera OC para compatibilidad
@@ -2055,7 +2133,12 @@ function renderAdmin(c){
   if(SESSION.rol!=='admin'){c.innerHTML='<div class="empty">Acceso denegado</div>';return;}
   var html='<div class="section-pad"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="sec-label" style="margin:0">Usuarios ('+DB.usuarios.length+')</div><button class="btn btn-dark btn-sm" data-nuevo-usuario="1">+ Agregar</button></div><div class="admin-section">';
   DB.usuarios.forEach(function(u){html+='<div class="admin-row"><div class="admin-info"><div class="admin-name">'+u.nombre+'</div><div class="admin-meta">@'+u.username+' - '+u.creado+(u.telefono?' \u00B7 \uD83D\uDCF1':'')+(u.correo?' \u00B7 \u2709\uFE0F':'')+'</div></div><span class="role-badge '+(u.rol==='admin'?'role-admin':'role-emp')+'">'+u.rol+'</span>';html+='<button class="btn btn-ghost btn-sm" data-edit-user="'+u.id+'">Editar</button>';if(u.id!==SESSION.id){html+='<button class="btn btn-red btn-sm" data-del-user="'+u.id+'">Eliminar</button>';}else{html+='<span style="font-size:11px;color:var(--muted)">T&#xFA;</span>';}html+='</div>';});
-  html+='</div><div class="sec-label" style="margin-top:20px">Sistema</div><div class="admin-section"><div class="admin-row"><div class="admin-info"><div class="admin-name">Total pedidos</div></div><strong>'+DB.pedidos.length+'</strong></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Base de datos</div></div><span style="color:var(--success);font-weight:600">Firebase activo</span></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Exportar</div></div><button class="btn btn-ghost btn-sm" data-exportar="json">JSON</button><button class="btn btn-ghost btn-sm" data-exportar="csv" style="margin-left:6px">CSV</button></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Importar pedidos (Excel)</div><div class="admin-meta">Reemplaza TODOS los pedidos por los del archivo (Hoja1)</div></div><input type="file" id="ped-file" accept=".xlsx,.xls" style="display:none" onchange="importarPedidosExcel(this)"><button class="btn btn-blue btn-sm" onclick="document.getElementById(\'ped-file\').click()">Importar</button></div><div class="admin-row"><div class="admin-info"><div class="admin-name" style="color:var(--danger)">Borrar todos los pedidos</div><div class="admin-meta">No se puede deshacer</div></div><button class="btn btn-red btn-sm" data-borrar-pedidos="1">Borrar</button></div></div></div>';
+  html+='</div>';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin:20px 0 10px"><div class="sec-label" style="margin:0">🔧 Instaladores ('+(DB.instaladores||[]).length+')</div><button class="btn btn-dark btn-sm" onclick="agregarInstalador()">+ Agregar</button></div><div class="admin-section">';
+  if((DB.instaladores||[]).length)DB.instaladores.forEach(function(ins){html+='<div class="admin-row"><div class="admin-info"><div class="admin-name">'+esc(ins.nombre)+'</div><div class="admin-meta">'+(ins.telefono?('📱 '+esc(ins.telefono)):'sin teléfono')+'</div></div><button class="btn btn-red btn-sm" onclick="eliminarInstalador(\''+ins.id+'\')">Eliminar</button></div>';});
+  else html+='<div class="admin-row"><div class="admin-info"><div class="admin-meta" style="color:var(--muted)">Aún no hay instaladores. Agrégalos para asignarlos a las instalaciones.</div></div></div>';
+  html+='</div>';
+  html+='<div class="sec-label" style="margin-top:20px">Sistema</div><div class="admin-section"><div class="admin-row"><div class="admin-info"><div class="admin-name">Total pedidos</div></div><strong>'+DB.pedidos.length+'</strong></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Base de datos</div></div><span style="color:var(--success);font-weight:600">Firebase activo</span></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Exportar</div></div><button class="btn btn-ghost btn-sm" data-exportar="json">JSON</button><button class="btn btn-ghost btn-sm" data-exportar="csv" style="margin-left:6px">CSV</button></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Importar pedidos (Excel)</div><div class="admin-meta">Reemplaza TODOS los pedidos por los del archivo (Hoja1)</div></div><input type="file" id="ped-file" accept=".xlsx,.xls" style="display:none" onchange="importarPedidosExcel(this)"><button class="btn btn-blue btn-sm" onclick="document.getElementById(\'ped-file\').click()">Importar</button></div><div class="admin-row"><div class="admin-info"><div class="admin-name" style="color:var(--danger)">Borrar todos los pedidos</div><div class="admin-meta">No se puede deshacer</div></div><button class="btn btn-red btn-sm" data-borrar-pedidos="1">Borrar</button></div></div></div>';
   c.innerHTML=html;
   c.onclick=function(e){var t=e.target;if(t.getAttribute('data-nuevo-usuario'))abrirNuevoUsuario();var eu=t.getAttribute('data-edit-user');if(eu)editarUsuario(eu);var du=t.getAttribute('data-del-user');if(du)eliminarUsuario(du);var ex=t.getAttribute('data-exportar');if(ex==='json')exportarJSON();if(ex==='csv')exportarCSV();if(t.getAttribute('data-borrar-pedidos'))borrarPedidos();};
 }
@@ -2064,6 +2147,8 @@ function editarUsuario(id){var u=DB.usuarios.find(function(x){return x.id===id;}
 async function guardarUsuario(){var nombre=document.getElementById('u-nombre').value.trim();var user=document.getElementById('u-user').value.trim().toLowerCase();var pass=document.getElementById('u-pass').value;var rol=document.getElementById('u-rol').value;var eid=document.getElementById('u-id').value;if(!nombre||!user||!pass){toast('Todos los campos son obligatorios','err');return;}if(DB.usuarios.find(function(x){return x.username===user&&x.id!==eid;})){toast('El usuario ya existe','err');return;}var tel=(document.getElementById('u-telefono')||{value:''}).value.trim().replace(/[^0-9]/g,'');var correo=(document.getElementById('u-correo')||{value:''}).value.trim();if(eid){var u=DB.usuarios.find(function(x){return x.id===eid;});if(u){u.nombre=nombre;u.username=user;u.password=pass;u.rol=rol;u.telefono=tel;u.correo=correo;}}else{DB.usuarios.push({id:uid(),nombre:nombre,username:user,password:pass,rol:rol,telefono:tel,correo:correo,creado:fecha()});}await guardarDB();cerrarModal('modal-usuario');goTab('admin',document.getElementById('nb-admin'));toast('Usuario guardado','ok');}
 async function eliminarUsuario(id){if(!confirm('Eliminar este usuario?'))return;DB.usuarios=DB.usuarios.filter(function(x){return x.id!==id;});await guardarDB();goTab('admin',document.getElementById('nb-admin'));toast('Usuario eliminado','warn');}
 async function borrarPedidos(){if(!confirm('Borrar TODOS los pedidos?'))return;DB.pedidos=[];await guardarDB();goTab('admin',document.getElementById('nb-admin'));toast('Pedidos eliminados','warn');}
+async function agregarInstalador(){var nombre=prompt('Nombre del instalador o cuadrilla:');if(!nombre||!nombre.trim())return;var tel=(prompt('Teléfono (opcional, para el recordatorio):','')||'').replace(/[^0-9]/g,'');if(!Array.isArray(DB.instaladores))DB.instaladores=[];DB.instaladores.push({id:uid(),nombre:nombre.trim(),telefono:tel});await guardarDB();goTab('admin',document.getElementById('nb-admin'));toast('Instalador agregado','ok');}
+async function eliminarInstalador(id){if(!confirm('Eliminar este instalador?'))return;DB.instaladores=(DB.instaladores||[]).filter(function(x){return x.id!==id;});await guardarDB();goTab('admin',document.getElementById('nb-admin'));toast('Instalador eliminado','warn');}
 // ---- Importar pedidos desde el Excel "RESUMEN DE PEDIDOS" (Hoja1), reemplazando todos ----
 function _ddmmyyyyUTC(d){return ('0'+d.getUTCDate()).slice(-2)+'/'+('0'+(d.getUTCMonth()+1)).slice(-2)+'/'+d.getUTCFullYear();}
 function _pedFechaExcel(v){
@@ -2156,16 +2241,56 @@ function exportarCSV(){var rows=[['ID','Numero','Cliente','Ciudad','Vendedor','E
 
 var ZONAS=[{nombre:'Maracaibo',ciudades:['MARACAIBO','NORTE','SUR','CENTRO','AMPARO','COROMOTO','HATICOS','DELICIAS','SANTA LUCIA','SAN FRANCISCO','SIERRA MAESTRA','ZONA INDUSTRIAL','BELLA VISTA']},{nombre:'Sur del lago',ciudades:['EL MOJAN','MARA','SANTA BARBARA','LOS PUERTOS','ALTAGRACIA']},{nombre:'Cabimas / C. Ojeda',ciudades:['CABIMAS','CIUDAD OJEDA','LAGUNILLAS']},{nombre:'Machiques / Perija',ciudades:['MACHIQUES','PERIJA','VILLA DEL ROSARIO','LA VILLA','CARRASQUERO']},{nombre:'Coro / Falcon',ciudades:['CORO','FALCON','TUCACAS','DABAJURO','PUNTO FIJO']},{nombre:'Barquisimeto',ciudades:['BARQUISIMETO','CARORA','YARACUY']},{nombre:'San Cristobal',ciudades:['SAN CRISTOBAL','TACHIRA']},{nombre:'Merida / Los Andes',ciudades:['MERIDA','VALERA','TRUJILLO']},{nombre:'Barinas / Llanos',ciudades:['BARINAS','ACARIGUA','GUASDUALITO','APURE']},{nombre:'Caracas / Centro',ciudades:['CARACAS','PETARE','LOS TEQUES','MIRANDA']},{nombre:'Valencia / Carabobo',ciudades:['VALENCIA','CARABOBO','MARACAY','ARAGUA','TURMERO']},{nombre:'Oriente',ciudades:['MATURIN','EL TIGRE','BARCELONA','CIUDAD BOLIVAR','ANZOATEGUI','PUERTO ORDAZ']},{nombre:'Otros',ciudades:[]}];
 function getZona(ciudad){if(!ciudad)return 'Sin ciudad';var cu=ciudad.toUpperCase().trim();for(var i=0;i<ZONAS.length-1;i++)for(var j=0;j<ZONAS[i].ciudades.length;j++)if(cu.indexOf(ZONAS[i].ciudades[j])>=0||ZONAS[i].ciudades[j].indexOf(cu)>=0)return ZONAS[i].nombre;return ciudad;}
+var PLAN_MODO='rutas';
+function planSetModo(m){PLAN_MODO=m;renderPlanificacion(document.getElementById('content'));}
+function planToggleHTML(){return '<div class="section-pad" style="padding-bottom:0"><div style="display:flex;gap:8px;margin-bottom:8px"><button class="btn '+(PLAN_MODO==='rutas'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1" onclick="planSetModo(\'rutas\')">🗺️ Rutas</button><button class="btn '+(PLAN_MODO==='instalaciones'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1" onclick="planSetModo(\'instalaciones\')">🔧 Instalaciones</button></div></div>';}
 function renderPlanificacion(c){
+  if(PLAN_MODO==='instalaciones'){c.innerHTML=planToggleHTML()+renderInstalacionesAgenda();return;}
   var pends=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';});
-  if(!pends.length){c.innerHTML='<div class="empty"><div class="empty-icon">OK</div>No hay pedidos pendientes</div>';return;}
+  if(!pends.length){c.innerHTML=planToggleHTML()+'<div class="empty"><div class="empty-icon">OK</div>No hay pedidos pendientes</div>';return;}
   var grupos={};pends.forEach(function(p){var z=getZona(p.ciudad);if(!grupos[z])grupos[z]=[];grupos[z].push(p);});
   for(var z in grupos){grupos[z].sort(function(a,b){var da=diasRestantes(a.fechaLimite),db=diasRestantes(b.fechaLimite);if(da===null&&db===null)return 0;if(da===null)return 1;if(db===null)return -1;return da-db;});}
   var zo=Object.keys(grupos).sort(function(a,b){var ma=9999,mb=9999;grupos[a].forEach(function(p){var d=diasRestantes(p.fechaLimite);if(d!==null&&d<ma)ma=d;});grupos[b].forEach(function(p){var d=diasRestantes(p.fechaLimite);if(d!==null&&d<mb)mb=d;});return ma-mb;});
   var tv=pends.filter(function(p){return clasif(p)==='vencido';}).length,tu=pends.filter(function(p){return clasif(p)==='urgente';}).length;
   var html='<div class="stats-bar"><div class="stat"><div class="stat-v">'+pends.length+'</div><div class="stat-l">pedidos</div></div><div class="stat"><div class="stat-v" style="color:#fca5a5">'+tv+'</div><div class="stat-l">vencidos</div></div><div class="stat"><div class="stat-v" style="color:#fcd34d">'+tu+'</div><div class="stat-l">urgentes</div></div><div class="stat"><div class="stat-v">'+zo.length+'</div><div class="stat-l">zonas</div></div></div><div style="padding:10px 14px 0"><div class="sec-label">Plan de entregas</div><button class="btn btn-ghost btn-sm" style="margin-bottom:10px;width:100%" onclick="exportarPlan()">Exportar CSV</button>';
   zo.forEach(function(zona){var pedidos=grupos[zona];var urgV=pedidos.filter(function(p){return clasif(p)==='vencido';}).length;var urgU=pedidos.filter(function(p){return clasif(p)==='urgente';}).length;var ch=urgV?'#dc2626':urgU?'#d97706':'#1a1a2e';html+='<div class="card" style="margin-bottom:12px"><div style="background:'+ch+';padding:10px 14px"><div style="color:#fff;font-size:13px;font-weight:700">'+zona+' ('+pedidos.length+' pedidos)</div>'+(urgV?'<div style="color:#fca5a5;font-size:11px">'+urgV+' vencido'+(urgV>1?'s':'')+'</div>':urgU?'<div style="color:#fcd34d;font-size:11px">'+urgU+' urgente'+(urgU>1?'s':'')+'</div>':'')+'</div><div style="padding:6px 0">';pedidos.forEach(function(p,pi){var d=diasRestantes(p.fechaLimite);var col=!p.fechaLimite?'#6b7280':d<0?'#dc2626':d<=7?'#d97706':'#16a34a';var r=resumenOrdenes(p);html+='<div style="padding:8px 14px;border-bottom:1px solid #f3f4f6;display:flex;gap:10px;align-items:center"><div style="min-width:22px;height:22px;border-radius:50%;background:'+col+';color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+(pi+1)+'</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+(p.cliente||'Sin nombre')+'</div><div style="font-size:11px;color:#6b7280">#'+(p.numero||p.id.substring(0,6))+(p.vendedor?' - '+p.vendedor:'')+(r.total?' \u00B7 \u00F3rdenes '+r.listas+'/'+r.total:'')+'</div></div>'+badgeHTML(p)+'</div>';});html+='</div></div>';});
-  c.innerHTML=html+'</div>';
+  c.innerHTML=planToggleHTML()+html+'</div>';
+}
+// Agenda general de instalaciones: pedidos con instalación, agrupados por día.
+function renderInstalacionesAgenda(){
+  var lista=DB.pedidos.filter(function(p){return p.instalacion&&p.instalacion.lleva&&p.estatus!=='ENTREGADO';});
+  var terminadas=DB.pedidos.filter(function(p){return p.instalacion&&p.instalacion.lleva&&(p.instalacion.estado==='TERMINADA'||p.estatus==='ENTREGADO');});
+  var pend=lista.filter(function(p){return p.instalacion.estado!=='TERMINADA';});
+  var nAg=pend.filter(function(p){return p.instalacion.estado==='AGENDADA';}).length;
+  var nSin=pend.filter(function(p){return p.instalacion.estado==='POR AGENDAR';}).length;
+  var h='<div class="stats-bar"><div class="stat"><div class="stat-v">'+pend.length+'</div><div class="stat-l">por instalar</div></div><div class="stat"><div class="stat-v" style="color:#93c5fd">'+nAg+'</div><div class="stat-l">agendadas</div></div><div class="stat"><div class="stat-v" style="color:#fcd34d">'+nSin+'</div><div class="stat-l">por agendar</div></div><div class="stat"><div class="stat-v" style="color:#86efac">'+terminadas.length+'</div><div class="stat-l">terminadas</div></div></div>';
+  h+='<div class="section-pad">';
+  if(!pend.length){h+='<div class="empty"><div class="empty-icon">🔧</div>No hay instalaciones pendientes</div>';}
+  else{
+    var grupos={};pend.forEach(function(p){var f=p.instalacion.fecha||'Sin fecha';if(!grupos[f])grupos[f]=[];grupos[f].push(p);});
+    var claves=Object.keys(grupos).sort(function(a,b){if(a==='Sin fecha')return 1;if(b==='Sin fecha')return -1;var da=diasRestantes(a),db=diasRestantes(b);if(da===null)return 1;if(db===null)return -1;return da-db;});
+    claves.forEach(function(f){
+      var dtxt=f;if(f!=='Sin fecha'){var d=diasRestantes(f);dtxt=f+' · '+(d<0?('hace '+Math.abs(d)+'d'):d===0?'HOY':('en '+d+'d'));}
+      h+='<div class="sec-label" style="margin-top:14px">📅 '+esc(dtxt)+'</div>';
+      grupos[f].forEach(function(p){h+=instAgendaCard(p);});
+    });
+  }
+  if(terminadas.length){
+    h+='<div class="sec-label" style="margin-top:18px">✅ Terminadas ('+terminadas.length+')</div>';
+    terminadas.sort(function(a,b){return (b.instalacion.fechaTerminada||'').localeCompare(a.instalacion.fechaTerminada||'');});
+    terminadas.slice(0,30).forEach(function(p){h+=instAgendaCard(p);});
+  }
+  return h+'</div>';
+}
+function instAgendaCard(p){
+  var it=p.instalacion;var mapa={'POR AGENDAR':['#fef9c3','#854d0e'],'AGENDADA':['#dbeafe','#1d4ed8'],'EN PROCESO':['#fed7aa','#9a3412'],'TERMINADA':['#dcfce7','#166534']};var col=mapa[it.estado]||['#f3f4f6','#374151'];
+  var h='<div class="card" style="margin-bottom:8px;cursor:pointer" onclick="abrirInstalacion(\''+p.id+'\')"><div style="padding:10px 14px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div style="font-size:14px;font-weight:700">'+esc(p.cliente||'Sin nombre')+' <span style="font-weight:400;color:var(--muted);font-size:12px">#'+esc(p.numero||'')+'</span></div><span class="card-vend" style="background:'+col[0]+';color:'+col[1]+'">'+esc(it.estado||'')+'</span></div>';
+  if(p.ciudad)h+='<div style="font-size:12px;color:var(--muted)">📍 '+esc(p.ciudad)+'</div>';
+  if(it.instaladores&&it.instaladores.length)h+='<div style="font-size:12px;margin-top:3px">👷 '+esc(it.instaladores.join(', '))+'</div>';
+  var meta=[];if(it.tiempoEstim)meta.push('⏱ '+it.tiempoEstim);if(it.materiales&&it.materiales.length)meta.push('🧰 '+it.materiales.length+' material(es)');if(it.fotos&&it.fotos.length)meta.push('📷 '+it.fotos.length);
+  if(meta.length)h+='<div style="font-size:11px;color:var(--muted);margin-top:3px">'+esc(meta.join(' · '))+'</div>';
+  h+='</div></div>';return h;
 }
 function exportarPlan(){var pends=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';});pends.sort(function(a,b){var da=diasRestantes(a.fechaLimite),db=diasRestantes(b.fechaLimite);if(da===null&&db===null)return 0;if(da===null)return 1;if(db===null)return -1;return da-db;});var rows=[['#','Pedido','Cliente','Ciudad','Zona','Vendedor','Fecha limite','Dias','Estado','Ordenes','Descripcion']];pends.forEach(function(p,i){var d=diasRestantes(p.fechaLimite);var r=resumenOrdenes(p);rows.push([i+1,p.numero||p.id.substring(0,6),p.cliente||'',p.ciudad||'',getZona(p.ciudad),p.vendedor||'',p.fechaLimite||'',d!==null?d:'',p.estatus||'',r.total?r.listas+'/'+r.total:'',(p.descripcion||'').substring(0,80)]);});var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download='plan_'+fecha().replace(/\//g,'-')+'.csv';a.click();}
 
@@ -2533,7 +2658,7 @@ async function initFirebase(){
     var snap=await fs.getDoc(fs.doc(_db,'veoyoca','data'));
     if(snap.exists()){var d=snap.data();DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];DB.clientes=d.clientes||[];}
     else{DB.usuarios=[{id:'admin',nombre:'Administrador',username:'admin',password:'admin123',rol:'admin',creado:fecha()}];await guardarDB();}
-    fs.onSnapshot(fs.doc(_db,'veoyoca','data'),function(snap){if(!snap.exists()||SAVING)return;var d=snap.data();DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];DB.clientes=d.clientes||[];DB.presupuestosDoc=d.presupuestosDoc||[];DB.ofertasPrecios=d.ofertasPrecios||{};if(TAB==='ventas'&&document.activeElement&&document.activeElement.closest&&document.activeElement.closest('#tabla-crm'))return;if(TAB==='cotizar')return;if(SESSION&&TAB){var nb=document.getElementById('nb-'+TAB);if(nb)goTab(TAB,nb);}});
+    fs.onSnapshot(fs.doc(_db,'veoyoca','data'),function(snap){if(!snap.exists()||SAVING)return;var d=snap.data();DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];DB.clientes=d.clientes||[];DB.presupuestosDoc=d.presupuestosDoc||[];DB.ofertasPrecios=d.ofertasPrecios||{};DB.instaladores=d.instaladores||[];if(TAB==='ventas'&&document.activeElement&&document.activeElement.closest&&document.activeElement.closest('#tabla-crm'))return;if(TAB==='cotizar')return;if(SESSION&&TAB){var nb=document.getElementById('nb-'+TAB);if(nb)goTab(TAB,nb);}});
     var sess=null;try{sess=JSON.parse(localStorage.getItem('veo_session')||'null');}catch(e){}
     if(sess){var u=DB.usuarios.find(function(x){return x.id===sess.id;});if(u){SESSION=u;mostrarApp();return;}}
     document.getElementById('splash').style.display='none';
