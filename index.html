@@ -730,7 +730,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v32 · módulo de inventario';
+var APP_VERSION='v33 · catálogo editable tipo CRM';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -2721,12 +2721,46 @@ function invListaHTML(){
   });
   return h;
 }
+var INV_SAVE_TIMER=null;
+function invItemCampo(id,campo,valor){
+  var it=invItem(id);if(!it)return;
+  if(['costo','precio','minimo','reorden'].indexOf(campo)>=0)valor=invNum(valor);
+  else{valor=String(valor==null?'':valor).trim();if(campo==='um'&&!valor)valor='u';}
+  it[campo]=valor;
+  clearTimeout(INV_SAVE_TIMER);INV_SAVE_TIMER=setTimeout(function(){guardarDB();},800);
+}
+function invQuickAdd(inp){
+  var nombre=(inp.value||'').trim();if(!nombre)return;
+  invDB().items.push({id:uid(),nombre:nombre,sku:'',um:'u',categoria:'',costo:0,precio:0,minimo:0,reorden:0,creado:fecha()});
+  inp.value='';guardarDB();renderInventario(document.getElementById('content'));
+  setTimeout(function(){var n=document.getElementById('inv-nuevo');if(n)n.focus();},100);
+  toast('Producto "'+nombre+'" agregado','ok');
+}
+function invItemBorrar(id){if(!confirm('¿Eliminar este producto del catálogo?'))return;var inv=invDB();inv.items=inv.items.filter(function(x){return x.id!==id;});guardarDB();renderInventario(document.getElementById('content'));toast('Producto eliminado','warn');}
+function invCelI(id,campo,valor,tipo){return '<input type="'+(tipo||'text')+'"'+(tipo==='number'?' step="any"':'')+' value="'+esc(valor==null?'':valor)+'" onchange="invItemCampo(\''+id+'\',\''+campo+'\',this.value)">';}
 function invRenderCatalogo(){
   var items=invDB().items.slice().sort(function(a,b){return (a.nombre||'').localeCompare(b.nombre||'');});
-  var h='<div class="section-pad" style="padding-top:0"><button class="btn btn-dark btn-sm" style="margin-bottom:8px" onclick="invItemAbrir()">➕ Nuevo producto</button>';
-  if(!items.length){h+='<div class="empty"><div class="empty-icon">🗂️</div>Catálogo vacío. Agrega tu primer producto.</div></div>';return h;}
-  items.forEach(function(it){h+='<div class="card" style="margin-bottom:6px;padding:10px 12px;cursor:pointer" onclick="invItemAbrir(\''+it.id+'\')"><div style="display:flex;justify-content:space-between"><div style="font-size:14px;font-weight:700">'+esc(it.nombre)+'</div><div style="font-size:11px;color:#94a3b8">'+esc(it.sku||'')+'</div></div><div style="font-size:11px;color:#64748b;margin-top:2px">'+(it.categoria?esc(it.categoria)+' · ':'')+'UM: '+esc(it.um||'u')+(invNum(it.costo)?' · costo $'+invFmt(it.costo):'')+(invNum(it.precio)?' · precio $'+invFmt(it.precio):'')+'</div><div style="font-size:11px;color:#64748b">mín: '+invFmt(it.minimo)+' · reorden: '+invFmt(it.reorden)+' · stock: '+invFmt(invStockItem(it.id))+'</div></div>';});
-  return h+'</div>';
+  var h='<div class="section-pad" style="padding-top:0;padding-bottom:6px"><div style="font-size:11px;color:var(--muted)">Escribe el nombre, presiona Enter y llena las casillas directamente — se guardan solas. El stock se lleva desde Existencias / Movimientos.</div></div>';
+  h+='<div class="crm-wrap"><table class="crm" id="tabla-inv"><thead><tr>';
+  ['Producto','SKU','Categoría','Unidad','Costo $','Precio $','Mínimo','Reorden','Stock'].forEach(function(t,i){h+='<th'+(i===0?' class="colfija"':'')+'>'+t+'</th>';});
+  h+='</tr></thead><tbody>';
+  h+='<tr><td class="colfija" style="background:var(--ibg)"><input id="inv-nuevo" placeholder="+ Nuevo producto (Enter)" onkeydown="if(event.key===\'Enter\')invQuickAdd(this)"></td><td colspan="8" style="padding:8px 10px;font-size:11px;color:var(--muted);background:var(--ibg)">Cada columna se edita directo, como en el CRM.</td></tr>';
+  items.forEach(function(it){
+    var id=it.id,total=invStockItem(id),est=invEstado(it,total);
+    h+='<tr>';
+    h+='<td class="colfija"><div style="display:flex;align-items:center;gap:2px"><button onclick="invItemBorrar(\''+id+'\')" title="Eliminar" style="border:none;background:none;color:#dc2626;font-size:13px;cursor:pointer;padding:0 2px 0 6px">🗑</button>'+invCelI(id,'nombre',it.nombre)+'</div></td>';
+    h+='<td style="min-width:110px">'+invCelI(id,'sku',it.sku)+'</td>';
+    h+='<td style="min-width:130px">'+invCelI(id,'categoria',it.categoria)+'</td>';
+    h+='<td style="min-width:70px">'+invCelI(id,'um',it.um)+'</td>';
+    h+='<td style="min-width:80px">'+invCelI(id,'costo',it.costo,'number')+'</td>';
+    h+='<td style="min-width:80px">'+invCelI(id,'precio',it.precio,'number')+'</td>';
+    h+='<td style="min-width:70px">'+invCelI(id,'minimo',it.minimo,'number')+'</td>';
+    h+='<td style="min-width:70px">'+invCelI(id,'reorden',it.reorden,'number')+'</td>';
+    h+='<td style="min-width:78px"><span style="font-weight:700;color:'+est.c+'">'+invFmt(total)+'</span> <span style="font-size:10px;color:var(--muted)">'+esc(it.um||'u')+'</span></td>';
+    h+='</tr>';
+  });
+  h+='</tbody></table></div>';
+  return h;
 }
 function invRenderUbicaciones(){
   var ubs=invDB().ubicaciones,sm=invStockRaw();
