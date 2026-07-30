@@ -730,7 +730,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v36 · producto con ubicación y stock inicial';
+var APP_VERSION='v38 · cambio de ubicación: admin + confirmación';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -2686,6 +2686,35 @@ function invItemReordenUb(id,ub,val){var it=invItem(id);if(!it)return;if(!it.reo
 function invReordenUbLista(){var out=[],sm=invStockRaw();invDB().items.forEach(function(it){var ru=it.reordenUb||{};Object.keys(ru).forEach(function(ub){var r=invNum(ru[ub]);if(r<=0)return;var q=(sm[it.id]||{})[ub]||0;if(q<=r){out.push({it:it,ub:invUbic(ub),q:q,r:r,critico:q<=0});}});});out.sort(function(a,b){return a.q-b.q;});return out;}
 function invSetCatUb(u){INV_CAT_UB=u;renderInventario(document.getElementById('content'));}
 function invUbicResumen(it){var s=invStockRaw()[it.id]||{};var parts=invDB().ubicaciones.filter(function(u){return s[u.id];}).map(function(u){return (u.tipo==='exhibicion'?'🛍️ ':'🏬 ')+esc(u.nombre)+' ('+invFmt(s[u.id])+')';});return parts.length?parts.join('<br>'):'<span style="color:#94a3b8">—</span>';}
+// Selector de ubicación editable en el catálogo: mueve el stock del producto a la ubicación elegida.
+function invCatUbSelect(it){
+  var ubs=invDB().ubicaciones;if(!ubs.length)return '<span style="color:#94a3b8">crea una ubicación</span>';
+  // Solo un admin puede cambiar la ubicación directo; los demás la ven pero no la mueven.
+  if(!(SESSION&&SESSION.rol==='admin'))return invUbicResumen(it);
+  var s=invStockRaw()[it.id]||{};var locs=ubs.filter(function(u){return s[u.id];});
+  if(locs.length>1)return invUbicResumen(it)+'<div style="font-size:10px;color:#94a3b8">(varias — mover en Existencias)</div>';
+  var cur=locs.length?locs[0].id:'';
+  var h='<select onchange="invCatMoverUb(\''+it.id+'\',this.value)" style="width:100%;border:1px solid #e5e7eb;border-radius:6px;padding:4px 6px;font-size:11px;background:#fff"><option value="">— sin ubicación —</option>';
+  ubs.forEach(function(u){h+='<option value="'+u.id+'"'+(cur===u.id?' selected':'')+'>'+(u.tipo==='exhibicion'?'🛍️ ':'🏬 ')+esc(u.nombre)+'</option>';});
+  h+='</select>'+(cur?' <span style="font-size:10px;color:#94a3b8">('+invFmt(s[cur])+')</span>':'');
+  return h;
+}
+function invCatMoverUb(id,destUb){
+  var it=invItem(id);if(!it)return;
+  var render=function(){renderInventario(document.getElementById('content'));};
+  if(!(SESSION&&SESSION.rol==='admin')){toast('Solo un administrador puede cambiar la ubicación desde el catálogo','err');render();return;}
+  var s=invStockRaw()[id]||{};var locs=invDB().ubicaciones.filter(function(u){return s[u.id];});
+  if(locs.length>1){toast('Este producto está en varias ubicaciones; muévelo desde Existencias','warn');render();return;}
+  var curId=locs.length?locs[0].id:'';
+  if(!destUb){if(curId)toast('Para dejarlo sin ubicación, descuenta el stock en Existencias','warn');render();return;}
+  if(curId===destUb){render();return;}
+  if(!curId){toast('El producto no tiene stock para mover. Cárgalo en Existencias o al crearlo.','warn');render();return;}
+  var qty=s[curId]||0;if(qty<=0){render();return;}
+  var curNom=(invUbic(curId)||{}).nombre||'',destNom=(invUbic(destUb)||{}).nombre||'';
+  if(!confirm('¿Mover '+invFmt(qty)+' '+(it.um||'u')+' de "'+it.nombre+'"\nde '+curNom+' → '+destNom+'?')){render();return;}
+  invMover('TRASLADO',id,curId,qty,{ubicDest:destUb,motivo:'Cambio de ubicación (catálogo)'});
+  guardarDB();render();toast('Movido a '+destNom,'ok');
+}
 function invValorTotal(){var v=0;invDB().items.forEach(function(it){v+=invStockItem(it.id)*invNum(it.costo);});return v;}
 function invMovsRecientes(itemId,dias){var lim=Date.now()-dias*86400000,s=0;invDB().movs.forEach(function(mv){if(mv.itemId===itemId&&mv.tipo==='SALIDA'&&(mv.ts||0)>=lim)s+=invNum(mv.cant);});return s;}
 function renderInventario(c){
@@ -2791,7 +2820,7 @@ function invRenderCatalogo(){
     h+='<td style="min-width:70px">'+invCelI(id,'minimo',it.minimo,'number')+'</td>';
     h+='<td style="min-width:70px">'+invCelI(id,'reorden',it.reorden,'number')+'</td>';
     h+='<td style="min-width:78px"><span style="font-weight:700;color:'+est.c+'">'+invFmt(qhere)+'</span> <span style="font-size:10px;color:var(--muted)">'+esc(it.um||'u')+'</span></td>';
-    h+='<td style="min-width:150px;font-size:11px;color:#475569">'+(f?(ufCfg?((ufCfg.tipo==='exhibicion'?'🛍️ ':'🏬 ')+esc(ufCfg.nombre)):''):invUbicResumen(it))+'</td>';
+    h+='<td style="min-width:170px;font-size:11px;color:#475569">'+(f?(ufCfg?((ufCfg.tipo==='exhibicion'?'🛍️ ':'🏬 ')+esc(ufCfg.nombre)):''):invCatUbSelect(it))+'</td>';
     h+='</tr>';
   });
   h+='</tbody></table></div>';
