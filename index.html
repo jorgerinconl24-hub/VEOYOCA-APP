@@ -728,7 +728,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v28 · entrega: ítems + OF/Inv pendientes';
+var APP_VERSION='v29 · entrega: retira/envío';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -2426,6 +2426,14 @@ function entregaGuiaEstado(o){
 function _entregaItems(o){return (o.items||[]).map(function(m){var dsc=m.descripcion||m.desc||'';var cnt=m.cantidad||m.cant;return dsc?(dsc+(cnt?(' x'+cnt):'')):'';}).filter(Boolean);}
 // Órdenes de fabricación / inventario aún pendientes por entregar (otro viaje).
 function _entregaPendExtra(ordenes){return (ordenes||[]).filter(function(o){var e=entregaGuiaEstado(o);return e.pend&&(o.tipo==='OF'||o.tipo==='INVENTARIO');}).map(function(o){return tipoLabel(o.tipo)+(o.numeroOC?(' #'+o.numeroOC):'');});}
+function _entregaTranspTxt(t){return t==='retira'?'Retira en sitio (el cliente lo busca)':t==='envio'?'Envío (nosotros lo llevamos)':'Transporte por definir';}
+function _entregaTranspCfg(t){return t==='retira'?{t:'🏪 Retira en sitio',bg:'#dbeafe',c:'#1d4ed8'}:t==='envio'?{t:'🚚 Envío (llevamos)',bg:'#ffedd5',c:'#9a3412'}:{t:'🚚 Transporte: definir',bg:'#f3f4f6',c:'#6b7280'};}
+// Cambia retira/envío desde Entrega (sirve para pedidos del sistema y manuales) y refresca.
+function entregaTranspToggle(tipo,id){
+  if(tipo==='man'){var m=entregaPedManual().find(function(x){return x.id===id;});if(m)m.transporte=(m.transporte==='retira')?'envio':'retira';}
+  else{var p=DB.pedidos.find(function(x){return x.id===id;});if(p)p.transporte=(p.transporte==='retira')?'envio':'retira';}
+  guardarDB();renderPlanificacion(document.getElementById('content'));
+}
 var ENTREGA_GUIA_MSG='';
 // Pedidos manuales agregados directamente en Entrega (sin pasar por la carga).
 function entregaPedManual(){var pl=cargaPlan();if(!Array.isArray(pl.pedidosManual))pl.pedidosManual=[];return pl.pedidosManual;}
@@ -2442,8 +2450,8 @@ function entregaGrupos(){
 }
 // Lista unificada para mostrar/exportar: pedidos del sistema + pedidos manuales.
 function entregaTodos(){
-  var lista=entregaGrupos().map(function(g){return {tipo:'sys',id:g.p.id,numero:g.p.numero||'',cliente:g.p.cliente||'',direccion:entregaDir(g.p),fechaLimite:g.p.fechaLimite,ordenes:getOrdenes(g.p),detalle:''};});
-  entregaPedManual().forEach(function(m){lista.push({tipo:'man',id:m.id,numero:m.numero||'',cliente:m.cliente||'',direccion:m.direccion||'',fechaLimite:'',ordenes:[],detalle:m.detalle||''});});
+  var lista=entregaGrupos().map(function(g){return {tipo:'sys',id:g.p.id,numero:g.p.numero||'',cliente:g.p.cliente||'',direccion:entregaDir(g.p),transporte:g.p.transporte||'',fechaLimite:g.p.fechaLimite,ordenes:getOrdenes(g.p),detalle:''};});
+  entregaPedManual().forEach(function(m){lista.push({tipo:'man',id:m.id,numero:m.numero||'',cliente:m.cliente||'',direccion:m.direccion||'',transporte:m.transporte||'',fechaLimite:'',ordenes:[],detalle:m.detalle||''});});
   lista.sort(function(a,b){var da=diasRestantes(a.fechaLimite),db=diasRestantes(b.fechaLimite);if(da===null&&db===null)return 0;if(da===null)return 1;if(db===null)return -1;return da-db;});
   return lista;
 }
@@ -2488,6 +2496,8 @@ function renderEntregaBoard(){
     h+='<div class="card" style="margin-bottom:8px;padding:10px 14px'+(man?';background:#fffbeb;border:1px solid #fde68a':'')+'">';
     h+='<div style="display:flex;justify-content:space-between;gap:8px"><div style="font-size:14px;font-weight:700">Pedido #'+esc(g.numero||'—')+' — '+esc(g.cliente||'Sin nombre')+(man?' <span style="font-size:9px;font-weight:700;color:#92400e;background:#fef3c7;border-radius:4px;padding:1px 5px">MANUAL</span>':'')+'</div>'+(man?'<button onclick="entregaPedManualQuitar(\''+g.id+'\')" style="border:none;background:none;color:#dc2626;font-size:16px;cursor:pointer;flex-shrink:0">×</button>':(prio?'<span style="font-size:11px;font-weight:600;flex-shrink:0;color:'+(d<0?'#dc2626':d===0?'#d97706':'#6b7280')+'">'+esc(prio)+'</span>':''))+'</div>';
     h+='<div style="font-size:12px;color:#374151;margin-top:2px">📍 '+esc(g.direccion||('(sin dirección'+(man?'':' — edítala en el pedido')+')'))+'</div>';
+    var tcfg=_entregaTranspCfg(g.transporte);
+    h+='<div style="margin-top:5px"><span onclick="entregaTranspToggle(\''+g.tipo+'\',\''+g.id+'\')" title="Tocar para cambiar" style="cursor:pointer;display:inline-block;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;background:'+tcfg.bg+';color:'+tcfg.c+'">'+tcfg.t+'</span></div>';
     g.ordenes.forEach(function(o){var st=entregaGuiaEstado(o);
       h+='<div style="font-size:12px;color:#4b5563;margin-top:5px;display:flex;justify-content:space-between;gap:8px"><span style="font-weight:600">'+esc(tipoLabel(o.tipo))+(o.numeroOC?(' #'+esc(o.numeroOC)):'')+'</span><span style="color:'+st.c+';font-weight:600;flex-shrink:0">'+st.t+'</span></div>';
       _entregaItems(o).forEach(function(it){h+='<div style="font-size:11px;color:#6b7280;margin-left:12px">– '+esc(it)+'</div>';});
@@ -2507,6 +2517,7 @@ function entregaTexto(){
   lista.forEach(function(g){
     L.push('*Pedido #'+(g.numero||'—')+' — '+(g.cliente||'')+'*'+(g.tipo==='man'?' (manual)':''));
     L.push('📍 '+(g.direccion||'(sin dirección)'));
+    L.push('🚚 '+_entregaTranspTxt(g.transporte));
     g.ordenes.forEach(function(o){L.push('   • '+tipoLabel(o.tipo)+(o.numeroOC?(' #'+o.numeroOC):'')+' — '+_entregaEstadoTxt(entregaGuiaEstado(o)));_entregaItems(o).forEach(function(it){L.push('       – '+it);});});
     var pex=_entregaPendExtra(g.ordenes);if(pex.length)L.push('   ⚠️ Pendiente por entregar (otro viaje): '+pex.join(', '));
     if(g.tipo==='man'&&g.detalle)L.push('   • '+g.detalle);
@@ -2534,6 +2545,7 @@ function entregaPDF(){
       doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(55,48,163);var tit=doc.splitTextToSize('Pedido #'+(g.numero||'—')+' — '+(g.cliente||'')+(g.tipo==='man'?' (manual)':''),W-2*M-12);doc.text(tit[0],M+6,y+2);doc.setTextColor(0,0,0);nl(22);
       doc.setFont('helvetica','normal');doc.setFontSize(10);
       var dl=doc.splitTextToSize('Dirección: '+(g.direccion||'(sin dirección)'),W-2*M-10);dl.forEach(function(ln){doc.text(ln,M+6,y);nl(13);});
+      var tl=doc.splitTextToSize('Transporte: '+_entregaTranspTxt(g.transporte),W-2*M-10);tl.forEach(function(ln){doc.text(ln,M+6,y);nl(13);});
       doc.setFontSize(9);doc.setTextColor(90,90,90);
       g.ordenes.forEach(function(o){var linea='- '+tipoLabel(o.tipo)+(o.numeroOC?(' #'+o.numeroOC):'')+'   '+_entregaEstadoTxt(entregaGuiaEstado(o));doc.setTextColor(90,90,90);var lns=doc.splitTextToSize(linea,W-2*M-16);lns.forEach(function(ln){doc.text(ln,M+16,y);nl(12);});
         if(incItems)_entregaItems(o).forEach(function(it){doc.setTextColor(130,130,130);var il=doc.splitTextToSize('· '+it,W-2*M-28);il.forEach(function(ln){doc.text(ln,M+28,y);nl(11);});});
