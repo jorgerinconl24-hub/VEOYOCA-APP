@@ -215,6 +215,14 @@ table.crm{border-collapse:collapse;font-size:12px;min-width:1780px}
 <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="cargaManualAddRow()">+ Agregar &#xED;tem</button>
 </div>
 <div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal('modal-carga-manual')">Cancelar</button><button class="btn btn-blue" onclick="cargaManualGuardar()">Agregar a la carga</button></div></div></div>
+<div class="overlay" id="modal-entrega-ped"><div class="sheet"><div class="sheet-handle"></div>
+<div class="sheet-head"><h2>&#x2795; Pedido manual para entrega</h2><button class="sheet-close" onclick="cerrarModal('modal-entrega-ped')">&#x2715;</button></div>
+<div class="sheet-body">
+<div class="sfield-row"><div class="sfield"><label># Pedido</label><input type="text" id="ep-num" placeholder="Ej: 512"></div><div class="sfield"><label>Cliente</label><input type="text" id="ep-cli" placeholder="Nombre del cliente"></div></div>
+<div class="sfield"><label>Direcci&#xF3;n de entrega</label><input type="text" id="ep-dir" placeholder="Direcci&#xF3;n del cliente"></div>
+<div class="sfield"><label>&#xD3;rdenes / &#xED;tems (opcional)</label><textarea id="ep-det" placeholder="Ej: OC #512, 3 vitrinas, 2 estantes..."></textarea></div>
+</div>
+<div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal('modal-entrega-ped')">Cancelar</button><button class="btn btn-blue" onclick="entregaPedManualGuardar()">Agregar a entrega</button></div></div></div>
 <div class="overlay" id="modal-ordenes"><div class="sheet"><div class="sheet-handle"></div>
 <div class="sheet-head"><h2 id="ord-titulo">&#xD3;rdenes del pedido</h2><button class="sheet-close" onclick="cerrarModal('modal-ordenes')">&#x2715;</button></div>
 <div class="sheet-body" id="ordenes-body"></div>
@@ -720,7 +728,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v26 · planificación de entrega';
+var APP_VERSION='v27 · entrega: guía + pedido manual';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -2410,49 +2418,93 @@ function entregaGuiaEstado(o){
   if(o.estado==='RECIBIDA')return {t:'📦 Recibida',c:'#16a34a'};
   return {t:'⏳ Sin guía',c:'#6b7280'};
 }
-// Agrupa por PEDIDO las órdenes que están en la carga (mismo contenido físico, otra vista).
+var ENTREGA_GUIA_MSG='';
+// Pedidos manuales agregados directamente en Entrega (sin pasar por la carga).
+function entregaPedManual(){var pl=cargaPlan();if(!Array.isArray(pl.pedidosManual))pl.pedidosManual=[];return pl.pedidosManual;}
+// Agrupa por PEDIDO las órdenes "en juego": las que están en la carga Y las que ya
+// tienen guía de despacho (recibida por el grupo o subida desde la app).
 function entregaGrupos(){
-  var plan=cargaPlan();var byPed={};
-  (plan.items||[]).forEach(function(it){var ref=cargaRef(it);if(!ref)return;var p=ref.p;if(!byPed[p.id])byPed[p.id]={p:p,ordenes:[]};byPed[p.id].ordenes.push(ref.o);});
-  var arr=Object.keys(byPed).map(function(k){return byPed[k];});
+  var byPed={};var order=[];
+  function add(p,o){if(!byPed[p.id]){byPed[p.id]={p:p,ordenes:[],_ids:{}};order.push(p.id);}var b=byPed[p.id];if(b._ids[o.id])return;b._ids[o.id]=true;b.ordenes.push(o);}
+  (cargaPlan().items||[]).forEach(function(it){var ref=cargaRef(it);if(ref)add(ref.p,ref.o);});
+  DB.pedidos.forEach(function(p){if(p.estatus==='ENTREGADO')return;getOrdenes(p).forEach(function(o){if(o.guiaDespacho)add(p,o);});});
+  var arr=order.map(function(k){return byPed[k];});
   arr.sort(function(a,b){var da=diasRestantes(a.p.fechaLimite),db=diasRestantes(b.p.fechaLimite);if(da===null&&db===null)return 0;if(da===null)return 1;if(db===null)return -1;return da-db;});
   return arr;
 }
+// Lista unificada para mostrar/exportar: pedidos del sistema + pedidos manuales.
+function entregaTodos(){
+  var lista=entregaGrupos().map(function(g){return {tipo:'sys',id:g.p.id,numero:g.p.numero||'',cliente:g.p.cliente||'',direccion:entregaDir(g.p),fechaLimite:g.p.fechaLimite,ordenes:g.ordenes,detalle:''};});
+  entregaPedManual().forEach(function(m){lista.push({tipo:'man',id:m.id,numero:m.numero||'',cliente:m.cliente||'',direccion:m.direccion||'',fechaLimite:'',ordenes:[],detalle:m.detalle||''});});
+  lista.sort(function(a,b){var da=diasRestantes(a.fechaLimite),db=diasRestantes(b.fechaLimite);if(da===null&&db===null)return 0;if(da===null)return 1;if(db===null)return -1;return da-db;});
+  return lista;
+}
+// Subir una guía de despacho desde la app → el webhook la verifica contra las OC.
+function entregaGuiaSubir(inp){
+  var file=inp.files&&inp.files[0];if(!file)return;var mt=file.type||'application/pdf';
+  toast('Leyendo y verificando la guía...','ok');
+  var rd=new FileReader();
+  rd.onload=function(e){
+    fetch('https://veoyoca-webhook.onrender.com/verificar-guia',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify({data:e.target.result,mediaType:mt})})
+    .then(function(r){return r.json();})
+    .then(function(res){inp.value='';
+      ENTREGA_GUIA_MSG=(res&&(res.mensaje||res.error))||'';
+      if(!res||res.ok===false){toast((res&&res.error)||'No se pudo verificar la guía','err');}
+      else{toast(res.cuadra===true?'✅ Guía verificada — todo cuadra':res.cuadra===false?'⚠️ Guía con diferencias':'Guía registrada','ok');}
+      renderPlanificacion(document.getElementById('content'));
+    })
+    .catch(function(){inp.value='';toast('Error de conexión con el verificador','err');});
+  };
+  rd.readAsDataURL(file);
+}
+function entregaPedManualAbrir(){['ep-num','ep-cli','ep-dir','ep-det'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});abrirModal('modal-entrega-ped');}
+function entregaPedManualGuardar(){
+  var num=(document.getElementById('ep-num').value||'').trim(),cli=(document.getElementById('ep-cli').value||'').trim();
+  var dir=(document.getElementById('ep-dir').value||'').trim(),det=(document.getElementById('ep-det').value||'').trim();
+  if(!cli&&!num){toast('Indica al menos el cliente o el número de pedido','err');return;}
+  entregaPedManual().push({id:uid(),numero:num,cliente:cli,direccion:dir,detalle:det});
+  guardarDB();cerrarModal('modal-entrega-ped');renderPlanificacion(document.getElementById('content'));toast('Pedido manual agregado a entrega','ok');
+}
+function entregaPedManualQuitar(id){var pl=cargaPlan();pl.pedidosManual=(pl.pedidosManual||[]).filter(function(x){return x.id!==id;});guardarDB();renderPlanificacion(document.getElementById('content'));}
 function renderEntregaBoard(){
-  var grupos=entregaGrupos();var plan=cargaPlan();var nMan=(plan.manuales||[]).length;
-  var nOrd=0,nVer=0;grupos.forEach(function(g){g.ordenes.forEach(function(o){nOrd++;if(o.guiaDespacho&&o.guiaDespacho.cuadra===true)nVer++;});});
+  var lista=entregaTodos();var plan=cargaPlan();var nMat=(plan.manuales||[]).length;
+  var nOrd=0,nVer=0;lista.forEach(function(g){g.ordenes.forEach(function(o){nOrd++;if(o.guiaDespacho&&o.guiaDespacho.cuadra===true)nVer++;});});
   var h='<div class="section-pad" style="padding-top:0">';
-  h+='<div class="stats-bar" style="margin-bottom:8px"><div class="stat"><div class="stat-v">'+grupos.length+'</div><div class="stat-l">pedidos</div></div><div class="stat"><div class="stat-v" style="color:#93c5fd">'+nOrd+'</div><div class="stat-l">órdenes</div></div><div class="stat"><div class="stat-v" style="color:#86efac">'+nVer+'</div><div class="stat-l">guías OK</div></div></div>';
-  h+='<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Desglose por pedido de lo que va en la carga, para que ventas arme las notas de entrega.</div>';
-  if(!grupos.length&&!nMan){return h+'<div class="empty"><div class="empty-icon">📦</div>La carga está vacía. Arma la carga en la pestaña 🚚 Carga.</div></div>';}
-  h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"><button class="btn btn-green btn-sm" onclick="entregaWhatsApp()">📲 WhatsApp</button><button class="btn btn-blue btn-sm" onclick="entregaPDF()">📄 PDF ventas</button><button class="btn btn-ghost btn-sm" onclick="entregaCopiar()">📋 Copiar</button></div>';
-  grupos.forEach(function(g){var p=g.p;var d=diasRestantes(p.fechaLimite);var prio=d===null?'':(d<0?('vencido '+Math.abs(d)+'d'):d===0?'HOY':('en '+d+'d'));
-    h+='<div class="card" style="margin-bottom:8px;padding:10px 14px">';
-    h+='<div style="display:flex;justify-content:space-between;gap:8px"><div style="font-size:14px;font-weight:700">Pedido #'+esc(p.numero||'')+' — '+esc(p.cliente||'Sin nombre')+'</div>'+(prio?'<span style="font-size:11px;font-weight:600;flex-shrink:0;color:'+(d<0?'#dc2626':d===0?'#d97706':'#6b7280')+'">'+esc(prio)+'</span>':'')+'</div>';
-    h+='<div style="font-size:12px;color:#374151;margin-top:2px">📍 '+esc(entregaDir(p)||'(sin dirección — edítala en el pedido)')+'</div>';
+  h+='<div class="stats-bar" style="margin-bottom:8px"><div class="stat"><div class="stat-v">'+lista.length+'</div><div class="stat-l">pedidos</div></div><div class="stat"><div class="stat-v" style="color:#93c5fd">'+nOrd+'</div><div class="stat-l">órdenes</div></div><div class="stat"><div class="stat-v" style="color:#86efac">'+nVer+'</div><div class="stat-l">guías OK</div></div></div>';
+  if(ENTREGA_GUIA_MSG){h+='<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;margin-bottom:10px;position:relative"><button onclick="ENTREGA_GUIA_MSG=\'\';renderPlanificacion(document.getElementById(\'content\'))" style="position:absolute;top:4px;right:8px;border:none;background:none;font-size:16px;color:#94a3b8;cursor:pointer">×</button><div style="font-size:11px;font-weight:700;color:#475569;margin-bottom:4px">🚚 Última guía verificada</div><div style="font-size:12px;color:#334155;white-space:pre-wrap;max-height:240px;overflow:auto">'+esc(ENTREGA_GUIA_MSG)+'</div></div>';}
+  h+='<input type="file" id="entrega-guia-file" accept="image/*,application/pdf" style="display:none" onchange="entregaGuiaSubir(this)">';
+  h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"><button class="btn btn-dark btn-sm" onclick="document.getElementById(\'entrega-guia-file\').click()">📷 Verificar guía</button><button class="btn btn-ghost btn-sm" onclick="entregaPedManualAbrir()">➕ Pedido manual</button><button class="btn btn-green btn-sm" onclick="entregaWhatsApp()">📲 WhatsApp</button><button class="btn btn-blue btn-sm" onclick="entregaPDF()">📄 PDF ventas</button><button class="btn btn-ghost btn-sm" onclick="entregaCopiar()">📋 Copiar</button></div>';
+  h+='<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Desglose por pedido para que ventas arme las notas de entrega. Sube una guía de despacho para verificarla contra sus órdenes de compra, o agrega un pedido manual.</div>';
+  if(!lista.length&&!nMat){return h+'<div class="empty"><div class="empty-icon">📦</div>Aún no hay pedidos para entrega. Arma la carga, sube una guía o agrega un pedido manual.</div></div>';}
+  lista.forEach(function(g){var man=g.tipo==='man';var d=diasRestantes(g.fechaLimite);var prio=d===null?'':(d<0?('vencido '+Math.abs(d)+'d'):d===0?'HOY':('en '+d+'d'));
+    h+='<div class="card" style="margin-bottom:8px;padding:10px 14px'+(man?';background:#fffbeb;border:1px solid #fde68a':'')+'">';
+    h+='<div style="display:flex;justify-content:space-between;gap:8px"><div style="font-size:14px;font-weight:700">Pedido #'+esc(g.numero||'—')+' — '+esc(g.cliente||'Sin nombre')+(man?' <span style="font-size:9px;font-weight:700;color:#92400e;background:#fef3c7;border-radius:4px;padding:1px 5px">MANUAL</span>':'')+'</div>'+(man?'<button onclick="entregaPedManualQuitar(\''+g.id+'\')" style="border:none;background:none;color:#dc2626;font-size:16px;cursor:pointer;flex-shrink:0">×</button>':(prio?'<span style="font-size:11px;font-weight:600;flex-shrink:0;color:'+(d<0?'#dc2626':d===0?'#d97706':'#6b7280')+'">'+esc(prio)+'</span>':''))+'</div>';
+    h+='<div style="font-size:12px;color:#374151;margin-top:2px">📍 '+esc(g.direccion||('(sin dirección'+(man?'':' — edítala en el pedido')+')'))+'</div>';
     g.ordenes.forEach(function(o){var st=entregaGuiaEstado(o);h+='<div style="font-size:12px;color:#4b5563;margin-top:4px;display:flex;justify-content:space-between;gap:8px"><span>'+esc(tipoLabel(o.tipo))+(o.numeroOC?(' #'+esc(o.numeroOC)):'')+((o.items&&o.items.length)?(' · '+o.items.length+' ítem(s)'):'')+'</span><span style="color:'+st.c+';font-weight:600;flex-shrink:0">'+st.t+'</span></div>';});
+    if(man&&g.detalle)h+='<div style="font-size:12px;color:#78350f;margin-top:4px">🧾 '+esc(g.detalle)+'</div>';
     h+='</div>';
   });
-  if(nMan){h+='<div class="card" style="margin-bottom:8px;padding:10px 14px;background:#fffbeb;border:1px solid #fde68a"><div style="font-size:13px;font-weight:700;color:#92400e">🧰 Materiales adicionales (sin pedido)</div>';(plan.manuales||[]).forEach(function(m){var det=(m.items||[]).map(function(it){return (it.desc||'')+(it.cant?(' x'+it.cant):'');}).filter(Boolean).join(', ');h+='<div style="font-size:12px;color:#78350f;margin-top:3px">• '+esc(m.proveedor||'')+': '+esc(det||'(sin ítems)')+'</div>';});h+='</div>';}
+  if(nMat){h+='<div class="card" style="margin-bottom:8px;padding:10px 14px;background:#fffbeb;border:1px solid #fde68a"><div style="font-size:13px;font-weight:700;color:#92400e">🧰 Materiales adicionales (sin pedido)</div>';(plan.manuales||[]).forEach(function(m){var det=(m.items||[]).map(function(it){return (it.desc||'')+(it.cant?(' x'+it.cant):'');}).filter(Boolean).join(', ');h+='<div style="font-size:12px;color:#78350f;margin-top:3px">• '+esc(m.proveedor||'')+': '+esc(det||'(sin ítems)')+'</div>';});h+='</div>';}
   return h+'</div>';
 }
 function _entregaEstadoTxt(st){return st.t.replace(/[^\x20-\x7EáéíóúÁÉÍÓÚñÑ]/g,'').replace(/\s+/g,' ').trim();}
 function entregaTexto(){
-  var grupos=entregaGrupos();if(!grupos.length)return '';
+  var lista=entregaTodos();if(!lista.length)return '';
   var L=['📦 *PLANIFICACIÓN DE ENTREGA* · '+fecha(),'','_Para elaborar las notas de entrega:_',''];
-  grupos.forEach(function(g){var p=g.p;
-    L.push('*Pedido #'+(p.numero||'')+' — '+(p.cliente||'')+'*');
-    L.push('📍 '+(entregaDir(p)||'(sin dirección)'));
+  lista.forEach(function(g){
+    L.push('*Pedido #'+(g.numero||'—')+' — '+(g.cliente||'')+'*'+(g.tipo==='man'?' (manual)':''));
+    L.push('📍 '+(g.direccion||'(sin dirección)'));
     g.ordenes.forEach(function(o){L.push('   • '+tipoLabel(o.tipo)+(o.numeroOC?(' #'+o.numeroOC):'')+' — '+_entregaEstadoTxt(entregaGuiaEstado(o)));});
+    if(g.tipo==='man'&&g.detalle)L.push('   • '+g.detalle);
     L.push('');
   });
-  L.push('Total: '+grupos.length+' pedido(s) para entrega.');
+  L.push('Total: '+lista.length+' pedido(s) para entrega.');
   return L.join('\n');
 }
-function entregaCopiar(){var t=entregaTexto();if(!t){toast('No hay pedidos en la carga','err');return;}copiarAlPortapapeles(t,'Planificación de entrega copiada');}
-function entregaWhatsApp(){var t=entregaTexto();if(!t){toast('No hay pedidos en la carga','err');return;}window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank');}
+function entregaCopiar(){var t=entregaTexto();if(!t){toast('No hay pedidos para entrega','err');return;}copiarAlPortapapeles(t,'Planificación de entrega copiada');}
+function entregaWhatsApp(){var t=entregaTexto();if(!t){toast('No hay pedidos para entrega','err');return;}window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank');}
 function entregaPDF(){
-  var grupos=entregaGrupos();if(!grupos.length){toast('No hay pedidos en la carga','err');return;}
+  var lista=entregaTodos();if(!lista.length){toast('No hay pedidos para entrega','err');return;}
   toast('Generando PDF...','ok');
   cargarLibsPDF().then(function(){
     var jsPDF=window.jspdf.jsPDF;var doc=new jsPDF({unit:'pt',format:'a4'});
@@ -2461,18 +2513,19 @@ function entregaPDF(){
     doc.setFont('helvetica','bold');doc.setFontSize(15);doc.text('PLANIFICACIÓN DE ENTREGA',M,y);
     doc.setFont('helvetica','normal');doc.setFontSize(10);doc.text('Fecha: '+fecha(),W-M,y,{align:'right'});
     nl(16);doc.setFontSize(9);doc.setTextColor(120,120,120);doc.text('Para que el departamento de ventas elabore las notas de entrega.',M,y);doc.setTextColor(0,0,0);nl(20);
-    grupos.forEach(function(g){var p=g.p;
+    lista.forEach(function(g){
       if(y>H-80){doc.addPage();y=48;}
       doc.setFillColor(238,242,255);doc.rect(M,y-12,W-2*M,20,'F');
-      doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(55,48,163);var tit=doc.splitTextToSize('Pedido #'+(p.numero||'')+' — '+(p.cliente||''),W-2*M-12);doc.text(tit[0],M+6,y+2);doc.setTextColor(0,0,0);nl(22);
+      doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(55,48,163);var tit=doc.splitTextToSize('Pedido #'+(g.numero||'—')+' — '+(g.cliente||'')+(g.tipo==='man'?' (manual)':''),W-2*M-12);doc.text(tit[0],M+6,y+2);doc.setTextColor(0,0,0);nl(22);
       doc.setFont('helvetica','normal');doc.setFontSize(10);
-      var dl=doc.splitTextToSize('Dirección: '+(entregaDir(p)||'(sin dirección)'),W-2*M-10);dl.forEach(function(ln){doc.text(ln,M+6,y);nl(13);});
+      var dl=doc.splitTextToSize('Dirección: '+(g.direccion||'(sin dirección)'),W-2*M-10);dl.forEach(function(ln){doc.text(ln,M+6,y);nl(13);});
       doc.setFontSize(9);doc.setTextColor(90,90,90);
       g.ordenes.forEach(function(o){var linea='- '+tipoLabel(o.tipo)+(o.numeroOC?(' #'+o.numeroOC):'')+'   '+_entregaEstadoTxt(entregaGuiaEstado(o));var lns=doc.splitTextToSize(linea,W-2*M-16);lns.forEach(function(ln){doc.text(ln,M+16,y);nl(12);});});
+      if(g.tipo==='man'&&g.detalle){var dd=doc.splitTextToSize('- '+g.detalle,W-2*M-16);dd.forEach(function(ln){doc.text(ln,M+16,y);nl(12);});}
       doc.setTextColor(0,0,0);doc.setFontSize(10);nl(8);
     });
     if(y>H-40){doc.addPage();y=48;}
-    doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text('Total: '+grupos.length+' pedido(s) para entrega.',M,y);
+    doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text('Total: '+lista.length+' pedido(s) para entrega.',M,y);
     doc.save('Planificacion-entrega-'+fecha().replace(/\//g,'-')+'.pdf');
   }).catch(function(){toast('No se pudo generar el PDF','err');});
 }
