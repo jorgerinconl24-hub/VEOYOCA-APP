@@ -728,7 +728,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v27 · entrega: guía + pedido manual';
+var APP_VERSION='v28 · entrega: ítems + OF/Inv pendientes';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -2414,10 +2414,18 @@ function cargaWhatsApp(){var t=cargaTexto();if(!t){toast('La carga está vacía'
 function entregaDir(p){return (p.direccion||'').trim()||(p.ciudad||'').trim()||'';}
 function entregaGuiaEstado(o){
   var gd=o.guiaDespacho;
-  if(gd){if(gd.cuadra===true)return {t:'✅ Guía verificada',c:'#16a34a'};if(gd.cuadra===false)return {t:'⚠️ Guía con diferencias',c:'#d97706'};return {t:'📄 Guía recibida',c:'#2563eb'};}
-  if(o.estado==='RECIBIDA')return {t:'📦 Recibida',c:'#16a34a'};
-  return {t:'⏳ Sin guía',c:'#6b7280'};
+  if(gd&&gd.cuadra===true)return {t:'✅ Guía verificada',c:'#16a34a',pend:false};
+  if(gd&&gd.cuadra===false)return {t:'⚠️ Guía con diferencias',c:'#d97706',pend:true};
+  if(gd)return {t:'📄 Guía recibida',c:'#2563eb',pend:false};
+  if(o.estado==='RECIBIDA')return {t:'📦 Recibida',c:'#16a34a',pend:false};
+  if(o.estado==='LISTA_PROVEEDOR')return {t:'🏭 Lista en planta',c:'#16a34a',pend:false};
+  if(o.tipo==='INVENTARIO')return {t:'📦 En almacén (por entregar)',c:'#7c3aed',pend:true};
+  if(o.tipo==='OF')return {t:'🔧 Fabricación pendiente',c:'#d97706',pend:true};
+  return {t:'⏳ Sin guía',c:'#6b7280',pend:true};
 }
+function _entregaItems(o){return (o.items||[]).map(function(m){var dsc=m.descripcion||m.desc||'';var cnt=m.cantidad||m.cant;return dsc?(dsc+(cnt?(' x'+cnt):'')):'';}).filter(Boolean);}
+// Órdenes de fabricación / inventario aún pendientes por entregar (otro viaje).
+function _entregaPendExtra(ordenes){return (ordenes||[]).filter(function(o){var e=entregaGuiaEstado(o);return e.pend&&(o.tipo==='OF'||o.tipo==='INVENTARIO');}).map(function(o){return tipoLabel(o.tipo)+(o.numeroOC?(' #'+o.numeroOC):'');});}
 var ENTREGA_GUIA_MSG='';
 // Pedidos manuales agregados directamente en Entrega (sin pasar por la carga).
 function entregaPedManual(){var pl=cargaPlan();if(!Array.isArray(pl.pedidosManual))pl.pedidosManual=[];return pl.pedidosManual;}
@@ -2434,7 +2442,7 @@ function entregaGrupos(){
 }
 // Lista unificada para mostrar/exportar: pedidos del sistema + pedidos manuales.
 function entregaTodos(){
-  var lista=entregaGrupos().map(function(g){return {tipo:'sys',id:g.p.id,numero:g.p.numero||'',cliente:g.p.cliente||'',direccion:entregaDir(g.p),fechaLimite:g.p.fechaLimite,ordenes:g.ordenes,detalle:''};});
+  var lista=entregaGrupos().map(function(g){return {tipo:'sys',id:g.p.id,numero:g.p.numero||'',cliente:g.p.cliente||'',direccion:entregaDir(g.p),fechaLimite:g.p.fechaLimite,ordenes:getOrdenes(g.p),detalle:''};});
   entregaPedManual().forEach(function(m){lista.push({tipo:'man',id:m.id,numero:m.numero||'',cliente:m.cliente||'',direccion:m.direccion||'',fechaLimite:'',ordenes:[],detalle:m.detalle||''});});
   lista.sort(function(a,b){var da=diasRestantes(a.fechaLimite),db=diasRestantes(b.fechaLimite);if(da===null&&db===null)return 0;if(da===null)return 1;if(db===null)return -1;return da-db;});
   return lista;
@@ -2473,14 +2481,19 @@ function renderEntregaBoard(){
   h+='<div class="stats-bar" style="margin-bottom:8px"><div class="stat"><div class="stat-v">'+lista.length+'</div><div class="stat-l">pedidos</div></div><div class="stat"><div class="stat-v" style="color:#93c5fd">'+nOrd+'</div><div class="stat-l">órdenes</div></div><div class="stat"><div class="stat-v" style="color:#86efac">'+nVer+'</div><div class="stat-l">guías OK</div></div></div>';
   if(ENTREGA_GUIA_MSG){h+='<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;margin-bottom:10px;position:relative"><button onclick="ENTREGA_GUIA_MSG=\'\';renderPlanificacion(document.getElementById(\'content\'))" style="position:absolute;top:4px;right:8px;border:none;background:none;font-size:16px;color:#94a3b8;cursor:pointer">×</button><div style="font-size:11px;font-weight:700;color:#475569;margin-bottom:4px">🚚 Última guía verificada</div><div style="font-size:12px;color:#334155;white-space:pre-wrap;max-height:240px;overflow:auto">'+esc(ENTREGA_GUIA_MSG)+'</div></div>';}
   h+='<input type="file" id="entrega-guia-file" accept="image/*,application/pdf" style="display:none" onchange="entregaGuiaSubir(this)">';
-  h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"><button class="btn btn-dark btn-sm" onclick="document.getElementById(\'entrega-guia-file\').click()">📷 Verificar guía</button><button class="btn btn-ghost btn-sm" onclick="entregaPedManualAbrir()">➕ Pedido manual</button><button class="btn btn-green btn-sm" onclick="entregaWhatsApp()">📲 WhatsApp</button><button class="btn btn-blue btn-sm" onclick="entregaPDF()">📄 PDF ventas</button><button class="btn btn-ghost btn-sm" onclick="entregaCopiar()">📋 Copiar</button></div>';
+  h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"><button class="btn btn-dark btn-sm" onclick="document.getElementById(\'entrega-guia-file\').click()">📷 Verificar guía</button><button class="btn btn-ghost btn-sm" onclick="entregaPedManualAbrir()">➕ Pedido manual</button><button class="btn btn-green btn-sm" onclick="entregaWhatsApp()">📲 WhatsApp</button><button class="btn btn-blue btn-sm" onclick="entregaPDF()">📄 PDF ventas</button><label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#475569;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:4px 8px"><input type="checkbox" id="entrega-pdf-items" checked style="width:14px;height:14px"> ítems en PDF</label><button class="btn btn-ghost btn-sm" onclick="entregaCopiar()">📋 Copiar</button></div>';
   h+='<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Desglose por pedido para que ventas arme las notas de entrega. Sube una guía de despacho para verificarla contra sus órdenes de compra, o agrega un pedido manual.</div>';
   if(!lista.length&&!nMat){return h+'<div class="empty"><div class="empty-icon">📦</div>Aún no hay pedidos para entrega. Arma la carga, sube una guía o agrega un pedido manual.</div></div>';}
   lista.forEach(function(g){var man=g.tipo==='man';var d=diasRestantes(g.fechaLimite);var prio=d===null?'':(d<0?('vencido '+Math.abs(d)+'d'):d===0?'HOY':('en '+d+'d'));
     h+='<div class="card" style="margin-bottom:8px;padding:10px 14px'+(man?';background:#fffbeb;border:1px solid #fde68a':'')+'">';
     h+='<div style="display:flex;justify-content:space-between;gap:8px"><div style="font-size:14px;font-weight:700">Pedido #'+esc(g.numero||'—')+' — '+esc(g.cliente||'Sin nombre')+(man?' <span style="font-size:9px;font-weight:700;color:#92400e;background:#fef3c7;border-radius:4px;padding:1px 5px">MANUAL</span>':'')+'</div>'+(man?'<button onclick="entregaPedManualQuitar(\''+g.id+'\')" style="border:none;background:none;color:#dc2626;font-size:16px;cursor:pointer;flex-shrink:0">×</button>':(prio?'<span style="font-size:11px;font-weight:600;flex-shrink:0;color:'+(d<0?'#dc2626':d===0?'#d97706':'#6b7280')+'">'+esc(prio)+'</span>':''))+'</div>';
     h+='<div style="font-size:12px;color:#374151;margin-top:2px">📍 '+esc(g.direccion||('(sin dirección'+(man?'':' — edítala en el pedido')+')'))+'</div>';
-    g.ordenes.forEach(function(o){var st=entregaGuiaEstado(o);h+='<div style="font-size:12px;color:#4b5563;margin-top:4px;display:flex;justify-content:space-between;gap:8px"><span>'+esc(tipoLabel(o.tipo))+(o.numeroOC?(' #'+esc(o.numeroOC)):'')+((o.items&&o.items.length)?(' · '+o.items.length+' ítem(s)'):'')+'</span><span style="color:'+st.c+';font-weight:600;flex-shrink:0">'+st.t+'</span></div>';});
+    g.ordenes.forEach(function(o){var st=entregaGuiaEstado(o);
+      h+='<div style="font-size:12px;color:#4b5563;margin-top:5px;display:flex;justify-content:space-between;gap:8px"><span style="font-weight:600">'+esc(tipoLabel(o.tipo))+(o.numeroOC?(' #'+esc(o.numeroOC)):'')+'</span><span style="color:'+st.c+';font-weight:600;flex-shrink:0">'+st.t+'</span></div>';
+      _entregaItems(o).forEach(function(it){h+='<div style="font-size:11px;color:#6b7280;margin-left:12px">– '+esc(it)+'</div>';});
+    });
+    var pex=_entregaPendExtra(g.ordenes);
+    if(pex.length)h+='<div style="font-size:11px;color:#9a3412;background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:5px 8px;margin-top:6px">⚠️ Pendiente por entregar (otro viaje): '+esc(pex.join(', '))+'</div>';
     if(man&&g.detalle)h+='<div style="font-size:12px;color:#78350f;margin-top:4px">🧾 '+esc(g.detalle)+'</div>';
     h+='</div>';
   });
@@ -2494,7 +2507,8 @@ function entregaTexto(){
   lista.forEach(function(g){
     L.push('*Pedido #'+(g.numero||'—')+' — '+(g.cliente||'')+'*'+(g.tipo==='man'?' (manual)':''));
     L.push('📍 '+(g.direccion||'(sin dirección)'));
-    g.ordenes.forEach(function(o){L.push('   • '+tipoLabel(o.tipo)+(o.numeroOC?(' #'+o.numeroOC):'')+' — '+_entregaEstadoTxt(entregaGuiaEstado(o)));});
+    g.ordenes.forEach(function(o){L.push('   • '+tipoLabel(o.tipo)+(o.numeroOC?(' #'+o.numeroOC):'')+' — '+_entregaEstadoTxt(entregaGuiaEstado(o)));_entregaItems(o).forEach(function(it){L.push('       – '+it);});});
+    var pex=_entregaPendExtra(g.ordenes);if(pex.length)L.push('   ⚠️ Pendiente por entregar (otro viaje): '+pex.join(', '));
     if(g.tipo==='man'&&g.detalle)L.push('   • '+g.detalle);
     L.push('');
   });
@@ -2505,6 +2519,7 @@ function entregaCopiar(){var t=entregaTexto();if(!t){toast('No hay pedidos para 
 function entregaWhatsApp(){var t=entregaTexto();if(!t){toast('No hay pedidos para entrega','err');return;}window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank');}
 function entregaPDF(){
   var lista=entregaTodos();if(!lista.length){toast('No hay pedidos para entrega','err');return;}
+  var incItems=!(document.getElementById('entrega-pdf-items')&&!document.getElementById('entrega-pdf-items').checked);
   toast('Generando PDF...','ok');
   cargarLibsPDF().then(function(){
     var jsPDF=window.jspdf.jsPDF;var doc=new jsPDF({unit:'pt',format:'a4'});
@@ -2520,8 +2535,12 @@ function entregaPDF(){
       doc.setFont('helvetica','normal');doc.setFontSize(10);
       var dl=doc.splitTextToSize('Dirección: '+(g.direccion||'(sin dirección)'),W-2*M-10);dl.forEach(function(ln){doc.text(ln,M+6,y);nl(13);});
       doc.setFontSize(9);doc.setTextColor(90,90,90);
-      g.ordenes.forEach(function(o){var linea='- '+tipoLabel(o.tipo)+(o.numeroOC?(' #'+o.numeroOC):'')+'   '+_entregaEstadoTxt(entregaGuiaEstado(o));var lns=doc.splitTextToSize(linea,W-2*M-16);lns.forEach(function(ln){doc.text(ln,M+16,y);nl(12);});});
-      if(g.tipo==='man'&&g.detalle){var dd=doc.splitTextToSize('- '+g.detalle,W-2*M-16);dd.forEach(function(ln){doc.text(ln,M+16,y);nl(12);});}
+      g.ordenes.forEach(function(o){var linea='- '+tipoLabel(o.tipo)+(o.numeroOC?(' #'+o.numeroOC):'')+'   '+_entregaEstadoTxt(entregaGuiaEstado(o));doc.setTextColor(90,90,90);var lns=doc.splitTextToSize(linea,W-2*M-16);lns.forEach(function(ln){doc.text(ln,M+16,y);nl(12);});
+        if(incItems)_entregaItems(o).forEach(function(it){doc.setTextColor(130,130,130);var il=doc.splitTextToSize('· '+it,W-2*M-28);il.forEach(function(ln){doc.text(ln,M+28,y);nl(11);});});
+      });
+      var pex=_entregaPendExtra(g.ordenes);
+      if(pex.length){doc.setTextColor(154,52,18);var pl=doc.splitTextToSize('Pendiente por entregar (otro viaje): '+pex.join(', '),W-2*M-16);pl.forEach(function(ln){doc.text(ln,M+16,y);nl(12);});}
+      if(g.tipo==='man'&&g.detalle){doc.setTextColor(90,90,90);var dd=doc.splitTextToSize('- '+g.detalle,W-2*M-16);dd.forEach(function(ln){doc.text(ln,M+16,y);nl(12);});}
       doc.setTextColor(0,0,0);doc.setFontSize(10);nl(8);
     });
     if(y>H-40){doc.addPage();y=48;}
