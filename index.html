@@ -719,7 +719,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v23 · PDF del plan de carga';
+var APP_VERSION='v25 · fichas carga: OC arriba';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -2402,6 +2402,7 @@ function cargaWhatsApp(){var t=cargaTexto();if(!t){toast('La carga está vacía'
 function cargaPDF(){
   var g=cargaGrupos();var provs=Object.keys(g).sort();
   if(!provs.length){toast('La carga está vacía','err');return;}
+  var incItems=!(document.getElementById('carga-pdf-items')&&!document.getElementById('carga-pdf-items').checked);
   toast('Generando PDF...','ok');
   cargarLibsPDF().then(function(){
     var jsPDF=window.jspdf.jsPDF;var doc=new jsPDF({unit:'pt',format:'a4'});
@@ -2415,16 +2416,17 @@ function cargaPDF(){
       doc.setFillColor(238,242,255);doc.rect(M,y-12,W-2*M,20,'F');
       doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(55,48,163);doc.text(pr,M+6,y+2);doc.setTextColor(0,0,0);nl(24);
       doc.setFontSize(10);
-      g[pr].ordenes.sort(cargaPrioridad).forEach(function(ref){tot++;var p=ref.p,o=ref.o;
-        doc.setFont('helvetica','bold');doc.text('#'+(p.numero||'')+' '+(p.cliente||''),M+6,y);
-        doc.setFont('helvetica','normal');doc.text((o.numeroOC?(tipoLabel(o.tipo)+' #'+o.numeroOC):tipoLabel(o.tipo))+(o.estado==='LISTA_PROVEEDOR'?'  [LISTA]':'  [PENDIENTE]'),W-M,y,{align:'right'});nl(15);
-        (o.items||[]).forEach(function(m){var dsc=m.descripcion||m.desc||'';var cnt=m.cantidad||m.cant;if(!dsc)return;doc.setFontSize(9);doc.setTextColor(90,90,90);var lns=doc.splitTextToSize('- '+dsc+(cnt?(' x'+cnt):''),W-2*M-20);lns.forEach(function(ln){doc.text(ln,M+18,y);nl(12);});doc.setTextColor(0,0,0);doc.setFontSize(10);});
+      g[pr].ordenes.sort(cargaPrioridad).forEach(function(ref){tot++;var o=ref.o;
+        var titulo=o.numeroOC?(tipoLabel(o.tipo)+' #'+o.numeroOC):(tipoLabel(o.tipo)+' (sin Nº)');
+        doc.setFont('helvetica','bold');doc.text(titulo,M+6,y);
+        doc.setFont('helvetica','normal');doc.text(o.estado==='LISTA_PROVEEDOR'?'[LISTA]':'[PENDIENTE]',W-M,y,{align:'right'});nl(15);
+        if(incItems)(o.items||[]).forEach(function(m){var dsc=m.descripcion||m.desc||'';var cnt=m.cantidad||m.cant;if(!dsc)return;doc.setFontSize(9);doc.setTextColor(90,90,90);var lns=doc.splitTextToSize('- '+dsc+(cnt?(' x'+cnt):''),W-2*M-20);lns.forEach(function(ln){doc.text(ln,M+18,y);nl(12);});doc.setTextColor(0,0,0);doc.setFontSize(10);});
       });
-      g[pr].manuales.forEach(function(mm){tot++;var det=(mm.items||[]).map(function(it){return (it.desc||'')+(it.cant?(' x'+it.cant):'');}).filter(Boolean).join(', ');doc.setFont('helvetica','bold');doc.text('(MANUAL)',M+6,y);doc.setFont('helvetica','normal');var lns=doc.splitTextToSize(det,W-M-(M+70));lns.forEach(function(ln,ix){doc.text(ln,M+70,y);if(ix<lns.length-1)nl(13);});nl(15);});
+      g[pr].manuales.forEach(function(mm){tot++;doc.setFont('helvetica','bold');doc.text('(MANUAL)',M+6,y);nl(15);if(incItems)(mm.items||[]).forEach(function(it){var dsc=it.desc||'';var cnt=it.cant;if(!dsc)return;doc.setFontSize(9);doc.setTextColor(90,90,90);var lns=doc.splitTextToSize('- '+dsc+(cnt?(' x'+cnt):''),W-2*M-20);lns.forEach(function(ln){doc.text(ln,M+18,y);nl(12);});doc.setTextColor(0,0,0);doc.setFontSize(10);});});
       nl(8);
     });
     if(y>H-40){doc.addPage();y=48;}
-    doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text('Total: '+tot+' item(s) en '+provs.length+' planta(s).',M,y);
+    doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text('Total: '+tot+' orden(es) en '+provs.length+' planta(s).',M,y);
     doc.save('Planificacion-carga-'+fecha().replace(/\//g,'-')+'.pdf');
   }).catch(function(){toast('No se pudo generar el PDF','err');});
 }
@@ -2434,8 +2436,8 @@ function cargaCardHTML(x){
   var d=diasRestantes(p.fechaLimite);var prio=d===null?'':(d<0?('vencido '+Math.abs(d)+'d'):d===0?'HOY':('en '+d+'d'));
   var key=p.id+'|'+o.id;
   return '<div draggable="true" ondragstart="cargaDrag(event,\''+key+'\')" onclick="cargaToggle(\''+p.id+'\',\''+o.id+'\')" title="Arrastra a la carga o toca para agregar" style="background:'+bg+';border:1px solid '+bd+';border-radius:8px;padding:8px;margin-bottom:6px;cursor:grab;opacity:'+(enCarga?'0.45':'1')+'">'
-    +'<div style="font-size:12px;font-weight:700">#'+esc(p.numero||'')+' '+esc(p.cliente||'')+(enCarga?' ✓':'')+'</div>'
-    +'<div style="font-size:11px;color:#374151">'+esc(tipoLabel(o.tipo))+(o.numeroOC?(' #'+esc(o.numeroOC)):'')+(lista?' · ✅ lista':' · pendiente')+'</div>'
+    +'<div style="font-size:12px;font-weight:700">'+esc(tipoLabel(o.tipo))+(o.numeroOC?(' #'+esc(o.numeroOC)):'')+(lista?' · ✅ lista':' · pendiente')+(enCarga?' ✓':'')+'</div>'
+    +'<div style="font-size:11px;color:#374151">#'+esc(p.numero||'')+' '+esc(p.cliente||'')+'</div>'
     +(prio?'<div style="font-size:10px;color:'+(d<0?'#dc2626':d===0?'#d97706':'#6b7280')+'">📅 '+prio+'</div>':'')
     +((o.items&&o.items.length)?'<div style="font-size:10px;color:#6b7280">🧾 '+o.items.length+' ítem(s)</div>':'')
     +'</div>';
@@ -2443,7 +2445,7 @@ function cargaCardHTML(x){
 function cargaItemHTML(ref){
   var p=ref.p,o=ref.o;
   return '<div style="display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #c7d2fe;border-radius:8px;padding:6px 8px;margin:4px 0 0"><input type="checkbox" '+(ref.cargado?'checked':'')+' onchange="cargaMarcar(\''+p.id+'\',\''+o.id+'\')" title="Marcar como cargado" style="width:16px;height:16px;flex-shrink:0">'
-    +'<div style="flex:1;font-size:12px'+(ref.cargado?';text-decoration:line-through;color:#9ca3af':'')+'"><b>#'+esc(p.numero||'')+'</b> '+esc(p.cliente||'')+' — '+esc(tipoLabel(o.tipo))+(o.numeroOC?(' #'+esc(o.numeroOC)):'')+((o.items&&o.items.length)?(' · '+o.items.length+' ítem(s)'):'')+'</div>'
+    +'<div style="flex:1;font-size:12px'+(ref.cargado?';text-decoration:line-through;color:#9ca3af':'')+'"><b>'+esc(tipoLabel(o.tipo))+(o.numeroOC?(' #'+esc(o.numeroOC)):'')+'</b>'+((o.items&&o.items.length)?(' · '+o.items.length+' ítem(s)'):'')+'<div style="font-size:11px;color:#6b7280;font-weight:400">#'+esc(p.numero||'')+' '+esc(p.cliente||'')+'</div></div>'
     +'<button onclick="cargaQuitar(\''+p.id+'\',\''+o.id+'\')" style="border:none;background:none;color:#dc2626;font-size:16px;cursor:pointer;flex-shrink:0">×</button></div>';
 }
 function renderCargaBoard(){
@@ -2455,7 +2457,7 @@ function renderCargaBoard(){
   var nListas=disp.filter(function(x){return x.o.estado==='LISTA_PROVEEDOR';}).length;
   var h='<div class="section-pad" style="padding-top:0;padding-bottom:0">';
   h+='<div class="stats-bar" style="margin-bottom:8px"><div class="stat"><div class="stat-v">'+provs.length+'</div><div class="stat-l">plantas</div></div><div class="stat"><div class="stat-v" style="color:#86efac">'+nListas+'</div><div class="stat-l">órdenes listas</div></div><div class="stat"><div class="stat-v" style="color:#93c5fd">'+nCarga+'</div><div class="stat-l">en la carga</div></div></div>';
-  h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"><button class="btn btn-dark btn-sm" onclick="cargaAuto()">🤖 Auto: todas las listas</button><button class="btn btn-ghost btn-sm" onclick="cargaManualAbrir()">➕ Agregar manual</button><button class="btn btn-green btn-sm" onclick="cargaWhatsApp()">📲 WhatsApp</button><button class="btn btn-blue btn-sm" onclick="cargaPDF()">📄 PDF</button><button class="btn btn-ghost btn-sm" onclick="cargaCopiar()">📋 Copiar</button><button class="btn btn-ghost btn-sm" onclick="cargaVaciar()">🧹 Vaciar</button></div>';
+  h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"><button class="btn btn-dark btn-sm" onclick="cargaAuto()">🤖 Auto: todas las listas</button><button class="btn btn-ghost btn-sm" onclick="cargaManualAbrir()">➕ Agregar manual</button><button class="btn btn-green btn-sm" onclick="cargaWhatsApp()">📲 WhatsApp</button><button class="btn btn-blue btn-sm" onclick="cargaPDF()">📄 PDF</button><label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#475569;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:4px 8px"><input type="checkbox" id="carga-pdf-items" checked style="width:14px;height:14px"> ítems en PDF</label><button class="btn btn-ghost btn-sm" onclick="cargaCopiar()">📋 Copiar</button><button class="btn btn-ghost btn-sm" onclick="cargaVaciar()">🧹 Vaciar</button></div>';
   h+='<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Arrastra (o toca) una orden para agregarla a la carga. 🟩 Verde = lista en planta · ⬜ Gris = aún no lista.</div>';
   h+='</div>';
   // Zona de carga
