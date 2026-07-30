@@ -195,6 +195,7 @@ table.crm{border-collapse:collapse;font-size:12px;min-width:1780px}
 <div class="sfield"><label>Cliente</label><input type="text" id="e-cliente"></div>
 <div class="sfield-row"><div class="sfield"><label>Ciudad</label><input type="text" id="e-ciudad"></div>
 <div class="sfield"><label>Vendedor</label><select id="e-vendedor"><option value="">Sin cambio</option></select></div></div>
+<div class="sfield"><label>Direcci&#xF3;n de entrega</label><input type="text" id="e-direccion" placeholder="Direcci&#xF3;n del cliente para la entrega"></div>
 <div class="sfield-row"><div class="sfield"><label>Fecha l&#xED;mite</label><input type="date" id="e-fecha"></div>
 <div class="sfield"><label>Estado</label><select id="e-estado"><option value="">Sin cambio</option><option value="PENDIENTE">Pendiente</option><option value="EN PROCESO">En proceso</option><option value="LISTO">Listo para entregar</option></select></div></div>
 <div class="sfield"><label>Descripci&#xF3;n</label><textarea id="e-desc" placeholder="Productos, medidas, colores..."></textarea></div>
@@ -719,7 +720,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v25 · fichas carga: OC arriba';
+var APP_VERSION='v26 · planificación de entrega';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1148,6 +1149,7 @@ function abrirEditar(id){
   PEDIDO_EDIT_ID=id;
   document.getElementById('modal-titulo').textContent='Editar #'+(p.numero||id.substring(0,6));
   document.getElementById('e-id').value=id;document.getElementById('e-cliente').value=p.cliente||'';document.getElementById('e-ciudad').value=p.ciudad||'';
+  document.getElementById('e-direccion').value=p.direccion||'';
   document.getElementById('e-fecha').value=fechaInput(p.fechaLimite);document.getElementById('e-desc').value=p.descripcion||'';
   document.getElementById('e-nota').value='';
   var vsel=document.getElementById('e-vendedor');vsel.innerHTML='<option value="">Sin cambio</option>';
@@ -1159,7 +1161,7 @@ function abrirEditar(id){
 async function guardarEdicion(){
   var id=PEDIDO_EDIT_ID;var p=DB.pedidos.find(function(x){return x.id===id;});if(!p)return;
   var cambios=[];
-  var vals={cliente:document.getElementById('e-cliente').value.trim(),ciudad:document.getElementById('e-ciudad').value.trim(),vendedor:document.getElementById('e-vendedor').value,fechaLimite:inputFecha(document.getElementById('e-fecha').value),estatus:document.getElementById('e-estado').value,descripcion:document.getElementById('e-desc').value.trim()};
+  var vals={cliente:document.getElementById('e-cliente').value.trim(),ciudad:document.getElementById('e-ciudad').value.trim(),direccion:document.getElementById('e-direccion').value.trim(),vendedor:document.getElementById('e-vendedor').value,fechaLimite:inputFecha(document.getElementById('e-fecha').value),estatus:document.getElementById('e-estado').value,descripcion:document.getElementById('e-desc').value.trim()};
   var nota=document.getElementById('e-nota').value.trim();
   for(var k in vals){if(vals[k]&&vals[k]!==p[k]){cambios.push(k);p[k]=vals[k];}}
   if(nota){cambios.push('nota');p.nota=nota;}
@@ -2295,9 +2297,10 @@ var ZONAS=[{nombre:'Maracaibo',ciudades:['MARACAIBO','NORTE','SUR','CENTRO','AMP
 function getZona(ciudad){if(!ciudad)return 'Sin ciudad';var cu=ciudad.toUpperCase().trim();for(var i=0;i<ZONAS.length-1;i++)for(var j=0;j<ZONAS[i].ciudades.length;j++)if(cu.indexOf(ZONAS[i].ciudades[j])>=0||ZONAS[i].ciudades[j].indexOf(cu)>=0)return ZONAS[i].nombre;return ciudad;}
 var PLAN_MODO='carga';
 function planSetModo(m){PLAN_MODO=m;renderPlanificacion(document.getElementById('content'));}
-function planToggleHTML(){return '<div class="section-pad" style="padding-bottom:0"><div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap"><button class="btn '+(PLAN_MODO==='carga'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:110px" onclick="planSetModo(\'carga\')">🚚 Carga</button><button class="btn '+(PLAN_MODO==='rutas'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:110px" onclick="planSetModo(\'rutas\')">🗺️ Rutas</button><button class="btn '+(PLAN_MODO==='instalaciones'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:110px" onclick="planSetModo(\'instalaciones\')">🔧 Instalaciones</button></div></div>';}
+function planToggleHTML(){return '<div class="section-pad" style="padding-bottom:0"><div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap"><button class="btn '+(PLAN_MODO==='carga'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:90px" onclick="planSetModo(\'carga\')">🚚 Carga</button><button class="btn '+(PLAN_MODO==='entrega'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:90px" onclick="planSetModo(\'entrega\')">📦 Entrega</button><button class="btn '+(PLAN_MODO==='rutas'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:90px" onclick="planSetModo(\'rutas\')">🗺️ Rutas</button><button class="btn '+(PLAN_MODO==='instalaciones'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:90px" onclick="planSetModo(\'instalaciones\')">🔧 Instalaciones</button></div></div>';}
 function renderPlanificacion(c){
   if(PLAN_MODO==='carga'){c.innerHTML=planToggleHTML()+renderCargaBoard();return;}
+  if(PLAN_MODO==='entrega'){c.innerHTML=planToggleHTML()+renderEntregaBoard();return;}
   if(PLAN_MODO==='instalaciones'){c.innerHTML=planToggleHTML()+renderInstalacionesAgenda();return;}
   var pends=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';});
   if(!pends.length){c.innerHTML=planToggleHTML()+'<div class="empty"><div class="empty-icon">OK</div>No hay pedidos pendientes</div>';return;}
@@ -2399,6 +2402,80 @@ function cargaTexto(){
 }
 function cargaCopiar(){var t=cargaTexto();if(!t){toast('La carga está vacía','err');return;}copiarAlPortapapeles(t,'Planificación copiada');}
 function cargaWhatsApp(){var t=cargaTexto();if(!t){toast('La carga está vacía','err');return;}window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank');}
+// ═══════════════ PLANIFICACIÓN DE ENTREGA (desglose por pedido) ═══════════════
+function entregaDir(p){return (p.direccion||'').trim()||(p.ciudad||'').trim()||'';}
+function entregaGuiaEstado(o){
+  var gd=o.guiaDespacho;
+  if(gd){if(gd.cuadra===true)return {t:'✅ Guía verificada',c:'#16a34a'};if(gd.cuadra===false)return {t:'⚠️ Guía con diferencias',c:'#d97706'};return {t:'📄 Guía recibida',c:'#2563eb'};}
+  if(o.estado==='RECIBIDA')return {t:'📦 Recibida',c:'#16a34a'};
+  return {t:'⏳ Sin guía',c:'#6b7280'};
+}
+// Agrupa por PEDIDO las órdenes que están en la carga (mismo contenido físico, otra vista).
+function entregaGrupos(){
+  var plan=cargaPlan();var byPed={};
+  (plan.items||[]).forEach(function(it){var ref=cargaRef(it);if(!ref)return;var p=ref.p;if(!byPed[p.id])byPed[p.id]={p:p,ordenes:[]};byPed[p.id].ordenes.push(ref.o);});
+  var arr=Object.keys(byPed).map(function(k){return byPed[k];});
+  arr.sort(function(a,b){var da=diasRestantes(a.p.fechaLimite),db=diasRestantes(b.p.fechaLimite);if(da===null&&db===null)return 0;if(da===null)return 1;if(db===null)return -1;return da-db;});
+  return arr;
+}
+function renderEntregaBoard(){
+  var grupos=entregaGrupos();var plan=cargaPlan();var nMan=(plan.manuales||[]).length;
+  var nOrd=0,nVer=0;grupos.forEach(function(g){g.ordenes.forEach(function(o){nOrd++;if(o.guiaDespacho&&o.guiaDespacho.cuadra===true)nVer++;});});
+  var h='<div class="section-pad" style="padding-top:0">';
+  h+='<div class="stats-bar" style="margin-bottom:8px"><div class="stat"><div class="stat-v">'+grupos.length+'</div><div class="stat-l">pedidos</div></div><div class="stat"><div class="stat-v" style="color:#93c5fd">'+nOrd+'</div><div class="stat-l">órdenes</div></div><div class="stat"><div class="stat-v" style="color:#86efac">'+nVer+'</div><div class="stat-l">guías OK</div></div></div>';
+  h+='<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Desglose por pedido de lo que va en la carga, para que ventas arme las notas de entrega.</div>';
+  if(!grupos.length&&!nMan){return h+'<div class="empty"><div class="empty-icon">📦</div>La carga está vacía. Arma la carga en la pestaña 🚚 Carga.</div></div>';}
+  h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"><button class="btn btn-green btn-sm" onclick="entregaWhatsApp()">📲 WhatsApp</button><button class="btn btn-blue btn-sm" onclick="entregaPDF()">📄 PDF ventas</button><button class="btn btn-ghost btn-sm" onclick="entregaCopiar()">📋 Copiar</button></div>';
+  grupos.forEach(function(g){var p=g.p;var d=diasRestantes(p.fechaLimite);var prio=d===null?'':(d<0?('vencido '+Math.abs(d)+'d'):d===0?'HOY':('en '+d+'d'));
+    h+='<div class="card" style="margin-bottom:8px;padding:10px 14px">';
+    h+='<div style="display:flex;justify-content:space-between;gap:8px"><div style="font-size:14px;font-weight:700">Pedido #'+esc(p.numero||'')+' — '+esc(p.cliente||'Sin nombre')+'</div>'+(prio?'<span style="font-size:11px;font-weight:600;flex-shrink:0;color:'+(d<0?'#dc2626':d===0?'#d97706':'#6b7280')+'">'+esc(prio)+'</span>':'')+'</div>';
+    h+='<div style="font-size:12px;color:#374151;margin-top:2px">📍 '+esc(entregaDir(p)||'(sin dirección — edítala en el pedido)')+'</div>';
+    g.ordenes.forEach(function(o){var st=entregaGuiaEstado(o);h+='<div style="font-size:12px;color:#4b5563;margin-top:4px;display:flex;justify-content:space-between;gap:8px"><span>'+esc(tipoLabel(o.tipo))+(o.numeroOC?(' #'+esc(o.numeroOC)):'')+((o.items&&o.items.length)?(' · '+o.items.length+' ítem(s)'):'')+'</span><span style="color:'+st.c+';font-weight:600;flex-shrink:0">'+st.t+'</span></div>';});
+    h+='</div>';
+  });
+  if(nMan){h+='<div class="card" style="margin-bottom:8px;padding:10px 14px;background:#fffbeb;border:1px solid #fde68a"><div style="font-size:13px;font-weight:700;color:#92400e">🧰 Materiales adicionales (sin pedido)</div>';(plan.manuales||[]).forEach(function(m){var det=(m.items||[]).map(function(it){return (it.desc||'')+(it.cant?(' x'+it.cant):'');}).filter(Boolean).join(', ');h+='<div style="font-size:12px;color:#78350f;margin-top:3px">• '+esc(m.proveedor||'')+': '+esc(det||'(sin ítems)')+'</div>';});h+='</div>';}
+  return h+'</div>';
+}
+function _entregaEstadoTxt(st){return st.t.replace(/[^\x20-\x7EáéíóúÁÉÍÓÚñÑ]/g,'').replace(/\s+/g,' ').trim();}
+function entregaTexto(){
+  var grupos=entregaGrupos();if(!grupos.length)return '';
+  var L=['📦 *PLANIFICACIÓN DE ENTREGA* · '+fecha(),'','_Para elaborar las notas de entrega:_',''];
+  grupos.forEach(function(g){var p=g.p;
+    L.push('*Pedido #'+(p.numero||'')+' — '+(p.cliente||'')+'*');
+    L.push('📍 '+(entregaDir(p)||'(sin dirección)'));
+    g.ordenes.forEach(function(o){L.push('   • '+tipoLabel(o.tipo)+(o.numeroOC?(' #'+o.numeroOC):'')+' — '+_entregaEstadoTxt(entregaGuiaEstado(o)));});
+    L.push('');
+  });
+  L.push('Total: '+grupos.length+' pedido(s) para entrega.');
+  return L.join('\n');
+}
+function entregaCopiar(){var t=entregaTexto();if(!t){toast('No hay pedidos en la carga','err');return;}copiarAlPortapapeles(t,'Planificación de entrega copiada');}
+function entregaWhatsApp(){var t=entregaTexto();if(!t){toast('No hay pedidos en la carga','err');return;}window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank');}
+function entregaPDF(){
+  var grupos=entregaGrupos();if(!grupos.length){toast('No hay pedidos en la carga','err');return;}
+  toast('Generando PDF...','ok');
+  cargarLibsPDF().then(function(){
+    var jsPDF=window.jspdf.jsPDF;var doc=new jsPDF({unit:'pt',format:'a4'});
+    var W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight(),M=40;var y=48;
+    function nl(inc){y+=inc;if(y>H-45){doc.addPage();y=48;}}
+    doc.setFont('helvetica','bold');doc.setFontSize(15);doc.text('PLANIFICACIÓN DE ENTREGA',M,y);
+    doc.setFont('helvetica','normal');doc.setFontSize(10);doc.text('Fecha: '+fecha(),W-M,y,{align:'right'});
+    nl(16);doc.setFontSize(9);doc.setTextColor(120,120,120);doc.text('Para que el departamento de ventas elabore las notas de entrega.',M,y);doc.setTextColor(0,0,0);nl(20);
+    grupos.forEach(function(g){var p=g.p;
+      if(y>H-80){doc.addPage();y=48;}
+      doc.setFillColor(238,242,255);doc.rect(M,y-12,W-2*M,20,'F');
+      doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(55,48,163);var tit=doc.splitTextToSize('Pedido #'+(p.numero||'')+' — '+(p.cliente||''),W-2*M-12);doc.text(tit[0],M+6,y+2);doc.setTextColor(0,0,0);nl(22);
+      doc.setFont('helvetica','normal');doc.setFontSize(10);
+      var dl=doc.splitTextToSize('Dirección: '+(entregaDir(p)||'(sin dirección)'),W-2*M-10);dl.forEach(function(ln){doc.text(ln,M+6,y);nl(13);});
+      doc.setFontSize(9);doc.setTextColor(90,90,90);
+      g.ordenes.forEach(function(o){var linea='- '+tipoLabel(o.tipo)+(o.numeroOC?(' #'+o.numeroOC):'')+'   '+_entregaEstadoTxt(entregaGuiaEstado(o));var lns=doc.splitTextToSize(linea,W-2*M-16);lns.forEach(function(ln){doc.text(ln,M+16,y);nl(12);});});
+      doc.setTextColor(0,0,0);doc.setFontSize(10);nl(8);
+    });
+    if(y>H-40){doc.addPage();y=48;}
+    doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text('Total: '+grupos.length+' pedido(s) para entrega.',M,y);
+    doc.save('Planificacion-entrega-'+fecha().replace(/\//g,'-')+'.pdf');
+  }).catch(function(){toast('No se pudo generar el PDF','err');});
+}
 function cargaPDF(){
   var g=cargaGrupos();var provs=Object.keys(g).sort();
   if(!provs.length){toast('La carga está vacía','err');return;}
