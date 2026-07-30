@@ -730,7 +730,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v35 · catálogo: filtro y columna de ubicación';
+var APP_VERSION='v36 · producto con ubicación y stock inicial';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -2770,7 +2770,7 @@ function invRenderCatalogo(){
   if(INV_CAT_UB&&!invUbic(INV_CAT_UB))INV_CAT_UB='';
   var f=INV_CAT_UB;
   var items=f?all.filter(function(it){return (invStockRaw()[it.id]||{})[f];}):all;
-  var h='<div class="section-pad" style="padding-top:0;padding-bottom:6px"><div style="font-size:11px;color:var(--muted);margin-bottom:6px">Escribe el nombre, presiona Enter y llena las casillas directamente — se guardan solas. El stock se lleva desde Existencias / Movimientos.</div>';
+  var h='<div class="section-pad" style="padding-top:0;padding-bottom:6px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px"><div style="font-size:11px;color:var(--muted)">Escribe el nombre y Enter para alta rápida, o usa el botón para cargar todos los detalles y su stock inicial de una vez.</div><button class="btn btn-dark btn-sm" style="flex-shrink:0" onclick="invItemAbrir()">➕ Nuevo producto</button></div>';
   if(ubs.length){h+='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:11px;color:var(--muted)">Filtrar por ubicación: <button class="btn '+(!f?'btn-dark':'btn-ghost')+' btn-sm" onclick="invSetCatUb(\'\')">Todas</button>'+ubs.map(function(u){return '<button class="btn '+(f===u.id?'btn-dark':'btn-ghost')+' btn-sm" onclick="invSetCatUb(\''+u.id+'\')">'+(u.tipo==='exhibicion'?'🛍️ ':'🏬 ')+esc(u.nombre)+'</button>';}).join('')+'</div>';}
   h+='</div>';
   h+='<div class="crm-wrap"><table class="crm" id="tabla-inv"><thead><tr>';
@@ -2841,6 +2841,12 @@ function invItemAbrir(id){
   h+='<div class="sfield"><label>Categoría</label><input type="text" id="iv-cat" value="'+(it?esc(it.categoria||''):'')+'" placeholder="Ej: Vigas, Marcos, Tornillería"></div>';
   h+='<div class="sfield-row"><div class="sfield"><label>Costo (USD)</label><input type="number" step="any" id="iv-costo" value="'+(it?esc(it.costo||''):'')+'"></div><div class="sfield"><label>Precio (USD)</label><input type="number" step="any" id="iv-precio" value="'+(it?esc(it.precio||''):'')+'"></div></div>';
   h+='<div class="sfield-row"><div class="sfield"><label>Stock mínimo</label><input type="number" step="any" id="iv-min" value="'+(it?esc(it.minimo||''):'')+'"></div><div class="sfield"><label>Punto de reorden</label><input type="number" step="any" id="iv-reorden" value="'+(it?esc(it.reorden||''):'')+'"></div></div>';
+  if(!it){
+    var ubs=invDB().ubicaciones;
+    h+='<div class="sec-label" style="margin-top:6px">Stock inicial (opcional)</div>';
+    if(ubs.length){h+='<div class="sfield-row"><div class="sfield"><label>Ubicación</label><select id="iv-ubic"><option value="">— ninguna —</option>'+ubs.map(function(u){return '<option value="'+u.id+'">'+(u.tipo==='exhibicion'?'🛍️ ':'🏬 ')+esc(u.nombre)+'</option>';}).join('')+'</select></div><div class="sfield"><label>Cantidad</label><input type="number" step="any" id="iv-cant" placeholder="0"></div></div><div style="font-size:11px;color:var(--muted);margin-top:-4px">Al guardar, carga esa cantidad en la ubicación elegida. Puedes dejarlo vacío.</div>';}
+    else{h+='<div style="font-size:11px;color:var(--muted)">Crea una ubicación en 🏬 Ubicaciones para poder cargar stock inicial aquí.</div>';}
+  }
   h+='</div><div class="sheet-foot">'+(it?'<button class="btn btn-red" onclick="invItemEliminar(\''+it.id+'\')">Eliminar</button>':'')+'<button class="btn btn-ghost" onclick="cerrarModal(\'modal-inv\')">Cancelar</button><button class="btn btn-blue" onclick="invItemGuardar()">Guardar</button></div>';
   invModal(h);
 }
@@ -2849,7 +2855,12 @@ function invItemGuardar(){
   if(!nombre){toast('El nombre es obligatorio','err');return;}
   var o={nombre:nombre,sku:(document.getElementById('iv-sku').value||'').trim(),um:(document.getElementById('iv-um').value||'').trim()||'u',categoria:(document.getElementById('iv-cat').value||'').trim(),costo:invNum(document.getElementById('iv-costo').value),precio:invNum(document.getElementById('iv-precio').value),minimo:invNum(document.getElementById('iv-min').value),reorden:invNum(document.getElementById('iv-reorden').value)};
   var inv=invDB();
-  if(id){var it=invItem(id);if(it)Object.keys(o).forEach(function(k){it[k]=o[k];});}else{o.id=uid();o.creado=fecha();inv.items.push(o);}
+  if(id){var it=invItem(id);if(it)Object.keys(o).forEach(function(k){it[k]=o[k];});}
+  else{o.id=uid();o.creado=fecha();inv.items.push(o);
+    var ubEl=document.getElementById('iv-ubic'),cEl=document.getElementById('iv-cant');
+    var ub=ubEl?ubEl.value:'',cant=cEl?invNum(cEl.value):0;
+    if(ub&&cant>0)invMover('ENTRADA',o.id,ub,cant,{motivo:'Stock inicial'});
+  }
   guardarDB();cerrarModal('modal-inv');renderInventario(document.getElementById('content'));toast('Producto guardado','ok');
 }
 function invItemEliminar(id){if(!confirm('¿Eliminar este producto del catálogo?'))return;var inv=invDB();inv.items=inv.items.filter(function(x){return x.id!==id;});guardarDB();cerrarModal('modal-inv');renderInventario(document.getElementById('content'));toast('Producto eliminado','warn');}
