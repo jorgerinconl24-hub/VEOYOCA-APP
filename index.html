@@ -730,7 +730,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v34 · inventario por ubicación + reorden local';
+var APP_VERSION='v35 · catálogo: filtro y columna de ubicación';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -2659,7 +2659,7 @@ var MODELO='claude-sonnet-4-6';
 // ═══════════════════════════════════════════════════════════
 // MÓDULO DE INVENTARIO (almacenes + exhibiciones, tipo SAP)
 // ═══════════════════════════════════════════════════════════
-var INV_MODO='existencias',INV_BUSCA='',INV_UBIC_FILTRO='';
+var INV_MODO='existencias',INV_BUSCA='',INV_UBIC_FILTRO='',INV_CAT_UB='';
 function invDB(){if(!DB.inv||typeof DB.inv!=='object')DB.inv={};if(!Array.isArray(DB.inv.items))DB.inv.items=[];if(!Array.isArray(DB.inv.ubicaciones))DB.inv.ubicaciones=[];if(!Array.isArray(DB.inv.movs))DB.inv.movs=[];if(!DB.inv.stock||typeof DB.inv.stock!=='object')DB.inv.stock={};return DB.inv;}
 function invSetModo(m){INV_MODO=m;INV_BUSCA='';renderInventario(document.getElementById('content'));}
 function invItem(id){return invDB().items.find(function(x){return x.id===id;});}
@@ -2684,6 +2684,8 @@ function invReordenUbOf(it,ub){return invNum((it.reordenUb||{})[ub]);}
 function invEstadoUb(it,q,ub){var r=invReordenUbOf(it,ub);if(r<=0)return {t:'—',c:'#94a3b8',bg:'#f1f5f9'};if(q<=0)return {t:'CRÍTICO',c:'#dc2626',bg:'#fee2e2'};if(q<=r)return {t:'REORDENAR',c:'#d97706',bg:'#fef3c7'};return {t:'OK',c:'#16a34a',bg:'#dcfce7'};}
 function invItemReordenUb(id,ub,val){var it=invItem(id);if(!it)return;if(!it.reordenUb||typeof it.reordenUb!=='object')it.reordenUb={};var n=invNum(val);if(n>0)it.reordenUb[ub]=n;else delete it.reordenUb[ub];clearTimeout(INV_SAVE_TIMER);INV_SAVE_TIMER=setTimeout(function(){guardarDB();},800);}
 function invReordenUbLista(){var out=[],sm=invStockRaw();invDB().items.forEach(function(it){var ru=it.reordenUb||{};Object.keys(ru).forEach(function(ub){var r=invNum(ru[ub]);if(r<=0)return;var q=(sm[it.id]||{})[ub]||0;if(q<=r){out.push({it:it,ub:invUbic(ub),q:q,r:r,critico:q<=0});}});});out.sort(function(a,b){return a.q-b.q;});return out;}
+function invSetCatUb(u){INV_CAT_UB=u;renderInventario(document.getElementById('content'));}
+function invUbicResumen(it){var s=invStockRaw()[it.id]||{};var parts=invDB().ubicaciones.filter(function(u){return s[u.id];}).map(function(u){return (u.tipo==='exhibicion'?'🛍️ ':'🏬 ')+esc(u.nombre)+' ('+invFmt(s[u.id])+')';});return parts.length?parts.join('<br>'):'<span style="color:#94a3b8">—</span>';}
 function invValorTotal(){var v=0;invDB().items.forEach(function(it){v+=invStockItem(it.id)*invNum(it.costo);});return v;}
 function invMovsRecientes(itemId,dias){var lim=Date.now()-dias*86400000,s=0;invDB().movs.forEach(function(mv){if(mv.itemId===itemId&&mv.tipo==='SALIDA'&&(mv.ts||0)>=lim)s+=invNum(mv.cant);});return s;}
 function renderInventario(c){
@@ -2763,14 +2765,22 @@ function invQuickAdd(inp){
 function invItemBorrar(id){if(!confirm('¿Eliminar este producto del catálogo?'))return;var inv=invDB();inv.items=inv.items.filter(function(x){return x.id!==id;});guardarDB();renderInventario(document.getElementById('content'));toast('Producto eliminado','warn');}
 function invCelI(id,campo,valor,tipo){return '<input type="'+(tipo||'text')+'"'+(tipo==='number'?' step="any"':'')+' value="'+esc(valor==null?'':valor)+'" onchange="invItemCampo(\''+id+'\',\''+campo+'\',this.value)">';}
 function invRenderCatalogo(){
-  var items=invDB().items.slice().sort(function(a,b){return (a.nombre||'').localeCompare(b.nombre||'');});
-  var h='<div class="section-pad" style="padding-top:0;padding-bottom:6px"><div style="font-size:11px;color:var(--muted)">Escribe el nombre, presiona Enter y llena las casillas directamente — se guardan solas. El stock se lleva desde Existencias / Movimientos.</div></div>';
+  var all=invDB().items.slice().sort(function(a,b){return (a.nombre||'').localeCompare(b.nombre||'');});
+  var ubs=invDB().ubicaciones;
+  if(INV_CAT_UB&&!invUbic(INV_CAT_UB))INV_CAT_UB='';
+  var f=INV_CAT_UB;
+  var items=f?all.filter(function(it){return (invStockRaw()[it.id]||{})[f];}):all;
+  var h='<div class="section-pad" style="padding-top:0;padding-bottom:6px"><div style="font-size:11px;color:var(--muted);margin-bottom:6px">Escribe el nombre, presiona Enter y llena las casillas directamente — se guardan solas. El stock se lleva desde Existencias / Movimientos.</div>';
+  if(ubs.length){h+='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:11px;color:var(--muted)">Filtrar por ubicación: <button class="btn '+(!f?'btn-dark':'btn-ghost')+' btn-sm" onclick="invSetCatUb(\'\')">Todas</button>'+ubs.map(function(u){return '<button class="btn '+(f===u.id?'btn-dark':'btn-ghost')+' btn-sm" onclick="invSetCatUb(\''+u.id+'\')">'+(u.tipo==='exhibicion'?'🛍️ ':'🏬 ')+esc(u.nombre)+'</button>';}).join('')+'</div>';}
+  h+='</div>';
   h+='<div class="crm-wrap"><table class="crm" id="tabla-inv"><thead><tr>';
-  ['Producto','SKU','Categoría','Unidad','Costo $','Precio $','Mínimo','Reorden','Stock'].forEach(function(t,i){h+='<th'+(i===0?' class="colfija"':'')+'>'+t+'</th>';});
+  ['Producto','SKU','Categoría','Unidad','Costo $','Precio $','Mínimo','Reorden',(f?'Stock aquí':'Stock'),'Ubicación'].forEach(function(t,i){h+='<th'+(i===0?' class="colfija"':'')+'>'+t+'</th>';});
   h+='</tr></thead><tbody>';
-  h+='<tr><td class="colfija" style="background:var(--ibg)"><input id="inv-nuevo" placeholder="+ Nuevo producto (Enter)" onkeydown="if(event.key===\'Enter\')invQuickAdd(this)"></td><td colspan="8" style="padding:8px 10px;font-size:11px;color:var(--muted);background:var(--ibg)">Cada columna se edita directo, como en el CRM.</td></tr>';
+  h+='<tr><td class="colfija" style="background:var(--ibg)"><input id="inv-nuevo" placeholder="+ Nuevo producto (Enter)" onkeydown="if(event.key===\'Enter\')invQuickAdd(this)"></td><td colspan="9" style="padding:8px 10px;font-size:11px;color:var(--muted);background:var(--ibg)">Cada columna se edita directo, como en el CRM.</td></tr>';
+  if(f&&!items.length)h+='<tr><td colspan="10" style="padding:12px;font-size:12px;color:var(--muted)">Ningún producto tiene stock en esta ubicación.</td></tr>';
   items.forEach(function(it){
-    var id=it.id,total=invStockItem(id),est=invEstado(it,total);
+    var id=it.id,total=invStockItem(id),qhere=f?invStockEn(id,f):total,est=f?invEstadoUb(it,qhere,f):invEstado(it,total);
+    var ufCfg=f?invUbic(f):null;
     h+='<tr>';
     h+='<td class="colfija"><div style="display:flex;align-items:center;gap:2px"><button onclick="invItemBorrar(\''+id+'\')" title="Eliminar" style="border:none;background:none;color:#dc2626;font-size:13px;cursor:pointer;padding:0 2px 0 6px">🗑</button>'+invCelI(id,'nombre',it.nombre)+'</div></td>';
     h+='<td style="min-width:110px">'+invCelI(id,'sku',it.sku)+'</td>';
@@ -2780,7 +2790,8 @@ function invRenderCatalogo(){
     h+='<td style="min-width:80px">'+invCelI(id,'precio',it.precio,'number')+'</td>';
     h+='<td style="min-width:70px">'+invCelI(id,'minimo',it.minimo,'number')+'</td>';
     h+='<td style="min-width:70px">'+invCelI(id,'reorden',it.reorden,'number')+'</td>';
-    h+='<td style="min-width:78px"><span style="font-weight:700;color:'+est.c+'">'+invFmt(total)+'</span> <span style="font-size:10px;color:var(--muted)">'+esc(it.um||'u')+'</span></td>';
+    h+='<td style="min-width:78px"><span style="font-weight:700;color:'+est.c+'">'+invFmt(qhere)+'</span> <span style="font-size:10px;color:var(--muted)">'+esc(it.um||'u')+'</span></td>';
+    h+='<td style="min-width:150px;font-size:11px;color:#475569">'+(f?(ufCfg?((ufCfg.tipo==='exhibicion'?'🛍️ ':'🏬 ')+esc(ufCfg.nombre)):''):invUbicResumen(it))+'</td>';
     h+='</tr>';
   });
   h+='</tbody></table></div>';
