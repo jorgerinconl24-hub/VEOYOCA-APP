@@ -169,10 +169,22 @@ table.crm{border-collapse:collapse;font-size:12px;min-width:1780px}
 <body>
 <div id="splash"><div class="splash-logo">&#x1F4E6;</div><div class="splash-title">VeoYoca</div><div class="splash-sub" id="splash-msg">Conectando con Firebase...</div><div class="splash-spinner"></div></div>
 <div id="login-screen"><div class="login-logo">&#x1F4E6;</div><div class="login-title">VeoYoca</div><div class="login-sub">Sistema de gesti&#xF3;n de pedidos</div>
-<div class="login-card"><h2>Iniciar sesi&#xF3;n</h2>
+<div class="login-card" id="login-card-main"><h2>Iniciar sesi&#xF3;n</h2>
 <div class="field"><label>Usuario</label><input type="text" id="l-user" placeholder="Tu usuario" autocomplete="username"></div>
 <div class="field"><label>Contrase&#xF1;a</label><input type="password" id="l-pass" placeholder="&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;" autocomplete="current-password"></div>
-<button class="btn-primary" onclick="login()">Entrar</button><div class="login-err" id="l-err">Usuario o contrase&#xF1;a incorrectos</div></div></div>
+<button class="btn-primary" onclick="login()">Entrar</button><div class="login-err" id="l-err">Usuario o contrase&#xF1;a incorrectos</div>
+<div style="margin-top:12px;text-align:center"><a href="#" onclick="resetMostrar(true);return false" style="font-size:12px;color:#93c5fd;text-decoration:none">&#xBF;Olvidaste tu contrase&#xF1;a?</a></div></div>
+<div class="login-card" id="reset-card" style="display:none"><h2>Recuperar contrase&#xF1;a</h2>
+<div id="reset-step1">
+<div class="field"><label>Usuario o correo</label><input type="text" id="r-ident" placeholder="tu usuario o tu correo"></div>
+<button class="btn-primary" onclick="resetSolicitar()">Enviar c&#xF3;digo al correo</button></div>
+<div id="reset-step2" style="display:none">
+<div class="field"><label>C&#xF3;digo (lleg&#xF3; a tu correo)</label><input type="text" id="r-code" placeholder="6 d&#xED;gitos" inputmode="numeric"></div>
+<div class="field"><label>Nueva contrase&#xF1;a</label><input type="password" id="r-newpass" placeholder="tu nueva clave"></div>
+<button class="btn-primary" onclick="resetConfirmar()">Cambiar contrase&#xF1;a</button></div>
+<div class="login-err" id="r-err" style="display:none"></div>
+<div id="r-msg" style="font-size:12px;color:#16a34a;margin-top:8px;text-align:center"></div>
+<div style="margin-top:12px;text-align:center"><a href="#" onclick="resetMostrar(false);return false" style="font-size:12px;color:#93c5fd;text-decoration:none">&#x2190; Volver a iniciar sesi&#xF3;n</a></div></div></div>
 <div id="app">
 <div class="topbar"><div><h1>VeoYoca</h1><p id="topbar-sub">Pedidos</p></div><div class="avatar" id="user-avatar" onclick="mostrarPerfil()">--</div></div>
 <div class="content" id="content"></div>
@@ -417,6 +429,41 @@ function login(){
   SESSION=usuario;localStorage.setItem('veo_session',JSON.stringify({id:usuario.id}));mostrarApp();
 }
 function logout(){SESSION=null;localStorage.removeItem('veo_session');location.reload();}
+function resetMostrar(show){
+  document.getElementById('login-card-main').style.display=show?'none':'block';
+  document.getElementById('reset-card').style.display=show?'block':'none';
+  document.getElementById('reset-step1').style.display='block';
+  document.getElementById('reset-step2').style.display='none';
+  var e=document.getElementById('r-err');e.style.display='none';e.textContent='';
+  document.getElementById('r-msg').textContent='';
+  if(show){var li=document.getElementById('l-user').value.trim();if(li)document.getElementById('r-ident').value=li;}
+}
+function resetErr(m){var e=document.getElementById('r-err');e.textContent=m||'';e.style.display=m?'block':'none';}
+function resetSolicitar(){
+  var ident=(document.getElementById('r-ident').value||'').trim();
+  if(!ident){resetErr('Indica tu usuario o correo');return;}
+  resetErr('');document.getElementById('r-msg').textContent='Enviando código...';
+  fetch('https://veoyoca-webhook.onrender.com/reset-solicitar',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify({ident:ident})})
+  .then(function(r){return r.json();}).then(function(res){
+    if(!res||!res.ok){document.getElementById('r-msg').textContent='';resetErr((res&&res.error)||'No se pudo enviar el código');return;}
+    document.getElementById('r-msg').textContent='Enviamos un código a '+(res.correo||'tu correo')+'. Revisa tu bandeja (y spam).';
+    document.getElementById('reset-step2').style.display='block';
+  }).catch(function(){document.getElementById('r-msg').textContent='';resetErr('Error de conexión con el servidor');});
+}
+function resetConfirmar(){
+  var ident=(document.getElementById('r-ident').value||'').trim();
+  var code=(document.getElementById('r-code').value||'').trim();
+  var np=document.getElementById('r-newpass').value||'';
+  if(!code||!np){resetErr('Ingresa el código y tu nueva contraseña');return;}
+  if(np.length<4){resetErr('La contraseña debe tener al menos 4 caracteres');return;}
+  resetErr('');document.getElementById('r-msg').textContent='Cambiando contraseña...';
+  fetch('https://veoyoca-webhook.onrender.com/reset-confirmar',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify({ident:ident,code:code,password:np})})
+  .then(function(r){return r.json();}).then(function(res){
+    if(!res||!res.ok){document.getElementById('r-msg').textContent='';resetErr((res&&res.error)||'No se pudo cambiar la contraseña');return;}
+    document.getElementById('r-msg').textContent='✅ Contraseña cambiada. Ya puedes iniciar sesión.';
+    setTimeout(function(){resetMostrar(false);document.getElementById('l-user').value=ident;var lp=document.getElementById('l-pass');if(lp){lp.value='';lp.focus();}},1600);
+  }).catch(function(){document.getElementById('r-msg').textContent='';resetErr('Error de conexión con el servidor');});
+}
 function mostrarApp(){
   document.getElementById('splash').style.display='none';
   document.getElementById('login-screen').style.display='none';
@@ -730,7 +777,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v38 · cambio de ubicación: admin + confirmación';
+var APP_VERSION='v39 · recuperar contraseña por correo';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
