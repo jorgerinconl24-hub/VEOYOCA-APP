@@ -777,7 +777,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v39 · recuperar contraseña por correo';
+var APP_VERSION='v40 · control del bot vendedor';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -2252,6 +2252,98 @@ function renderReportes(c){
   c.innerHTML=html;
 }
 
+// ═══════════════════════════════════════════════════════════
+// CONTROL DEL BOT VENDEDOR (tarjeta en Administración, solo admin)
+// El rol se verifica TAMBIEN en el servidor: esconder el botón no basta.
+// ═══════════════════════════════════════════════════════════
+var BOT_API='https://veoyoca-webhook.onrender.com';
+var BOT_TOKEN='veoyoca-leads-2026';
+var _botEstado=null,_botCargando=false,_botTimer=null;
+
+function botControlHTML(){
+  return '<div class="sec-label" style="margin-top:20px">Bot vendedor</div>'
+    +'<div id="botControlCard" style="background:#1a1a2e;border-radius:12px;padding:16px 18px;margin-bottom:14px;color:#fff">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'
+    +'<div><div style="font-size:15px;font-weight:700">🤖 Bot vendedor</div>'
+    +'<div id="botEstadoTexto" style="font-size:12px;color:rgba(255,255,255,.6);margin-top:2px">Consultando…</div></div>'
+    +'<div id="botPill" style="font-size:11px;font-weight:700;padding:5px 11px;border-radius:999px;background:rgba(255,255,255,.12)">—</div>'
+    +'</div>'
+    +'<div id="botMetricas" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;margin-top:14px"></div>'
+    +'<div id="botAbiertas" style="margin-top:12px;font-size:12px;color:rgba(255,255,255,.75);display:none"></div>'
+    +'<button id="botToggleBtn" style="width:100%;margin-top:16px;padding:14px;border:0;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;background:#dc2626;color:#fff">🛑 PARAR EL BOT</button>'
+    +'<div id="botMsg" style="margin-top:8px;font-size:12px;text-align:center;min-height:15px;color:rgba(255,255,255,.7)"></div>'
+    +'</div>';
+}
+function _botEl(id){return document.getElementById(id);}
+function botMsg(t,err){var e=_botEl('botMsg');if(!e)return;e.textContent=t||'';e.style.color=err?'#fca5a5':'rgba(255,255,255,.7)';}
+function botPintar(e){
+  _botEstado=e;
+  if(!_botEl('botPill'))return;
+  var on=!!e.encendido, prueba=!!e.modoPrueba;
+  _botEl('botPill').textContent=on?(prueba?'PRUEBA':'ENCENDIDO'):'APAGADO';
+  _botEl('botPill').style.background=on?(prueba?'rgba(245,158,11,.25)':'rgba(34,197,94,.22)'):'rgba(220,38,38,.25)';
+  _botEl('botPill').style.color=on?(prueba?'#fcd34d':'#4ade80'):'#fca5a5';
+  _botEl('botEstadoTexto').textContent=on
+    ?((prueba?'Modo prueba: solo habla con '+(e.permitidos||0)+' número(s) autorizado(s) · ':'')+(e.lineasVenta||0)+' línea(s) · 1 lead cada '+(e.intervaloMin||0)+' min · '+(e.horario||''))
+    :('Detenido'+(e.apagadoPor?' por '+e.apagadoPor:'')+'. No escribe ni responde.');
+  var tasa=e.conversaciones?Math.round(e.respondieron*100/e.conversaciones):0;
+  var cards=[['Conversaciones',e.conversaciones||0],['Activas',e.activas||0],['Contestaron',tasa+'%'],['Escaladas',e.escaladas||0]];
+  _botEl('botMetricas').innerHTML=cards.map(function(c){
+    return '<div style="background:rgba(255,255,255,.07);border-radius:8px;padding:9px 10px">'
+      +'<div style="font-size:18px;font-weight:700">'+c[1]+'</div>'
+      +'<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:1px">'+c[0]+'</div></div>';
+  }).join('');
+  var ab=_botEl('botAbiertas');
+  if(e.activas>0){
+    ab.style.display='block';
+    ab.innerHTML='<b>⚠️ Si lo paras, quedan '+e.activas+' conversación(es) a medias:</b><br>'
+      +(e.abiertas||[]).slice(0,6).map(function(x){return '• '+esc(x.nombre)+' · '+esc(x.tel)+' ('+x.turnos+' turnos)';}).join('<br>')
+      +((e.abiertas||[]).length>6?'<br>…y '+(e.abiertas.length-6)+' más':'');
+  }else{ab.style.display='none';}
+  var b=_botEl('botToggleBtn');
+  b.textContent=on?'🛑 PARAR EL BOT':'▶️ ENCENDER EL BOT';
+  b.style.background=on?'#dc2626':'#16a34a';
+  b.disabled=false;b.style.opacity='1';
+}
+function botCargar(){
+  if(!_botEl('botControlCard'))return;
+  fetch(BOT_API+'/bot-estado?token='+encodeURIComponent(BOT_TOKEN))
+    .then(function(r){return r.json();})
+    .then(function(d){if(!d||!d.ok)throw new Error((d&&d.error)||'error');botPintar(d);botMsg('');})
+    .catch(function(e){botMsg('No pude consultar el estado del bot. '+e.message,true);});
+}
+function botAlternar(){
+  if(_botCargando||!_botEstado)return;
+  var apagando=!!_botEstado.encendido;
+  if(apagando){
+    var av='¿Parar el bot vendedor?\n\nDeja de escribir y de responder de inmediato.';
+    if(_botEstado.activas>0)av+='\n\nQuedan '+_botEstado.activas+' conversación(es) a medias que habrá que atender a mano.';
+    if(!confirm(av))return;
+  }else if(!confirm('¿Encender el bot vendedor?\n\nVa a empezar a saludar a los leads nuevos con teléfono.'))return;
+  _botCargando=true;
+  var b=_botEl('botToggleBtn');b.disabled=true;b.style.opacity='.6';b.textContent='Un momento…';botMsg('');
+  fetch(BOT_API+'/bot-control',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({token:BOT_TOKEN,username:SESSION.username,accion:apagando?'apagar':'encender'})})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(!d||!d.ok)throw new Error((d&&d.error)||'no se pudo');
+      botPintar(d);
+      botMsg(apagando?'🛑 Bot detenido. Se avisó al equipo por WhatsApp.':'✅ Bot encendido.');
+      toast(apagando?'Bot vendedor detenido':'Bot vendedor encendido',apagando?'warn':'ok');
+    })
+    .catch(function(e){botMsg('Error: '+e.message,true);toast('No se pudo cambiar el bot: '+e.message,'err');botCargar();})
+    .then(function(){_botCargando=false;});
+}
+function initBotControl(){
+  var card=_botEl('botControlCard');
+  if(!card)return;
+  if(!SESSION||SESSION.rol!=='admin'){card.style.display='none';return;}
+  _botEl('botToggleBtn').onclick=botAlternar;
+  botCargar();
+  clearInterval(_botTimer);
+  _botTimer=setInterval(function(){if(!_botCargando&&_botEl('botControlCard'))botCargar();},60000);
+}
+
 function renderAdmin(c){
   if(SESSION.rol!=='admin'){c.innerHTML='<div class="empty">Acceso denegado</div>';return;}
   var html='<div class="section-pad"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="sec-label" style="margin:0">Usuarios ('+DB.usuarios.length+')</div><button class="btn btn-dark btn-sm" data-nuevo-usuario="1">+ Agregar</button></div><div class="admin-section">';
@@ -2261,9 +2353,11 @@ function renderAdmin(c){
   if((DB.instaladores||[]).length)DB.instaladores.forEach(function(ins){html+='<div class="admin-row"><div class="admin-info"><div class="admin-name">'+esc(ins.nombre)+'</div><div class="admin-meta">'+(ins.telefono?('📱 '+esc(ins.telefono)):'sin teléfono')+'</div></div><button class="btn btn-red btn-sm" onclick="eliminarInstalador(\''+ins.id+'\')">Eliminar</button></div>';});
   else html+='<div class="admin-row"><div class="admin-info"><div class="admin-meta" style="color:var(--muted)">Aún no hay instaladores. Agrégalos para asignarlos a las instalaciones.</div></div></div>';
   html+='</div>';
+  html+=botControlHTML();
   html+='<div class="sec-label" style="margin-top:20px">Sistema</div><div class="admin-section"><div class="admin-row"><div class="admin-info"><div class="admin-name">Total pedidos</div></div><strong>'+DB.pedidos.length+'</strong></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Base de datos</div></div><span style="color:var(--success);font-weight:600">Firebase activo</span></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Exportar</div></div><button class="btn btn-ghost btn-sm" data-exportar="json">JSON</button><button class="btn btn-ghost btn-sm" data-exportar="csv" style="margin-left:6px">CSV</button></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Importar pedidos (Excel)</div><div class="admin-meta">Reemplaza TODOS los pedidos por los del archivo (Hoja1)</div></div><input type="file" id="ped-file" accept=".xlsx,.xls" style="display:none" onchange="importarPedidosExcel(this)"><button class="btn btn-blue btn-sm" onclick="document.getElementById(\'ped-file\').click()">Importar</button></div><div class="admin-row"><div class="admin-info"><div class="admin-name" style="color:var(--danger)">Borrar todos los pedidos</div><div class="admin-meta">No se puede deshacer</div></div><button class="btn btn-red btn-sm" data-borrar-pedidos="1">Borrar</button></div></div></div>';
   c.innerHTML=html;
   c.onclick=function(e){var t=e.target;if(t.getAttribute('data-nuevo-usuario'))abrirNuevoUsuario();var eu=t.getAttribute('data-edit-user');if(eu)editarUsuario(eu);var du=t.getAttribute('data-del-user');if(du)eliminarUsuario(du);var ex=t.getAttribute('data-exportar');if(ex==='json')exportarJSON();if(ex==='csv')exportarCSV();if(t.getAttribute('data-borrar-pedidos'))borrarPedidos();};
+  initBotControl();
 }
 function abrirNuevoUsuario(){document.getElementById('u-titulo').textContent='Nuevo usuario';['u-id','u-nombre','u-user','u-pass','u-telefono','u-correo'].forEach(function(id){document.getElementById(id).value='';});document.getElementById('u-rol').value='empleado';abrirModal('modal-usuario');}
 function editarUsuario(id){var u=DB.usuarios.find(function(x){return x.id===id;});if(!u)return;document.getElementById('u-titulo').textContent='Editar usuario';document.getElementById('u-id').value=id;document.getElementById('u-nombre').value=u.nombre;document.getElementById('u-user').value=u.username;document.getElementById('u-pass').value=u.password;document.getElementById('u-telefono').value=u.telefono||'';document.getElementById('u-correo').value=u.correo||'';document.getElementById('u-rol').value=u.rol;abrirModal('modal-usuario');}
