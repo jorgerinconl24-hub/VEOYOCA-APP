@@ -6,7 +6,7 @@
 importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js");
 
 
-var CACHE_NAME = 'veoyoca-v1';
+var CACHE_NAME = 'veoyoca-v2';
 
 // Instalar el service worker
 self.addEventListener('install', function(e) {
