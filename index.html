@@ -515,6 +515,152 @@ function rkvModsLight(largo,fondo){var d=rkvDescFondo(fondo),nFull=Math.floor(la
 function rkvModsMiniInd(largo,fondo,carga){var d=rkvDescFondo(fondo),cod=carga<=500?'300-502':'300-501',nFull=Math.floor(largo/0.20+1e-9),sobra=rkv2(largo-nFull*0.20),items=[];if(nFull>0)items.push({codigo:cod,tam:0.20,cant:nFull,precioUnit:rkv2(RKV_MODULO[cod]*(1-d))});if(sobra>1e-9)items.push({codigo:cod,tam:sobra,cobradoComo:0.20,cant:1,precioUnit:rkv2(RKV_MODULO[cod]*(1-d))});return items;}
 function rkvArmar(tipo,p){var marco,viga,mods;if(tipo==='light'){viga=rkvVigaLight(p.largo,p.cargaPorNivel);marco=rkvMarco(RKV_MARCO_LIGHT,p.alto,p.fondo);if(!viga||!marco)return null;if(p.conModulos)mods=rkvModsLight(p.largo,p.fondo);}else if(tipo==='mini'){viga=rkvVigaMini(p.largo,p.cargaPorNivel);marco=rkvMarco(RKV_MARCO_MINI,p.alto,p.fondo);if(!viga||!marco)return null;if(p.conModulos)mods=rkvModsMiniInd(p.largo,p.fondo,p.cargaPorNivel);}else{viga=rkvVigaInd(p.largo,p.cargaPorNivel,p.conModulos);marco=rkvMarco(RKV_MARCO_IND,p.alto,p.fondo);if(!viga||!marco)return null;if(p.conModulos)mods=rkvModsMiniInd(p.largo,p.fondo,p.cargaPorNivel);}var nMarcos=2,nVigas=p.niveles*2,piezas=[];piezas.push({concepto:'Marco '+rkvNombreTipo(tipo).toLowerCase()+' '+marco.alto.toFixed(2)+'x'+marco.fondo.toFixed(2),cant:nMarcos,precioUnit:marco.precio,subtotal:rkv2(nMarcos*marco.precio)});piezas.push({concepto:viga.desc,cant:nVigas,precioUnit:viga.precio,subtotal:rkv2(nVigas*viga.precio)});if(p.conModulos&&mods){for(var i=0;i<mods.length;i++){var m=mods[i],ct=m.cant*p.niveles;var etq=m.cobradoComo?('Módulo '+m.codigo+' ('+m.tam.toFixed(2)+'→'+m.cobradoComo.toFixed(2)+')'):('Módulo '+m.codigo+' ('+m.tam.toFixed(2)+')');piezas.push({concepto:etq,cant:ct,precioUnit:m.precioUnit,subtotal:rkv2(ct*m.precioUnit)});}}var total=rkv2(piezas.reduce(function(s,x){return s+x.subtotal;},0));return{tipo:tipo,piezas:piezas,total:total,marco:marco,viga:viga};}
 function cotizarRack(params){var p={largo:+params.largo,alto:+params.alto,fondo:+params.fondo,niveles:+params.niveles,cargaPorNivel:+params.cargaPorNivel,conModulos:!!params.conModulos,desglosada:!!params.desglosada};var reqs=['largo','alto','fondo','niveles','cargaPorNivel'];for(var i=0;i<reqs.length;i++){if(!(p[reqs[i]]>0))return{ok:false,error:'Falta o es inválido: '+reqs[i]};}var notas=[],tipos=['light','mini','industrial'];for(var t=0;t<tipos.length;t++){var c=rkvArmar(tipos[t],p);if(c){if(c.marco.alto>p.alto+1e-9)notas.push('Alto '+p.alto.toFixed(2)+' no está en lista → marco de '+c.marco.alto.toFixed(2)+'.');if(c.marco.fondo>p.fondo+1e-9)notas.push('Fondo '+p.fondo.toFixed(2)+' no está en lista → marco de '+c.marco.fondo.toFixed(2)+'.');if(c.viga.largoViga>p.largo+1e-9)notas.push('Largo '+p.largo.toFixed(2)+' → viga estándar de '+c.viga.largoViga.toFixed(2)+'.');var precio1=rkv2(c.total*(1-RK_DESCUENTO)*(1+RK_MARGEN)),precio2=null,factorBs=null;if(params.tasaBCV>0&&params.tasaBinance>0){factorBs=params.tasaBinance/params.tasaBCV;precio2=rkv2(precio1*factorBs);}return{ok:true,tipo:c.tipo,tipoNombre:rkvNombreTipo(c.tipo),piezas:c.piezas,costo:c.total,precio1:precio1,precio2:precio2,factorBs:factorBs,tasaBCV:params.tasaBCV||null,tasaBinance:params.tasaBinance||null,notas:notas,params:p};}}return{ok:false,error:'Ningún tipo de rack del catálogo aguanta esa carga/medida. Revísalo manualmente.'};}
+
+/* ═══════════════════════════════════════════════════════════════
+ * COTIZADOR DE PARTES SUELTAS DE RACK (marcos, vigas, módulos)
+ * Los clientes piden repuestos, no racks completos. Redondea a la
+ * medida de lista Y LO DICE, y muestra la carga que aguanta cada viga.
+ * ═══════════════════════════════════════════════════════════════ */
+var PARTES_LISTA=[{clase:'MARCO',alto:'',fondo:'',largo:'',cant:'1'}];
+var PARTES_CARGA='',PARTES_FAM='';
+function pkFam(f){return f==='light'?'RACK LIGHT':(f==='mini'?'MINI RACK':'INDUSTRIAL');}
+function pkVenta(c){return rkv2(c*(1-RK_DESCUENTO)*(1+RK_MARGEN));}
+function pkMarco(alto,fondo,fam){
+  var tablas={light:RKV_MARCO_LIGHT,mini:RKV_MARCO_MINI,industrial:RKV_MARCO_IND};
+  var fams=fam?[fam]:['light','mini','industrial'],out=[];
+  fams.forEach(function(f){var m=rkvMarco(tablas[f],alto,fondo);if(m)out.push({familia:f,alto:m.alto,fondo:m.fondo,precio:m.precio});});
+  return out;
+}
+function pkViga(largo,carga,fam,conMod){
+  var out=[],q=carga>0?carga:0,quiere=function(f){return !fam||fam===f;};
+  if(quiere('light')){var L=rkvSubir(largo,rkvKeys(RKV_RES_LIGHT));if(L!==null)[1.5,2.0].forEach(function(cal){var res=RKV_RES_LIGHT[L][cal];if(q&&res<q)return;out.push({familia:'light',largo:L,precio:RKV_VIGA_LIGHT[L][cal],resiste:res,detalle:'calibre '+cal.toFixed(1)+'mm'});});}
+  if(quiere('mini')){var L2=rkvSubir(largo,rkvKeys(RKV_RES_MINI_12));if(L2!==null){var res2=RKV_RES_MINI_12[L2];
+    if(!q||res2>=q)out.push({familia:'mini',largo:L2,precio:RKV_VIGA_MINI_12[L2],resiste:res2,detalle:'calibre 1.2mm'});
+    var Lp=rkvSubir(L2,rkvKeys(RKV_VIGA_MINI_25));if(Lp!==null&&(!q||res2+500>=q))out.push({familia:'mini',largo:Lp,precio:RKV_VIGA_MINI_25[Lp],resiste:res2+500,detalle:'calibre 2.5mm (semipesada)'});}}
+  if(quiere('industrial')){var L3=rkvSubir(largo,rkvKeys(RKV_RES_IND[0.10]));if(L3!==null){var tabla=conMod?RKV_VIGA_IND_ESC:RKV_VIGA_IND_CUA,tv=conMod?'escalonada':'cuadrada';
+    [0.10,0.125,0.15].forEach(function(sec){var res3=RKV_RES_IND[sec][L3];if(q&&res3<q)return;out.push({familia:'industrial',largo:L3,precio:tabla[sec][L3],resiste:res3,detalle:tv+' secc '+sec});});}}
+  out.sort(function(a,b){return a.precio-b.precio;});return out;
+}
+function pkModulo(codigo,fondo,carga){
+  var d=rkvDescFondo(fondo>0?fondo:0.80),cod=(codigo||'').toString().trim();
+  if(!RKV_MODULO[cod])cod=(carga>0&&carga<=500)?'300-502':'300-501';
+  return {codigo:cod,precio:rkv2(RKV_MODULO[cod]*(1-d)),descuento:d,fondo:fondo>0?fondo:null};
+}
+function cotizarPartes(params){
+  var partes=params.partes||[];if(!partes.length)return {ok:false,error:'Agrega al menos una pieza.'};
+  var fam=params.tipo||null,carga=+params.carga||0,conMod=params.conModulos===true;
+  var lineas=[],avisos=[];
+  partes.forEach(function(p){
+    var clase=(p.clase||'').toUpperCase(),cant=Math.max(1,parseInt(p.cant,10)||1);
+    if(clase==='MARCO'){
+      var alto=parseFloat(p.alto)||0,fondo=parseFloat(p.fondo)||0;
+      if(!(alto>0)||!(fondo>0))return;
+      var ops=pkMarco(alto,fondo,fam);
+      if(!ops.length){avisos.push('No hay marco de '+alto.toFixed(2)+'x'+fondo.toFixed(2)+' en la lista (fuera de rango).');return;}
+      if(ops[0].alto>alto+1e-9)avisos.push('Marco '+alto.toFixed(2)+' no está en lista → se cobra el de '+ops[0].alto.toFixed(2)+'.');
+      if(ops[0].fondo>fondo+1e-9)avisos.push('Fondo '+fondo.toFixed(2)+' no está en lista → se cobra el de '+ops[0].fondo.toFixed(2)+'.');
+      lineas.push({clase:'MARCO',cant:cant,pedido:alto.toFixed(2)+' x '+fondo.toFixed(2),opciones:ops.map(function(o){return {etiqueta:pkFam(o.familia)+' '+o.alto.toFixed(2)+'x'+o.fondo.toFixed(2),precio:pkVenta(o.precio),nota:''};})});
+    }else if(clase==='VIGA'){
+      var largo=parseFloat(p.largo)||0;if(!(largo>0))return;
+      var ops2=pkViga(largo,carga,fam,conMod);
+      if(!ops2.length){avisos.push('No hay viga de '+largo.toFixed(2)+(carga?' que aguante '+carga+' kg':'')+' en la lista.');return;}
+      if(ops2[0].largo>largo+1e-9)avisos.push('Viga '+largo.toFixed(2)+' no está en lista → se cobra la de '+ops2[0].largo.toFixed(2)+'.');
+      lineas.push({clase:'VIGA',cant:cant,pedido:largo.toFixed(2)+(carga?' · '+carga+' kg/nivel':''),opciones:ops2.map(function(o){return {etiqueta:pkFam(o.familia)+' '+o.largo.toFixed(2)+' · '+o.detalle,precio:pkVenta(o.precio),nota:'aguanta '+o.resiste+' kg'};})});
+    }else if(clase==='MODULO'){
+      var m=pkModulo(p.codigo,parseFloat(p.fondo)||0,carga);
+      lineas.push({clase:'MODULO',cant:cant,pedido:(p.codigo||m.codigo)+(m.fondo?' · fondo '+m.fondo.toFixed(2):''),opciones:[{etiqueta:'Módulo '+m.codigo+(m.descuento?' (-'+Math.round(m.descuento*100)+'% por fondo)':''),precio:pkVenta(m.precio),nota:''}]});
+    }
+  });
+  if(!lineas.length)return {ok:false,error:'Completa las medidas de al menos una pieza.'};
+  var total=0;lineas.forEach(function(l){total+=l.cant*l.opciones[0].precio;});total=rkv2(total);
+  var totalBs=null;if(params.tasaBCV>0&&params.tasaBinance>0)totalBs=rkv2(total*(params.tasaBinance/params.tasaBCV));
+  return {ok:true,lineas:lineas,total:total,totalBs:totalBs,tasaBCV:params.tasaBCV||null,tasaBinance:params.tasaBinance||null,avisos:avisos,carga:carga,
+          unica:lineas.every(function(l){return l.opciones.length===1;})};
+}
+function partesTexto(r){
+  var L=['🔩 *Cotización de partes de rack*',''];
+  r.lineas.forEach(function(l){
+    L.push('• *'+l.cant+' '+(l.clase==='MARCO'?'marco(s)':l.clase==='VIGA'?'viga(s)':'módulo(s)')+'* — pediste '+l.pedido);
+    l.opciones.forEach(function(o,i){L.push('   '+(l.opciones.length>1?(i===0?'✅ ':'   '):'')+o.etiqueta+': $'+o.precio.toFixed(2)+' c/u'+(o.nota?' ('+o.nota+')':'')+' → '+l.cant+' = $'+rkv2(l.cant*o.precio).toFixed(2));});
+    L.push('');
+  });
+  L.push('💵 *Total: $'+r.total.toFixed(2)+'*');
+  if(r.totalBs!=null)L.push('💱 *Pagando en Bs: $'+r.totalBs.toFixed(2)+'* (BCV '+r.tasaBCV+' · Binance '+r.tasaBinance+')');
+  if(r.avisos&&r.avisos.length){L.push('');L.push('⚠️ '+r.avisos.join(' '));}
+  L.push('');L.push('Precios sin IVA.');
+  return L.join('\n');
+}
+var PARTES_RES=null;
+function partesSet(i,k,v){if(PARTES_LISTA[i])PARTES_LISTA[i][k]=v;}
+function partesAdd(){PARTES_LISTA.push({clase:'MARCO',alto:'',fondo:'',largo:'',cant:'1'});partesRenderFilas();}
+function partesDel(i){PARTES_LISTA.splice(i,1);if(!PARTES_LISTA.length)PARTES_LISTA.push({clase:'MARCO',alto:'',fondo:'',largo:'',cant:'1'});partesRenderFilas();}
+function partesClase(i,v){partesSet(i,'clase',v);partesRenderFilas();}
+function partesRenderFilas(){
+  var el=document.getElementById('pt-filas');if(!el)return;var h='';
+  PARTES_LISTA.forEach(function(p,i){
+    h+='<div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:8px;margin-bottom:8px">';
+    h+='<div style="display:grid;grid-template-columns:1fr 62px 26px;gap:6px;margin-bottom:6px">';
+    h+='<select onchange="partesClase('+i+',this.value)" style="padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px"><option value="MARCO"'+(p.clase==='MARCO'?' selected':'')+'>Marco (columna)</option><option value="VIGA"'+(p.clase==='VIGA'?' selected':'')+'>Viga (larguero)</option><option value="MODULO"'+(p.clase==='MODULO'?' selected':'')+'>Módulo (entrepaño)</option></select>';
+    h+='<input type="number" step="1" min="1" placeholder="Cant" value="'+esc(p.cant||'')+'" oninput="partesSet('+i+',\'cant\',this.value)" style="padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px">';
+    h+='<button onclick="partesDel('+i+')" style="border:none;background:none;color:#dc2626;font-size:18px;cursor:pointer">×</button></div>';
+    if(p.clase==='MARCO')h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><input type="number" step="0.01" placeholder="Alto (m)" value="'+esc(p.alto||'')+'" oninput="partesSet('+i+',\'alto\',this.value)" style="padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px"><input type="number" step="0.01" placeholder="Fondo (m)" value="'+esc(p.fondo||'')+'" oninput="partesSet('+i+',\'fondo\',this.value)" style="padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px"></div>';
+    else if(p.clase==='VIGA')h+='<input type="number" step="0.01" placeholder="Largo (m)" value="'+esc(p.largo||'')+'" oninput="partesSet('+i+',\'largo\',this.value)" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px">';
+    else h+='<input type="number" step="0.01" placeholder="Fondo del rack (m) — define el descuento" value="'+esc(p.fondo||'')+'" oninput="partesSet('+i+',\'fondo\',this.value)" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px">';
+    h+='</div>';
+  });
+  el.innerHTML=h;
+}
+function cotUIpartes(){
+  return '<div class="section-pad" style="max-width:560px;margin:0 auto">'
+    +'<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:14px">'
+    +'<div style="font-size:15px;font-weight:700;color:#1a1a2e;margin-bottom:4px">🔩 Partes sueltas de rack</div>'
+    +'<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Para cuando el cliente pide repuestos: marcos, vigas o módulos. Si la medida no está en lista, se redondea hacia arriba y te lo aviso.</div>'
+    +'<div id="pt-filas"></div>'
+    +'<button class="btn btn-ghost btn-sm" style="margin-top:2px" onclick="partesAdd()">+ Agregar pieza</button>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">'
+    +'<div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Carga por nivel (kg)</label><input type="number" step="1" id="pt-carga" value="'+esc(PARTES_CARGA)+'" placeholder="opcional" style="width:100%;padding:9px;border:1px solid #d1d5db;border-radius:8px;font-size:14px"></div>'
+    +'<div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Tipo de rack</label><select id="pt-fam" style="width:100%;padding:9px;border:1px solid #d1d5db;border-radius:8px;font-size:14px"><option value="">Cualquiera (comparar)</option><option value="light">Rack light</option><option value="mini">Mini rack</option><option value="industrial">Industrial</option></select></div>'
+    +'</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-top:6px">Si pones la carga, solo te muestro las vigas que de verdad aguantan.</div>'
+    +'<button class="btn btn-dark" style="width:100%;margin-top:14px" onclick="partesCalcular()">Calcular precio</button>'
+    +'</div><div id="pt-result"></div>'
+    +'<div style="font-size:10px;color:#cbd5e1;text-align:center;margin-top:8px">'+APP_VERSION+'</div></div>';
+}
+function partesCalcular(){
+  PARTES_CARGA=(document.getElementById('pt-carga')||{value:''}).value;
+  PARTES_FAM=(document.getElementById('pt-fam')||{value:''}).value;
+  var res=document.getElementById('pt-result');
+  res.innerHTML='<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px;text-align:center;font-size:13px;color:var(--muted)">Consultando tasas del día y calculando...</div>';
+  var hacer=function(t){
+    var r=cotizarPartes({partes:PARTES_LISTA,carga:parseFloat(PARTES_CARGA)||0,tipo:PARTES_FAM||null,tasaBCV:t&&t.bcv?t.bcv:0,tasaBinance:t&&t.binance?t.binance:0});
+    if(!r.ok){res.innerHTML='<div style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:10px;padding:12px;font-size:13px">⚠️ '+esc(r.error)+'</div>';return;}
+    PARTES_RES=r;res.innerHTML=partesRenderResultado(r);
+  };
+  if(RKV_TASAS)hacer(RKV_TASAS);else rkvCargarTasas(hacer);
+}
+function partesRenderResultado(r){
+  var h='<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px">';
+  h+='<div style="font-size:13px;font-weight:700;color:#1a1a2e;margin-bottom:10px">Resultado</div>';
+  r.lineas.forEach(function(l){
+    h+='<div style="border-bottom:1px solid #f0f0f0;padding:8px 0"><div style="font-size:13px;font-weight:700">'+l.cant+' '+(l.clase==='MARCO'?'marco(s)':l.clase==='VIGA'?'viga(s)':'módulo(s)')+' <span style="font-weight:400;color:var(--muted)">— pediste '+esc(l.pedido)+'</span></div>';
+    l.opciones.forEach(function(o,i){
+      var best=l.opciones.length>1&&i===0;
+      h+='<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:3px 0;'+(best?'font-weight:700;color:#065f46':'color:#475569')+'"><span>'+(best?'✅ ':(l.opciones.length>1?'　':''))+esc(o.etiqueta)+(o.nota?' <span style="color:#94a3b8">('+esc(o.nota)+')</span>':'')+'</span><span style="white-space:nowrap">$'+o.precio.toFixed(2)+' c/u → <b>$'+rkv2(l.cant*o.precio).toFixed(2)+'</b></span></div>';
+    });
+    h+='</div>';
+  });
+  if(!r.unica)h+='<div style="font-size:11px;color:var(--muted);margin-top:6px">Donde hay varias opciones, el ✅ es la más económica. El total usa esas.</div>';
+  h+='<div style="display:flex;gap:10px;margin-top:12px">';
+  h+='<div style="flex:1;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:12px;text-align:center"><div style="font-size:11px;color:#047857;font-weight:600">EN DÓLARES</div><div style="font-size:22px;font-weight:800;color:#065f46">$'+r.total.toFixed(2)+'</div></div>';
+  h+=(r.totalBs!=null?'<div style="flex:1;background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;padding:12px;text-align:center"><div style="font-size:11px;color:#4338ca;font-weight:600">PAGANDO EN BOLÍVARES</div><div style="font-size:22px;font-weight:800;color:#3730a3">$'+r.totalBs.toFixed(2)+'</div><div style="font-size:10px;color:#6366f1">BCV '+r.tasaBCV+' · Binance '+r.tasaBinance+'</div></div>':'<div style="flex:1;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:12px;text-align:center;font-size:12px;color:#c2410c">Sin tasas ahora: solo precio en dólares.</div>');
+  h+='</div>';
+  if(r.avisos&&r.avisos.length)h+='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 10px;margin-top:10px;font-size:12px;color:#92400e">⚠️ '+esc(r.avisos.join(' '))+'</div>';
+  if(!r.carga)h+='<div style="font-size:11px;color:var(--muted);margin-top:8px">Si pones los kg por nivel, filtro las vigas que de verdad aguantan.</div>';
+  h+='<button class="btn btn-ghost btn-sm" style="width:100%;margin-top:12px" onclick="partesCopiar()">📋 Copiar para el cliente</button>';
+  h+='<div style="font-size:11px;color:var(--muted);text-align:center;margin-top:8px">Precios sin IVA</div></div>';
+  return h;
+}
+function partesCopiar(){if(!PARTES_RES){toast('Calcula primero','err');return;}copiarAlPortapapeles(partesTexto(PARTES_RES),'Cotización copiada');}
 var RKV_TASAS=null;
 var RK_DESCUENTO=0.28,RK_MARGEN=0.35; // precio USD = suma de lista × (1-28%) × (1+35%)
 // Plan B: si el webhook no responde, saca las tasas directo de las fuentes públicas (mismo +5 de colchón)
@@ -684,12 +830,14 @@ function renderCotizar(c){
   if(COTIZAR_MODO==='stats'&&!esAdmin)COTIZAR_MODO='rack';
   var toggle='<div class="section-pad" style="max-width:760px;margin:0 auto 0"><div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">'
     +'<button class="btn '+(COTIZAR_MODO==='rack'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'rack\')">🏗️ Cotizar rack</button>'
+    +'<button class="btn '+(COTIZAR_MODO==='partes'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'partes\')">🔩 Partes de rack</button>'
     +'<button class="btn '+(COTIZAR_MODO==='presu'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'presu\')">📄 Hacer presupuesto</button>'
     +'<button class="btn '+(COTIZAR_MODO==='tasa'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'tasa\')">🧮 Calculadora de tasa</button>'
     +'<button class="btn '+(COTIZAR_MODO==='precios'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'precios\')">🏷️ Lista de precios</button>'
     +'<button class="btn '+(COTIZAR_MODO==='lista'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'lista\')">📋 Presupuestos</button>'
     +(esAdmin?'<button class="btn '+(COTIZAR_MODO==='stats'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'stats\')">📊 Estadísticas</button>':'')
     +'</div></div>';
+  if(COTIZAR_MODO==='partes'){c.innerHTML=toggle+cotUIpartes();partesRenderFilas();rkvCargarTasas(null);return;}
   if(COTIZAR_MODO==='presu'){c.innerHTML=toggle+cotUIpresu();presuInitForm();return;}
   if(COTIZAR_MODO==='lista'){c.innerHTML=toggle+cotUIlista();return;}
   if(COTIZAR_MODO==='stats'){c.innerHTML=toggle+cotUIstats();return;}
@@ -777,7 +925,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v40 · control del bot vendedor';
+var APP_VERSION='v41 · partes de rack + control del bot';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
