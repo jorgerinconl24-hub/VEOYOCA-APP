@@ -925,7 +925,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v41 · partes de rack + control del bot';
+var APP_VERSION='v42 · conteo físico + fotos de producto';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -3007,9 +3007,10 @@ function invCatMoverUb(id,destUb){
 function invValorTotal(){var v=0;invDB().items.forEach(function(it){v+=invStockItem(it.id)*invNum(it.costo);});return v;}
 function invMovsRecientes(itemId,dias){var lim=Date.now()-dias*86400000,s=0;invDB().movs.forEach(function(mv){if(mv.itemId===itemId&&mv.tipo==='SALIDA'&&(mv.ts||0)>=lim)s+=invNum(mv.cant);});return s;}
 function renderInventario(c){
-  var modos=[['existencias','📦 Existencias'],['movimientos','🔄 Movimientos'],['catalogo','🗂️ Catálogo'],['ubicaciones','🏬 Ubicaciones'],['ia','🤖 IA']];
+  var modos=[['existencias','📦 Existencias'],['conteo','📋 Conteo'],['movimientos','🔄 Movimientos'],['catalogo','🗂️ Catálogo'],['ubicaciones','🏬 Ubicaciones'],['ia','🤖 IA']];
   var h='<div class="section-pad" style="padding-bottom:0"><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">'+modos.map(function(m){return '<button class="btn '+(INV_MODO===m[0]?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:88px" onclick="invSetModo(\''+m[0]+'\')">'+m[1]+'</button>';}).join('')+'</div></div>';
   if(INV_MODO==='existencias')h+=invRenderExistencias();
+  else if(INV_MODO==='conteo')h+=invRenderConteo();
   else if(INV_MODO==='movimientos')h+=invRenderMovs();
   else if(INV_MODO==='catalogo')h+=invRenderCatalogo();
   else if(INV_MODO==='ubicaciones')h+=invRenderUbicaciones();
@@ -3045,7 +3046,7 @@ function invListaHTML(){
     items.forEach(function(it){
       var qy=invStockEn(it.id,f),est=invEstadoUb(it,qy,f);
       h+='<div class="card" style="margin-bottom:6px;padding:10px 12px">';
-      h+='<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div><div style="font-size:14px;font-weight:700">'+esc(it.nombre)+(it.sku?' <span style="font-weight:400;color:#94a3b8;font-size:11px">'+esc(it.sku)+'</span>':'')+'</div>'+(it.categoria?'<div style="font-size:11px;color:#94a3b8">'+esc(it.categoria)+'</div>':'')+'</div><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+est.bg+';color:'+est.c+';flex-shrink:0">'+est.t+'</span></div>';
+      h+='<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">'+invThumb(it,46)+'<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700">'+esc(it.nombre)+(it.sku?' <span style="font-weight:400;color:#94a3b8;font-size:11px">'+esc(it.sku)+'</span>':'')+'</div>'+(it.categoria?'<div style="font-size:11px;color:#94a3b8">'+esc(it.categoria)+'</div>':'')+'</div><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+est.bg+';color:'+est.c+';flex-shrink:0">'+est.t+'</span></div>';
       h+='<div style="margin-top:6px"><span style="font-size:20px;font-weight:800">'+invFmt(qy)+'</span> <span style="font-size:12px;color:#64748b">'+esc(it.um||'u')+' · aquí (total '+invFmt(invStockItem(it.id))+')</span></div>';
       h+='<div style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:#64748b">Reorden en esta ubicación: <input type="number" step="any" value="'+esc(invReordenUbOf(it,f)||'')+'" onchange="invItemReordenUb(\''+it.id+'\',\''+f+'\',this.value)" style="width:74px;padding:4px 6px;border:1px solid #e5e7eb;border-radius:6px;font-size:12px"></div>';
       h+='<div style="display:flex;gap:6px;margin-top:8px"><button class="btn btn-green btn-sm" onclick="invMovAbrir(\'ENTRADA\',\''+it.id+'\',\''+f+'\')">➕ Cargar</button><button class="btn btn-ghost btn-sm" onclick="invMovAbrir(\'SALIDA\',\''+it.id+'\',\''+f+'\')">➖ Descontar</button><button class="btn btn-ghost btn-sm" onclick="invMovAbrir(\'TRASLADO\',\''+it.id+'\',\''+f+'\')">🔀</button><button class="btn btn-ghost btn-sm" onclick="invItemAbrir(\''+it.id+'\')" style="margin-left:auto">✏️</button></div>';
@@ -3057,7 +3058,7 @@ function invListaHTML(){
     var total=invStockItem(it.id),est=invEstado(it,total),valor=total*invNum(it.costo),s=invStockRaw()[it.id]||{};
     var porUb=Object.keys(s).filter(function(k){return s[k];}).map(function(k){var u=invUbic(k);return (u?esc(u.nombre):'?')+': '+invFmt(s[k]);}).join(' · ');
     h+='<div class="card" style="margin-bottom:6px;padding:10px 12px">';
-    h+='<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div><div style="font-size:14px;font-weight:700">'+esc(it.nombre)+(it.sku?' <span style="font-weight:400;color:#94a3b8;font-size:11px">'+esc(it.sku)+'</span>':'')+'</div>'+(it.categoria?'<div style="font-size:11px;color:#94a3b8">'+esc(it.categoria)+'</div>':'')+'</div><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+est.bg+';color:'+est.c+';flex-shrink:0">'+est.t+'</span></div>';
+    h+='<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">'+invThumb(it,46)+'<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700">'+esc(it.nombre)+(it.sku?' <span style="font-weight:400;color:#94a3b8;font-size:11px">'+esc(it.sku)+'</span>':'')+'</div>'+(it.categoria?'<div style="font-size:11px;color:#94a3b8">'+esc(it.categoria)+'</div>':'')+'</div><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+est.bg+';color:'+est.c+';flex-shrink:0">'+est.t+'</span></div>';
     h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px"><div><span style="font-size:20px;font-weight:800">'+invFmt(total)+'</span> <span style="font-size:12px;color:#64748b">'+esc(it.um||'u')+'</span></div><div style="font-size:11px;color:#64748b;text-align:right">'+(invNum(it.reorden)?'reorden '+invFmt(it.reorden):'')+(invNum(it.costo)?' · $'+invFmt(valor):'')+'</div></div>';
     if(porUb)h+='<div style="font-size:11px;color:#64748b;margin-top:3px">📍 '+porUb+'</div>';
     h+='<div style="display:flex;gap:6px;margin-top:8px"><button class="btn btn-green btn-sm" onclick="invMovAbrir(\'ENTRADA\',\''+it.id+'\')">➕ Cargar</button><button class="btn btn-ghost btn-sm" onclick="invMovAbrir(\'SALIDA\',\''+it.id+'\')">➖ Descontar</button><button class="btn btn-ghost btn-sm" onclick="invMovAbrir(\'TRASLADO\',\''+it.id+'\')">🔀</button><button class="btn btn-ghost btn-sm" onclick="invItemAbrir(\''+it.id+'\')" style="margin-left:auto">✏️</button></div>';
@@ -3100,7 +3101,7 @@ function invRenderCatalogo(){
     var id=it.id,total=invStockItem(id),qhere=f?invStockEn(id,f):total,est=f?invEstadoUb(it,qhere,f):invEstado(it,total);
     var ufCfg=f?invUbic(f):null;
     h+='<tr>';
-    h+='<td class="colfija"><div style="display:flex;align-items:center;gap:2px"><button onclick="invItemBorrar(\''+id+'\')" title="Eliminar" style="border:none;background:none;color:#dc2626;font-size:13px;cursor:pointer;padding:0 2px 0 6px">🗑</button>'+invCelI(id,'nombre',it.nombre)+'</div></td>';
+    h+='<td class="colfija"><div style="display:flex;align-items:center;gap:2px"><button onclick="invItemBorrar(\''+id+'\')" title="Eliminar" style="border:none;background:none;color:#dc2626;font-size:13px;cursor:pointer;padding:0 2px 0 6px">🗑</button>'+invThumb(it,30)+invCelI(id,'nombre',it.nombre)+'</div></td>';
     h+='<td style="min-width:110px">'+invCelI(id,'sku',it.sku)+'</td>';
     h+='<td style="min-width:130px">'+invCelI(id,'categoria',it.categoria)+'</td>';
     h+='<td style="min-width:70px">'+invCelI(id,'um',it.um)+'</td>';
@@ -3157,6 +3158,8 @@ function invItemAbrir(id){
   h+='<div class="sfield"><label>Nombre *</label><input type="text" id="iv-nombre" value="'+(it?esc(it.nombre):'')+'" placeholder="Ej: Viga rack light 2.00"></div>';
   h+='<div class="sfield-row"><div class="sfield"><label>SKU / código</label><input type="text" id="iv-sku" value="'+(it?esc(it.sku||''):'')+'" placeholder="opcional"></div><div class="sfield"><label>Unidad</label><input type="text" id="iv-um" value="'+(it?esc(it.um||''):'')+'" placeholder="u, m, kg, par..."></div></div>';
   h+='<div class="sfield"><label>Categoría</label><input type="text" id="iv-cat" value="'+(it?esc(it.categoria||''):'')+'" placeholder="Ej: Vigas, Marcos, Tornillería"></div>';
+  if(it)h+='<div class="sfield"><label>Foto del producto</label><div id="iv-foto-box" style="display:flex;gap:12px;align-items:center">'+invThumb(it,64)+'<div>'+invFotoBtn(it.id,it.foto?'Cambiar foto':'Tomar foto')+'</div></div></div>';
+  else h+='<div style="font-size:11px;color:var(--muted);margin:-6px 0 12px">La foto se agrega después de guardar, o al contarlo en 📋 Conteo.</div>';
   h+='<div class="sfield-row"><div class="sfield"><label>Costo (USD)</label><input type="number" step="any" id="iv-costo" value="'+(it?esc(it.costo||''):'')+'"></div><div class="sfield"><label>Precio (USD)</label><input type="number" step="any" id="iv-precio" value="'+(it?esc(it.precio||''):'')+'"></div></div>';
   h+='<div class="sfield-row"><div class="sfield"><label>Stock mínimo</label><input type="number" step="any" id="iv-min" value="'+(it?esc(it.minimo||''):'')+'"></div><div class="sfield"><label>Punto de reorden</label><input type="number" step="any" id="iv-reorden" value="'+(it?esc(it.reorden||''):'')+'"></div></div>';
   if(!it){
@@ -3239,6 +3242,360 @@ function invCargarDesdeOrden(o,pedNum){
   });
   guardarDB();toast('Cargados '+n+' ítem(s) al inventario ('+ub.nombre+')','ok');
 }
+// ═══════════════════════════════════════════════════════════
+// CONTEO FÍSICO / CARGA INICIAL (dentro de Inventario)
+//
+// Dos modos:
+//  · 'inicial' — primera carga. No hay ciego ni recuento porque
+//    no hay contra qué comparar. Cuentas, fotografías y cargas.
+//  · 'conteo'  — verificación. Congela el stock de la ubicación,
+//    el que cuenta NO ve esa cantidad, y las diferencias que pasan
+//    los DOS umbrales (% y unidades) caen en cola de recuento.
+//
+// Las fotos se guardan en el PRODUCTO (it.foto), no en el conteo:
+// se toman una vez y quedan para siempre en ficha, existencias y
+// catálogo. Suben por el mismo webhook de Render que ya usan las
+// fotos de instalación (las llaves de Cloudinary no tocan el front).
+// ═══════════════════════════════════════════════════════════
+var INV_CT_BUSCA='',INV_CT_BUF='0',INV_CT_ITEM=null;
+
+function invConteo(){var inv=invDB();if(!inv.conteo||typeof inv.conteo!=='object')inv.conteo={activo:null,historial:[]};if(!Array.isArray(inv.conteo.historial))inv.conteo.historial=[];return inv.conteo;}
+function invCtAct(){return invConteo().activo;}
+function invCtEsAdmin(){return !!(SESSION&&SESSION.rol==='admin');}
+function invCtYo(){return SESSION?SESSION.nombre:'';}
+function invCtLineaNueva(teorico){return {estado:'pendiente',qty:null,usuario:'',ts:0,qty2:null,usuario2:'',teorico:invNum(teorico),nota:''};}
+function invCtLinea(itemId){var a=invCtAct();if(!a)return null;if(!a.lineas)a.lineas={};if(!a.lineas[itemId])a.lineas[itemId]=invCtLineaNueva(0);return a.lineas[itemId];}
+function invCtFisico(l){return (l.qty2!=null?l.qty2:l.qty);}
+function invCtDiff(l){var f=invCtFisico(l);return f==null?null:Math.round((f-invNum(l.teorico))*100)/100;}
+function invCtSupera(a,l){var f=invCtFisico(l);if(f==null)return false;var t=invNum(l.teorico),d=Math.abs(f-t);var pct=t>0?(d/t*100):(d>0?100:0);return d>invNum(a.umbralUnid)&&pct>invNum(a.umbralPct);}
+
+// ── FOTOS ──────────────────────────────────────────────────
+// Se comprime en el navegador antes de subir: la foto de un celular
+// pesa 4MB y dentro de un galpón con señal mala eso no sube nunca.
+function invComprimir(file,cb){
+  try{
+    var url=URL.createObjectURL(file),img=new Image();
+    img.onload=function(){
+      var max=1000,w=img.width,h=img.height;
+      if(w>h){if(w>max){h=Math.round(h*max/w);w=max;}}else{if(h>max){w=Math.round(w*max/h);h=max;}}
+      var cv=document.createElement('canvas');cv.width=w;cv.height=h;
+      cv.getContext('2d').drawImage(img,0,0,w,h);
+      URL.revokeObjectURL(url);
+      try{cb(cv.toDataURL('image/jpeg',0.72));}catch(e){cb(null);}
+    };
+    img.onerror=function(){URL.revokeObjectURL(url);cb(null);};
+    img.src=url;
+  }catch(e){cb(null);}
+}
+function invThumb(it,px){
+  px=px||44;
+  if(it&&it.foto)return '<img src="'+esc(it.foto)+'" onclick="event.stopPropagation();invFotoVer(\''+esc(it.foto)+'\')" style="width:'+px+'px;height:'+px+'px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;flex-shrink:0;cursor:pointer" alt="">';
+  return '<div style="width:'+px+'px;height:'+px+'px;border-radius:8px;border:1px dashed #cbd5e1;background:#f8fafc;display:flex;align-items:center;justify-content:center;font-size:'+Math.max(11,Math.round(px*0.42))+'px;color:#cbd5e1;flex-shrink:0">📷</div>';
+}
+function invFotoVer(url){window.open(url,'_blank');}
+function invFotoBtn(itemId,label){
+  return '<input type="file" accept="image/*" capture="environment" id="invfoto-'+itemId+'" style="display:none" onchange="invFotoSubir(\''+itemId+'\',this)">'
+    +'<button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'invfoto-'+itemId+'\').click()">📷 '+label+'</button>';
+}
+function invFotoSubir(itemId,inp){
+  var file=inp.files&&inp.files[0];inp.value='';if(!file)return;
+  var it=invItem(itemId);if(!it)return;
+  toast('Preparando la foto...','');
+  invComprimir(file,function(dataUrl){
+    if(!dataUrl){toast('No se pudo leer esa imagen','err');return;}
+    toast('Subiendo foto...','');
+    fetch('https://veoyoca-webhook.onrender.com/subir-pdf-orden',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify({data:dataUrl,mediaType:'image/jpeg',nombre:'producto_'+(it.sku||it.id)})})
+    .then(function(r){return r.json();})
+    .then(function(res){
+      if(res&&res.ok&&res.url){
+        var x=invItem(itemId);if(x)x.foto=res.url;
+        guardarDB();toast('Foto guardada ✓','ok');invCtRefrescarFoto(itemId);
+      }else toast('No se pudo subir: '+((res&&res.error)||'error'),'err');
+    })
+    .catch(function(){toast('Sin señal — la foto no subió. Reinténtalo con conexión (la cantidad sí se guardó).','err');});
+  });
+}
+function invCtRefrescarFoto(itemId){
+  var abierto=document.getElementById('modal-inv')&&document.getElementById('modal-inv').classList.contains('open');
+  if(abierto&&INV_CT_ITEM===itemId){invCtFicha(itemId,true);return;}
+  if(abierto&&document.getElementById('iv-id')){var box=document.getElementById('iv-foto-box');if(box){var it=invItem(itemId);box.innerHTML=invThumb(it,64)+'<div>'+invFotoBtn(itemId,it&&it.foto?'Cambiar foto':'Tomar foto')+'</div>';}return;}
+  if(TAB==='inventario')renderInventario(document.getElementById('content'));
+}
+
+// ── VISTA PRINCIPAL ────────────────────────────────────────
+function invRenderConteo(){var a=invCtAct();return a?invCtActivoHTML(a):invCtInicioHTML();}
+function invCtInicioHTML(){
+  var hist=invConteo().historial;
+  var h='<div class="section-pad" style="padding-top:0">';
+  if(invCtEsAdmin()){
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">';
+    h+='<button onclick="invCtIniciar(\'inicial\')" style="border:none;background:linear-gradient(135deg,#065f46,#16a34a);color:#fff;border-radius:12px;padding:16px 12px;text-align:left;cursor:pointer"><div style="font-size:24px">📥</div><div style="font-size:14px;font-weight:700;margin-top:6px">Carga inicial</div><div style="font-size:11px;opacity:.85;margin-top:3px;line-height:1.35">Primera vez: recorres, cuentas, fotografías y cargas</div></button>';
+    h+='<button onclick="invCtIniciar(\'conteo\')" style="border:none;background:linear-gradient(135deg,#1e1b4b,#4338ca);color:#fff;border-radius:12px;padding:16px 12px;text-align:left;cursor:pointer"><div style="font-size:24px">📋</div><div style="font-size:14px;font-weight:700;margin-top:6px">Conteo ciego</div><div style="font-size:11px;opacity:.85;margin-top:3px;line-height:1.35">Verifica contra el sistema y detecta las fugas</div></button>';
+    h+='</div>';
+    h+='<div style="font-size:11px;color:var(--muted);margin-bottom:12px">Si estás cargando el inventario desde cero, usa <b>Carga inicial</b>. El conteo ciego tiene sentido cuando el sistema ya tiene números que verificar.</div>';
+  }else{
+    h+='<div class="empty"><div class="empty-icon">📋</div>No hay ningún conteo abierto.<br><span style="font-size:12px">Pídele a un administrador que abra uno.</span></div>';
+  }
+  if(hist.length){
+    h+='<div class="sec-label">Conteos anteriores</div>';
+    hist.slice(0,12).forEach(function(x){var u=invUbic(x.ubic);
+      h+='<div class="card" style="margin-bottom:6px;padding:9px 12px"><div style="font-size:13px;font-weight:700">'+(x.modo==='inicial'?'📥 ':'📋 ')+esc(x.nombre||'')+'</div><div style="font-size:11px;color:#64748b;margin-top:2px">'+(u?esc(u.nombre):'?')+' · '+(x.lineas||0)+' producto(s) · '+(x.ajustados||0)+' aplicado(s) · cerrado por '+esc(x.cerradoPor||'')+' el '+esc(x.cerradoEn||'')+'</div></div>';});
+  }
+  return h+'</div>';
+}
+function invCtActivoHTML(a){
+  var ub=invUbic(a.ubic),ids=Object.keys(a.lineas||{});
+  var cont=0,recu=0,ajus=0,pend=0;
+  ids.forEach(function(k){var e=a.lineas[k].estado;if(e==='contado')cont++;else if(e==='recuento')recu++;else if(e==='ajustado')ajus++;else pend++;});
+  var listos=cont+ajus,pct=ids.length?Math.round(listos/ids.length*100):0;
+  var ini=a.modo==='inicial';
+  var h='<div class="section-pad" style="padding-top:0">';
+  h+='<div style="background:'+(ini?'linear-gradient(135deg,#065f46,#16a34a)':'linear-gradient(135deg,#1e1b4b,#4338ca)')+';border-radius:12px;padding:14px;margin-bottom:10px;color:#fff">';
+  h+='<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div style="min-width:0"><div style="font-size:15px;font-weight:700">'+(ini?'📥 ':'📋 ')+esc(a.nombre)+'</div><div style="font-size:11px;opacity:.75;margin-top:2px">'+(ub?esc(ub.nombre):'?')+' · abierto por '+esc(a.creadoPor)+' el '+esc(a.fecha)+'</div></div><div style="font-size:24px;font-weight:800;flex-shrink:0">'+pct+'%</div></div>';
+  h+='<div style="height:8px;background:rgba(255,255,255,.18);border-radius:99px;overflow:hidden;margin-top:10px"><div style="height:100%;width:'+pct+'%;background:#bbf7d0"></div></div>';
+  h+='<div style="font-size:11px;opacity:.8;margin-top:5px">'+listos+' de '+ids.length+' contados'+(recu?' · '+recu+' por recontar':'')+(pend?' · '+pend+' sin tocar':'')+'</div>';
+  h+='</div>';
+  if(!ini)h+='<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 10px;font-size:11px;color:#1d4ed8;margin-bottom:8px">🙈 <b>Conteo ciego:</b> la lista no muestra la cantidad del sistema. Se manda a recuento lo que pase <b>'+invFmt(a.umbralPct)+'%</b> Y <b>'+invFmt(a.umbralUnid)+' unidades</b> de diferencia.</div>';
+  h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"><button class="btn btn-dark btn-sm" onclick="invCtNuevoProducto()">➕ Producto nuevo</button>';
+  if(invCtEsAdmin())h+='<button class="btn btn-blue btn-sm" onclick="invCtRevisar()">🔍 Revisar y aplicar</button><button class="btn btn-ghost btn-sm" onclick="invCtCSV()">📄 CSV</button><button class="btn btn-red btn-sm" onclick="invCtCerrar()">Cerrar</button>';
+  h+='</div>';
+  h+='<input type="text" placeholder="Buscar producto..." value="'+esc(INV_CT_BUSCA)+'" oninput="INV_CT_BUSCA=this.value;invCtRefrescarLista()" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;margin-bottom:8px">';
+  h+='<div id="ct-lista">'+invCtListaHTML()+'</div>';
+  return h+'</div>';
+}
+function invCtRefrescarLista(){var el=document.getElementById('ct-lista');if(el)el.innerHTML=invCtListaHTML();}
+function invCtListaHTML(){
+  var a=invCtAct();if(!a)return '';
+  var q=INV_CT_BUSCA.toLowerCase().trim();
+  var arr=Object.keys(a.lineas||{}).map(function(k){return invItem(k);}).filter(function(it){return it&&(!q||((it.nombre||'')+' '+(it.sku||'')).toLowerCase().indexOf(q)>=0);});
+  arr.sort(function(x,y){return (x.nombre||'').localeCompare(y.nombre||'');});
+  if(!arr.length)return '<div class="empty"><div class="empty-icon">🔍</div>Sin productos aquí. Usa <b>➕ Producto nuevo</b> para agregar uno.</div>';
+  var h='';
+  arr.forEach(function(it){
+    var l=a.lineas[it.id];
+    var cfg=l.estado==='recuento'?{b:'#fef3c7',c:'#92400e',t:'2º'}:l.estado==='ajustado'?{b:'#dbeafe',c:'#1d4ed8',t:'✓✓'}:l.estado==='contado'?{b:'#dcfce7',c:'#166534',t:'✓'}:{b:'#f1f5f9',c:'#64748b',t:'·'};
+    var pie;
+    if(l.estado==='pendiente')pie='sin contar';
+    else if(l.estado==='recuento')pie='falta el segundo conteo (otra persona)';
+    else if(a.modo==='inicial')pie=invFmt(invCtFisico(l))+' '+esc(it.um||'u')+' · '+esc(l.usuario||'');
+    else pie='contado por '+esc(l.usuario2||l.usuario||'');
+    h+='<div class="card" style="margin-bottom:6px;padding:8px 10px;display:flex;gap:10px;align-items:center;cursor:pointer" onclick="invCtFicha(\''+it.id+'\')">'
+      +invThumb(it,52)
+      +'<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700">'+esc(it.nombre)+'</div>'
+      +(it.sku?'<div style="font-size:11px;color:#94a3b8">'+esc(it.sku)+'</div>':'')
+      +'<div style="font-size:11px;color:#64748b;margin-top:1px">'+pie+'</div></div>'
+      +'<span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;background:'+cfg.b+';color:'+cfg.c+';flex-shrink:0">'+cfg.t+'</span></div>';
+  });
+  return h;
+}
+
+// ── ABRIR UN CONTEO ────────────────────────────────────────
+function invCtIniciar(modo){
+  var inv=invDB();
+  if(!inv.ubicaciones.length){toast('Primero crea una ubicación en 🏬 Ubicaciones','err');return;}
+  var ini=modo==='inicial';
+  var h='<div class="sheet-head"><h2>'+(ini?'📥 Carga inicial':'📋 Nuevo conteo ciego')+'</h2><button class="sheet-close" onclick="cerrarModal(\'modal-inv\')">✕</button></div><div class="sheet-body">';
+  h+='<input type="hidden" id="ct-modo" value="'+modo+'">';
+  h+='<div class="sfield"><label>Nombre del conteo</label><input type="text" id="ct-nombre" value="'+(ini?'Carga inicial':'Conteo')+' '+fecha()+'"></div>';
+  h+='<div class="sfield"><label>Ubicación *</label><select id="ct-ubic">'+inv.ubicaciones.map(function(u){return '<option value="'+u.id+'">'+(u.tipo==='exhibicion'?'🛍️ ':'🏬 ')+esc(u.nombre)+'</option>';}).join('')+'</select></div>';
+  if(!ini){
+    h+='<div class="sfield-row"><div class="sfield"><label>Umbral %</label><input type="number" step="any" id="ct-upct" value="5"></div><div class="sfield"><label>Umbral unidades</label><input type="number" step="any" id="ct-uuni" value="3"></div></div>';
+    h+='<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:9px 11px;font-size:12px;color:#1d4ed8">Se congela el stock actual de esa ubicación. Quien cuenta <b>no ve</b> esa cantidad. Un producto va a recuento solo si la diferencia pasa <b>ambos</b> umbrales, así no pierdes tiempo con el ruido normal.</div>';
+  }else{
+    h+='<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:9px 11px;font-size:12px;color:#166534">Para cargar el inventario por primera vez: recorres, cuentas y fotografías. Sin ciego ni recuento, porque todavía no hay contra qué comparar.</div>';
+  }
+  h+='</div><div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal(\'modal-inv\')">Cancelar</button><button class="btn btn-blue" onclick="invCtCrear()">Abrir</button></div>';
+  invModal(h);
+}
+function invCtCrear(){
+  var modo=document.getElementById('ct-modo').value;
+  var nombre=(document.getElementById('ct-nombre').value||'').trim()||('Conteo '+fecha());
+  var ubic=document.getElementById('ct-ubic').value;
+  if(!ubic){toast('Elige una ubicación','err');return;}
+  var ini=modo==='inicial',lineas={},sm=invStockRaw(),n=0;
+  invDB().items.forEach(function(it){
+    var t=(sm[it.id]||{})[ubic]||0;
+    if(!ini&&t<=0)return;
+    lineas[it.id]=invCtLineaNueva(ini?0:t);n++;
+  });
+  if(!ini&&!n){toast('Esa ubicación no tiene stock que contar. Usa Carga inicial.','err');return;}
+  invConteo().activo={id:uid(),nombre:nombre,modo:modo,ubic:ubic,
+    umbralPct:ini?0:invNum(document.getElementById('ct-upct').value),
+    umbralUnid:ini?0:invNum(document.getElementById('ct-uuni').value),
+    creadoPor:invCtYo(),fecha:fecha(),hora:hora(),ts:Date.now(),lineas:lineas};
+  guardarDB();cerrarModal('modal-inv');INV_CT_BUSCA='';renderInventario(document.getElementById('content'));
+  toast((ini?'Carga inicial abierta':'Conteo abierto')+' — '+n+' producto(s)','ok');
+}
+function invCtNuevoProducto(){
+  var a=invCtAct();if(!a)return;
+  var nombre=prompt('Nombre del producto nuevo:');if(!nombre||!nombre.trim())return;
+  var it={id:uid(),nombre:nombre.trim(),sku:'',um:'u',categoria:'',costo:0,precio:0,minimo:0,reorden:0,creado:fecha()};
+  invDB().items.push(it);
+  a.lineas[it.id]=invCtLineaNueva(0);
+  guardarDB();invCtFicha(it.id);
+}
+
+// ── FICHA DE CONTEO (teclado + foto) ───────────────────────
+function invCtFicha(itemId,mantener){
+  var a=invCtAct();if(!a)return;
+  var it=invItem(itemId);if(!it)return;
+  var l=invCtLinea(itemId);
+  if(a.modo==='conteo'&&l.estado==='recuento'&&l.usuario===invCtYo()){
+    toast('Este lo recuenta otra persona — así el segundo conteo sirve de verificación','err');return;
+  }
+  INV_CT_ITEM=itemId;
+  if(!mantener)INV_CT_BUF=(a.modo==='inicial'&&l.qty!=null)?String(l.qty):'0';
+  var esRec=l.estado==='recuento';
+  var h='<div class="sheet-head"><h2 style="font-size:15px;line-height:1.25">'+esc(it.nombre)+'</h2><button class="sheet-close" onclick="invCtCerrarFicha()">✕</button></div><div class="sheet-body" style="padding-bottom:10px">';
+  h+='<div id="iv-foto-box" style="display:flex;gap:12px;align-items:center;margin-bottom:10px">'+invThumb(it,84)
+    +'<div style="flex:1;min-width:0"><div style="font-size:12px;color:#64748b">'+(it.sku?esc(it.sku)+' · ':'')+esc(it.um||'u')+(it.categoria?' · '+esc(it.categoria):'')+'</div>'
+    +'<div style="margin-top:7px">'+invFotoBtn(it.id,it.foto?'Cambiar foto':'Tomar foto')+'</div>'
+    +(it.foto?'':'<div style="font-size:10px;color:#94a3b8;margin-top:4px">Foto del producto, no del estante lleno</div>')+'</div></div>';
+  if(a.modo==='conteo')h+='<div style="background:'+(esRec?'#fef3c7':'#eff6ff')+';border:1px solid '+(esRec?'#fde68a':'#bfdbfe')+';border-radius:8px;padding:7px 10px;font-size:11px;color:'+(esRec?'#92400e':'#1d4ed8')+';margin-bottom:6px">'+(esRec?'🔁 <b>Recuento.</b> Cuenta de nuevo desde cero, sin mirar lo anterior.':'🙈 Escribe lo que hay en el estante. No verás el número del sistema.')+'</div>';
+  h+='<div style="text-align:center;padding:8px 0 2px"><div id="ct-num" style="font-size:58px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums">'+esc(INV_CT_BUF)+'</div><div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#94a3b8;margin-top:4px">'+esc(it.um||'unidades')+' contadas</div></div>';
+  h+='<div style="display:flex;gap:6px;margin:10px 0"><button class="btn btn-ghost btn-sm" style="flex:1" onclick="invCtSuma(1)">+1</button><button class="btn btn-ghost btn-sm" style="flex:1" onclick="invCtSuma(5)">+5</button><button class="btn btn-ghost btn-sm" style="flex:1" onclick="invCtSuma(10)">+10</button><button class="btn btn-ghost btn-sm" style="flex:1" onclick="invCtTeclaPulsa(\'C\')">Borrar</button></div>';
+  h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px">';
+  ['7','8','9','4','5','6','1','2','3','.','0','B'].forEach(function(t){h+=invCtTecla(t);});
+  h+='</div>';
+  h+='</div><div class="sheet-foot"><button class="btn btn-ghost" onclick="invCtCerrarFicha()">Cerrar</button><button class="btn btn-green" onclick="invCtGuardar()">Guardar y seguir</button></div>';
+  invModal(h);
+}
+function invCtTecla(t){return '<button onclick="invCtTeclaPulsa(\''+t+'\')" style="padding:15px 0;border:1px solid #e5e7eb;background:#fff;border-radius:8px;font-size:22px;font-weight:600;cursor:pointer;font-variant-numeric:tabular-nums">'+(t==='B'?'←':t)+'</button>';}
+function invCtPintar(){var el=document.getElementById('ct-num');if(el)el.textContent=INV_CT_BUF;}
+function invCtTeclaPulsa(t){
+  if(t==='C')INV_CT_BUF='0';
+  else if(t==='B')INV_CT_BUF=INV_CT_BUF.length>1?INV_CT_BUF.slice(0,-1):'0';
+  else if(t==='.'){if(INV_CT_BUF.indexOf('.')<0)INV_CT_BUF=INV_CT_BUF+'.';}
+  else INV_CT_BUF=(INV_CT_BUF==='0'?'':INV_CT_BUF)+t;
+  if(INV_CT_BUF.length>9)INV_CT_BUF=INV_CT_BUF.slice(0,9);
+  invCtPintar();
+}
+function invCtSuma(n){INV_CT_BUF=String(Math.round((invNum(INV_CT_BUF)+n)*100)/100);invCtPintar();}
+function invCtCerrarFicha(){cerrarModal('modal-inv');INV_CT_ITEM=null;renderInventario(document.getElementById('content'));}
+function invCtGuardar(){
+  var a=invCtAct();if(!a||!INV_CT_ITEM)return;
+  var q=invNum(INV_CT_BUF);
+  if(q<0){toast('La cantidad no puede ser negativa','err');return;}
+  var l=invCtLinea(INV_CT_ITEM);
+  if(a.modo==='conteo'&&l.estado==='recuento'){l.qty2=q;l.usuario2=invCtYo();l.estado='contado';}
+  else{l.qty=q;l.usuario=invCtYo();l.ts=Date.now();l.estado='contado';}
+  guardarDB();
+  var sig=invCtSiguiente(INV_CT_ITEM);
+  if(sig){toast('Guardado ✓','ok');invCtFicha(sig);}
+  else{toast('Guardado ✓ — no quedan pendientes','ok');invCtCerrarFicha();}
+}
+function invCtSiguiente(actual){
+  var a=invCtAct();if(!a)return null;
+  var yo=invCtYo();
+  var arr=Object.keys(a.lineas).map(function(k){return invItem(k);}).filter(Boolean).sort(function(x,y){return (x.nombre||'').localeCompare(y.nombre||'');});
+  var libre=function(it){var l=a.lineas[it.id];if(it.id===actual)return false;if(l.estado==='pendiente')return true;return l.estado==='recuento'&&l.usuario!==yo;};
+  var i=-1;for(var k=0;k<arr.length;k++){if(arr[k].id===actual){i=k;break;}}
+  for(var j=i+1;j<arr.length;j++){if(libre(arr[j]))return arr[j].id;}
+  for(var m=0;m<arr.length;m++){if(libre(arr[m]))return arr[m].id;}
+  return null;
+}
+
+// ── REVISIÓN Y AJUSTE (solo admin) ─────────────────────────
+function invCtRevisar(){
+  var a=invCtAct();if(!a)return;
+  if(!invCtEsAdmin()){toast('Solo un administrador revisa y aplica','err');return;}
+  var rows=Object.keys(a.lineas).map(function(k){return {it:invItem(k),l:a.lineas[k]};}).filter(function(x){return x.it&&x.l.estado!=='pendiente'&&x.l.estado!=='recuento';});
+  rows.sort(function(x,y){return Math.abs(invCtDiff(y.l)||0)-Math.abs(invCtDiff(x.l)||0);});
+  var ub=invUbic(a.ubic);
+  var h='<div class="sheet-head"><h2>🔍 Revisar y aplicar</h2><button class="sheet-close" onclick="cerrarModal(\'modal-inv\')">✕</button></div><div class="sheet-body">';
+  if(!rows.length)h+='<div class="empty"><div class="empty-icon">📋</div>Todavía no hay productos contados por revisar.</div>';
+  else{
+    h+='<div style="font-size:11px;color:var(--muted);margin-bottom:8px">'+(a.modo==='inicial'?'Aplicar deja el stock de <b>'+esc(ub?ub.nombre:'')+'</b> igual a lo contado.':'<b>Sist.</b> = lo congelado al abrir el conteo. <b>Físico</b> = lo contado. Aplicar genera un movimiento de AJUSTE que queda en tu historial.')+'</div>';
+    var nAl=rows.filter(function(r){return a.modo==='conteo'&&r.l.estado==='contado'&&r.l.qty2==null&&invCtSupera(a,r.l);}).length;
+    if(nAl)h+='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 10px;font-size:11px;color:#92400e;margin-bottom:8px">'+nAl+' producto(s) pasan el umbral. Recuéntalos con otra persona antes de tocar el sistema.</div>';
+    h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:400px">';
+    h+='<thead><tr style="border-bottom:2px solid #111"><th style="text-align:left;padding:5px 4px">Producto</th><th style="text-align:right;padding:5px 4px">Sist.</th><th style="text-align:right;padding:5px 4px">Físico</th><th style="text-align:right;padding:5px 4px">Dif.</th><th style="padding:5px 4px"></th></tr></thead><tbody>';
+    rows.forEach(function(r){
+      var f=invCtFisico(r.l),d=invCtDiff(r.l);
+      var alerta=a.modo==='conteo'&&r.l.estado==='contado'&&r.l.qty2==null&&invCtSupera(a,r.l);
+      var col=d<0?'#dc2626':d>0?'#16a34a':'#64748b';
+      h+='<tr style="border-bottom:1px solid #eee"><td style="padding:5px 4px">'+esc(r.it.nombre)+(r.l.qty2!=null?' <span style="font-size:10px;color:#7c3aed">2º</span>':'')+'</td>'
+        +'<td style="text-align:right;padding:5px 4px">'+invFmt(r.l.teorico)+'</td>'
+        +'<td style="text-align:right;padding:5px 4px;font-weight:700">'+invFmt(f)+'</td>'
+        +'<td style="text-align:right;padding:5px 4px;font-weight:700;color:'+col+'">'+(d>0?'+':'')+invFmt(d)+'</td>'
+        +'<td style="padding:5px 4px;text-align:right;white-space:nowrap">'+(r.l.estado==='ajustado'?'<span style="font-size:10px;color:#16a34a;font-weight:700">✓ aplicado</span>':(alerta?'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 7px" onclick="invCtRecontar(\''+r.it.id+'\')">Recontar</button>':'<button class="btn btn-blue btn-sm" style="font-size:11px;padding:3px 7px" onclick="invCtAplicar(\''+r.it.id+'\')">Aplicar</button>'))+'</td></tr>';
+    });
+    h+='</tbody></table></div>';
+  }
+  h+='</div><div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal(\'modal-inv\')">Cerrar</button>'+(rows.length?'<button class="btn btn-green" onclick="invCtAplicarTodo()">Aplicar todo</button>':'')+'</div>';
+  invModal(h);
+}
+function invCtRecontar(itemId){
+  var a=invCtAct();if(!a)return;var l=a.lineas[itemId];if(!l)return;
+  l.estado='recuento';l.qty2=null;l.usuario2='';
+  guardarDB();invCtRevisar();toast('Mandado a recuento — lo cuenta otra persona','ok');
+}
+function invCtAplicar(itemId){
+  var a=invCtAct();if(!a)return;
+  var l=a.lineas[itemId],it=invItem(itemId);if(!l||!it)return;
+  var f=invCtFisico(l);if(f==null){toast('Ese producto aún no se ha contado','err');return;}
+  var actual=invStockEn(itemId,a.ubic),delta=Math.round((f-actual)*100)/100;
+  if(delta===0){l.estado='ajustado';guardarDB();invCtRevisar();toast('Ya coincidía — marcado','ok');return;}
+  var motivo=prompt('Motivo del ajuste de "'+it.nombre+'"\n('+invFmt(actual)+' → '+invFmt(f)+' '+(it.um||'u')+')\n\nEj: despacho no descargado, recepción no cargada, material dañado, ubicado en otra zona, merma sin explicación.',(a.modo==='inicial'?'Carga inicial':'Conteo físico')+' · '+a.nombre);
+  if(motivo===null)return;
+  if(!motivo.trim()){toast('El motivo es obligatorio: sin razón no hay rastro que auditar','err');return;}
+  invMover('AJUSTE',itemId,a.ubic,delta,{motivo:motivo.trim()});
+  l.estado='ajustado';
+  guardarDB();invCtRevisar();toast('Ajustado ✓','ok');
+}
+function invCtAplicarTodo(){
+  var a=invCtAct();if(!a)return;
+  var ks=Object.keys(a.lineas).filter(function(k){return a.lineas[k].estado==='contado';});
+  if(!ks.length){toast('No hay líneas contadas por aplicar','err');return;}
+  if(a.modo==='conteo'){
+    var falt=ks.filter(function(k){return a.lineas[k].qty2==null&&invCtSupera(a,a.lineas[k]);});
+    if(falt.length&&!confirm(falt.length+' línea(s) pasan el umbral y deberían recontarse.\n\n¿Aplicar todo igual?'))return;
+  }
+  var ub=invUbic(a.ubic);
+  if(!confirm('¿Aplicar '+ks.length+' línea(s) al stock de "'+((ub&&ub.nombre)||'')+'"?\n\nGenera movimientos de AJUSTE con motivo automático.'))return;
+  var n=0,motivo=(a.modo==='inicial'?'Carga inicial':'Conteo físico')+' · '+a.nombre;
+  ks.forEach(function(k){
+    var l=a.lineas[k],f=invCtFisico(l);if(f==null)return;
+    var delta=Math.round((f-invStockEn(k,a.ubic))*100)/100;
+    if(delta!==0){invMover('AJUSTE',k,a.ubic,delta,{motivo:motivo});n++;}
+    l.estado='ajustado';
+  });
+  guardarDB();cerrarModal('modal-inv');renderInventario(document.getElementById('content'));
+  toast(n+' ajuste(s) aplicados al stock ✓','ok');
+}
+function invCtCerrar(){
+  var a=invCtAct();if(!a)return;
+  var ids=Object.keys(a.lineas||{});
+  var sinAplicar=ids.filter(function(k){return a.lineas[k].estado==='contado';}).length;
+  var pend=ids.filter(function(k){var e=a.lineas[k].estado;return e==='pendiente'||e==='recuento';}).length;
+  var msg='¿Cerrar "'+a.nombre+'"?';
+  if(pend)msg+='\n\n• Quedan '+pend+' producto(s) sin contar o sin recontar.';
+  if(sinAplicar)msg+='\n\n• Hay '+sinAplicar+' línea(s) contadas SIN aplicar al stock. Si cierras, esos números se pierden. Baja el CSV antes si los quieres.';
+  if(!confirm(msg))return;
+  var ajus=ids.filter(function(k){return a.lineas[k].estado==='ajustado';}).length;
+  var c=invConteo();
+  c.historial.unshift({id:a.id,nombre:a.nombre,modo:a.modo,ubic:a.ubic,fecha:a.fecha,creadoPor:a.creadoPor,cerradoPor:invCtYo(),cerradoEn:fecha(),lineas:ids.length,ajustados:ajus});
+  if(c.historial.length>40)c.historial=c.historial.slice(0,40);
+  c.activo=null;
+  guardarDB();renderInventario(document.getElementById('content'));toast('Conteo cerrado','ok');
+}
+function invCtCSV(){
+  var a=invCtAct();if(!a)return;
+  var ub=invUbic(a.ubic);
+  var rows=[['Producto','SKU','Unidad','Ubicacion','Sistema','Fisico','Diferencia','Conteo 1','Quien 1','Conteo 2','Quien 2','Estado','Foto']];
+  Object.keys(a.lineas).forEach(function(k){
+    var it=invItem(k),l=a.lineas[k];if(!it)return;
+    var f=invCtFisico(l);
+    rows.push([it.nombre,it.sku||'',it.um||'u',(ub&&ub.nombre)||'',l.teorico,f==null?'':f,f==null?'':(f-invNum(l.teorico)),l.qty==null?'':l.qty,l.usuario||'',l.qty2==null?'':l.qty2,l.usuario2||'',l.estado,it.foto||'']);
+  });
+  var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
+  var el=document.createElement('a');
+  el.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
+  el.download='conteo_'+String(a.nombre||'').replace(/\W+/g,'_')+'_'+fecha().replace(/\//g,'-')+'.csv';
+  el.click();
+}
+// ═══════════════ FIN CONTEO FÍSICO ═══════════════
+
 function renderPlanIA(c){var pends=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO';});var apikey=localStorage.getItem('veo_apikey')||'';c.innerHTML='<div class="stats-bar"><div class="stat"><div class="stat-v">'+pends.length+'</div><div class="stat-l">pendientes</div></div><div class="stat"><div class="stat-v" style="color:#fca5a5">'+pends.filter(function(p){return clasif(p)==='vencido';}).length+'</div><div class="stat-l">vencidos</div></div><div class="stat"><div class="stat-v" style="color:#fcd34d">'+pends.filter(function(p){return clasif(p)==='urgente';}).length+'</div><div class="stat-l">urgentes</div></div><div class="stat"><div class="stat-v">'+ [...new Set(pends.map(function(p){return p.ciudad||'?';}))].length+'</div><div class="stat-l">ciudades</div></div></div><div style="padding:14px">'+(!apikey?'<div style="background:#fff;border:2px solid #f59e0b;border-radius:12px;padding:16px;margin-bottom:14px"><div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px">CONFIGURAR API KEY</div><input type="password" id="ia-keyinput" placeholder="sk-ant-api03-..." style="width:100%;padding:10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;margin-bottom:8px"><button class="btn btn-dark" style="width:100%" onclick="guardarAPIKey()">Guardar clave</button></div>':'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:12px;color:#16a34a;font-weight:600">API Key configurada</div><button onclick="cambiarAPIKey()" style="background:none;border:none;font-size:11px;color:#6b7280;cursor:pointer;text-decoration:underline">Cambiar</button></div>')+'<div style="background:linear-gradient(135deg,#1a1a2e,#2d2d5e);border-radius:14px;padding:20px;margin-bottom:14px;text-align:center"><div style="font-size:28px;margin-bottom:8px">IA</div><div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:4px">Plan de Entregas con IA</div><div style="color:rgba(255,255,255,.6);font-size:12px;margin-bottom:16px">Claude analiza tus '+pends.length+' pedidos y arma el plan optimo</div><button class="btn btn-green" style="width:100%;padding:13px;font-size:15px;font-weight:700" onclick="generarPlanIA()" id="btn-ia"'+(!apikey?' disabled':'')+'>'+(apikey?'Generar plan inteligente':'Configura tu API Key primero')+'</button></div><div id="ia-resultado"></div></div>';}
 function guardarAPIKey(){var k=(document.getElementById('ia-keyinput')||{}).value||'';if(!k||!k.startsWith('sk-ant')){toast('Clave invalida','err');return;}localStorage.setItem('veo_apikey',k);toast('Clave guardada','ok');renderPlanIA(document.getElementById('content'));}
 function cambiarAPIKey(){localStorage.removeItem('veo_apikey');renderPlanIA(document.getElementById('content'));}
