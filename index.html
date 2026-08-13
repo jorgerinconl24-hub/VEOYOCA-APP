@@ -925,7 +925,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v42 · conteo físico + fotos de producto';
+var APP_VERSION='v43 · conteo con ubicación por producto';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -3263,8 +3263,21 @@ function invConteo(){var inv=invDB();if(!inv.conteo||typeof inv.conteo!=='object
 function invCtAct(){return invConteo().activo;}
 function invCtEsAdmin(){return !!(SESSION&&SESSION.rol==='admin');}
 function invCtYo(){return SESSION?SESSION.nombre:'';}
-function invCtLineaNueva(teorico){return {estado:'pendiente',qty:null,usuario:'',ts:0,qty2:null,usuario2:'',teorico:invNum(teorico),nota:''};}
-function invCtLinea(itemId){var a=invCtAct();if(!a)return null;if(!a.lineas)a.lineas={};if(!a.lineas[itemId])a.lineas[itemId]=invCtLineaNueva(0);return a.lineas[itemId];}
+function invCtLineaNueva(teorico,ubic){return {estado:'pendiente',qty:null,usuario:'',ts:0,qty2:null,usuario2:'',teorico:invNum(teorico),ubic:ubic||'',nota:''};}
+function invCtLinea(itemId){var a=invCtAct();if(!a)return null;if(!a.lineas)a.lineas={};if(!a.lineas[itemId])a.lineas[itemId]=invCtLineaNueva(0,a.ubic);return a.lineas[itemId];}
+// Ubicacion de una linea: la suya propia si la cambiaron, si no la del conteo.
+function invCtUbicDe(l){var a=invCtAct();return (l&&l.ubic)||(a?a.ubic:'');}
+// Cambiar la ubicacion de UN producto dentro del conteo. En modo ciego se
+// recalcula la cantidad de referencia contra el stock de la ubicacion nueva:
+// la que se congelo al abrir el conteo era la de la ubicacion anterior.
+function invCtSetUbic(itemId,ubicId){
+  var a=invCtAct();if(!a||!ubicId)return;
+  var l=invCtLinea(itemId);if(!l||l.ubic===ubicId)return;
+  l.ubic=ubicId;
+  if(a.modo==='conteo')l.teorico=invStockEn(itemId,ubicId);
+  guardarDB();invCtFicha(itemId,true);
+  var u=invUbic(ubicId);toast('Ahora cuenta en '+((u&&u.nombre)||'')+'','ok');
+}
 function invCtFisico(l){return (l.qty2!=null?l.qty2:l.qty);}
 function invCtDiff(l){var f=invCtFisico(l);return f==null?null:Math.round((f-invNum(l.teorico))*100)/100;}
 function invCtSupera(a,l){var f=invCtFisico(l);if(f==null)return false;var t=invNum(l.teorico),d=Math.abs(f-t);var pct=t>0?(d/t*100):(d>0?100:0);return d>invNum(a.umbralUnid)&&pct>invNum(a.umbralPct);}
@@ -3351,7 +3364,7 @@ function invCtActivoHTML(a){
   var ini=a.modo==='inicial';
   var h='<div class="section-pad" style="padding-top:0">';
   h+='<div style="background:'+(ini?'linear-gradient(135deg,#065f46,#16a34a)':'linear-gradient(135deg,#1e1b4b,#4338ca)')+';border-radius:12px;padding:14px;margin-bottom:10px;color:#fff">';
-  h+='<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div style="min-width:0"><div style="font-size:15px;font-weight:700">'+(ini?'📥 ':'📋 ')+esc(a.nombre)+'</div><div style="font-size:11px;opacity:.75;margin-top:2px">'+(ub?esc(ub.nombre):'?')+' · abierto por '+esc(a.creadoPor)+' el '+esc(a.fecha)+'</div></div><div style="font-size:24px;font-weight:800;flex-shrink:0">'+pct+'%</div></div>';
+  h+='<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div style="min-width:0"><div style="font-size:15px;font-weight:700">'+(ini?'📥 ':'📋 ')+esc(a.nombre)+'</div><div style="font-size:11px;opacity:.75;margin-top:2px">'+(ub?esc(ub.nombre):'?')+' (por defecto) · abierto por '+esc(a.creadoPor)+' el '+esc(a.fecha)+'</div></div><div style="font-size:24px;font-weight:800;flex-shrink:0">'+pct+'%</div></div>';
   h+='<div style="height:8px;background:rgba(255,255,255,.18);border-radius:99px;overflow:hidden;margin-top:10px"><div style="height:100%;width:'+pct+'%;background:#bbf7d0"></div></div>';
   h+='<div style="font-size:11px;opacity:.8;margin-top:5px">'+listos+' de '+ids.length+' contados'+(recu?' · '+recu+' por recontar':'')+(pend?' · '+pend+' sin tocar':'')+'</div>';
   h+='</div>';
@@ -3379,6 +3392,8 @@ function invCtListaHTML(){
     else if(l.estado==='recuento')pie='falta el segundo conteo (otra persona)';
     else if(a.modo==='inicial')pie=invFmt(invCtFisico(l))+' '+esc(it.um||'u')+' · '+esc(l.usuario||'');
     else pie='contado por '+esc(l.usuario2||l.usuario||'');
+    var _uL=invCtUbicDe(l);
+    if(_uL&&_uL!==a.ubic){var _uo=invUbic(_uL);if(_uo)pie+=' · 📍 '+esc(_uo.nombre);}
     h+='<div class="card" style="margin-bottom:6px;padding:8px 10px;display:flex;gap:10px;align-items:center;cursor:pointer" onclick="invCtFicha(\''+it.id+'\')">'
       +invThumb(it,52)
       +'<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700">'+esc(it.nombre)+'</div>'
@@ -3397,7 +3412,7 @@ function invCtIniciar(modo){
   var h='<div class="sheet-head"><h2>'+(ini?'📥 Carga inicial':'📋 Nuevo conteo ciego')+'</h2><button class="sheet-close" onclick="cerrarModal(\'modal-inv\')">✕</button></div><div class="sheet-body">';
   h+='<input type="hidden" id="ct-modo" value="'+modo+'">';
   h+='<div class="sfield"><label>Nombre del conteo</label><input type="text" id="ct-nombre" value="'+(ini?'Carga inicial':'Conteo')+' '+fecha()+'"></div>';
-  h+='<div class="sfield"><label>Ubicación *</label><select id="ct-ubic">'+inv.ubicaciones.map(function(u){return '<option value="'+u.id+'">'+(u.tipo==='exhibicion'?'🛍️ ':'🏬 ')+esc(u.nombre)+'</option>';}).join('')+'</select></div>';
+  h+='<div class="sfield"><label>Ubicación de arranque *</label><select id="ct-ubic">'+inv.ubicaciones.map(function(u){return '<option value="'+u.id+'">'+(u.tipo==='exhibicion'?'🛍️ ':'🏬 ')+esc(u.nombre)+'</option>';}).join('')+'</select></div>';
   if(!ini){
     h+='<div class="sfield-row"><div class="sfield"><label>Umbral %</label><input type="number" step="any" id="ct-upct" value="5"></div><div class="sfield"><label>Umbral unidades</label><input type="number" step="any" id="ct-uuni" value="3"></div></div>';
     h+='<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:9px 11px;font-size:12px;color:#1d4ed8">Se congela el stock actual de esa ubicación. Quien cuenta <b>no ve</b> esa cantidad. Un producto va a recuento solo si la diferencia pasa <b>ambos</b> umbrales, así no pierdes tiempo con el ruido normal.</div>';
@@ -3416,7 +3431,7 @@ function invCtCrear(){
   invDB().items.forEach(function(it){
     var t=(sm[it.id]||{})[ubic]||0;
     if(!ini&&t<=0)return;
-    lineas[it.id]=invCtLineaNueva(ini?0:t);n++;
+    lineas[it.id]=invCtLineaNueva(ini?0:t,ubic);n++;
   });
   if(!ini&&!n){toast('Esa ubicación no tiene stock que contar. Usa Carga inicial.','err');return;}
   invConteo().activo={id:uid(),nombre:nombre,modo:modo,ubic:ubic,
@@ -3431,7 +3446,7 @@ function invCtNuevoProducto(){
   var nombre=prompt('Nombre del producto nuevo:');if(!nombre||!nombre.trim())return;
   var it={id:uid(),nombre:nombre.trim(),sku:'',um:'u',categoria:'',costo:0,precio:0,minimo:0,reorden:0,creado:fecha()};
   invDB().items.push(it);
-  a.lineas[it.id]=invCtLineaNueva(0);
+  a.lineas[it.id]=invCtLineaNueva(0,a.ubic);
   guardarDB();invCtFicha(it.id);
 }
 
@@ -3451,6 +3466,8 @@ function invCtFicha(itemId,mantener){
     +'<div style="flex:1;min-width:0"><div style="font-size:12px;color:#64748b">'+(it.sku?esc(it.sku)+' · ':'')+esc(it.um||'u')+(it.categoria?' · '+esc(it.categoria):'')+'</div>'
     +'<div style="margin-top:7px">'+invFotoBtn(it.id,it.foto?'Cambiar foto':'Tomar foto')+'</div>'
     +(it.foto?'':'<div style="font-size:10px;color:#94a3b8;margin-top:4px">Foto del producto, no del estante lleno</div>')+'</div></div>';
+  var _ubs=invDB().ubicaciones,_ubL=invCtUbicDe(l);
+  if(_ubs.length>1)h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:11px;color:#64748b;flex-shrink:0">📍 Contando en</span><select onchange="invCtSetUbic(\''+it.id+'\',this.value)" style="flex:1;padding:9px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;background:#fff">'+_ubs.map(function(u){return '<option value="'+u.id+'"'+(u.id===_ubL?' selected':'')+'>'+(u.tipo==='exhibicion'?'🛍️ ':'🏬 ')+esc(u.nombre)+'</option>';}).join('')+'</select></div>';
   if(a.modo==='conteo')h+='<div style="background:'+(esRec?'#fef3c7':'#eff6ff')+';border:1px solid '+(esRec?'#fde68a':'#bfdbfe')+';border-radius:8px;padding:7px 10px;font-size:11px;color:'+(esRec?'#92400e':'#1d4ed8')+';margin-bottom:6px">'+(esRec?'🔁 <b>Recuento.</b> Cuenta de nuevo desde cero, sin mirar lo anterior.':'🙈 Escribe lo que hay en el estante. No verás el número del sistema.')+'</div>';
   h+='<div style="text-align:center;padding:8px 0 2px"><div id="ct-num" style="font-size:58px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums">'+esc(INV_CT_BUF)+'</div><div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#94a3b8;margin-top:4px">'+esc(it.um||'unidades')+' contadas</div></div>';
   h+='<div style="display:flex;gap:6px;margin:10px 0"><button class="btn btn-ghost btn-sm" style="flex:1" onclick="invCtSuma(1)">+1</button><button class="btn btn-ghost btn-sm" style="flex:1" onclick="invCtSuma(5)">+5</button><button class="btn btn-ghost btn-sm" style="flex:1" onclick="invCtSuma(10)">+10</button><button class="btn btn-ghost btn-sm" style="flex:1" onclick="invCtTeclaPulsa(\'C\')">Borrar</button></div>';
@@ -3505,16 +3522,18 @@ function invCtRevisar(){
   var h='<div class="sheet-head"><h2>🔍 Revisar y aplicar</h2><button class="sheet-close" onclick="cerrarModal(\'modal-inv\')">✕</button></div><div class="sheet-body">';
   if(!rows.length)h+='<div class="empty"><div class="empty-icon">📋</div>Todavía no hay productos contados por revisar.</div>';
   else{
-    h+='<div style="font-size:11px;color:var(--muted);margin-bottom:8px">'+(a.modo==='inicial'?'Aplicar deja el stock de <b>'+esc(ub?ub.nombre:'')+'</b> igual a lo contado.':'<b>Sist.</b> = lo congelado al abrir el conteo. <b>Físico</b> = lo contado. Aplicar genera un movimiento de AJUSTE que queda en tu historial.')+'</div>';
+    h+='<div style="font-size:11px;color:var(--muted);margin-bottom:8px">'+(a.modo==='inicial'?'Aplicar deja el stock igual a lo contado, en la ubicación de cada línea.':'<b>Sist.</b> = lo congelado al abrir el conteo. <b>Físico</b> = lo contado. Aplicar genera un movimiento de AJUSTE que queda en tu historial.')+'</div>';
     var nAl=rows.filter(function(r){return a.modo==='conteo'&&r.l.estado==='contado'&&r.l.qty2==null&&invCtSupera(a,r.l);}).length;
     if(nAl)h+='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 10px;font-size:11px;color:#92400e;margin-bottom:8px">'+nAl+' producto(s) pasan el umbral. Recuéntalos con otra persona antes de tocar el sistema.</div>';
     h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:400px">';
-    h+='<thead><tr style="border-bottom:2px solid #111"><th style="text-align:left;padding:5px 4px">Producto</th><th style="text-align:right;padding:5px 4px">Sist.</th><th style="text-align:right;padding:5px 4px">Físico</th><th style="text-align:right;padding:5px 4px">Dif.</th><th style="padding:5px 4px"></th></tr></thead><tbody>';
+    h+='<thead><tr style="border-bottom:2px solid #111"><th style="text-align:left;padding:5px 4px">Producto</th><th style="text-align:left;padding:5px 4px">Ubicación</th><th style="text-align:right;padding:5px 4px">Sist.</th><th style="text-align:right;padding:5px 4px">Físico</th><th style="text-align:right;padding:5px 4px">Dif.</th><th style="padding:5px 4px"></th></tr></thead><tbody>';
     rows.forEach(function(r){
       var f=invCtFisico(r.l),d=invCtDiff(r.l);
       var alerta=a.modo==='conteo'&&r.l.estado==='contado'&&r.l.qty2==null&&invCtSupera(a,r.l);
       var col=d<0?'#dc2626':d>0?'#16a34a':'#64748b';
+      var ru=invUbic(invCtUbicDe(r.l));
       h+='<tr style="border-bottom:1px solid #eee"><td style="padding:5px 4px">'+esc(r.it.nombre)+(r.l.qty2!=null?' <span style="font-size:10px;color:#7c3aed">2º</span>':'')+'</td>'
+        +'<td style="padding:5px 4px;font-size:11px;color:#64748b;white-space:nowrap">'+esc(ru?ru.nombre:'')+'</td>'
         +'<td style="text-align:right;padding:5px 4px">'+invFmt(r.l.teorico)+'</td>'
         +'<td style="text-align:right;padding:5px 4px;font-weight:700">'+invFmt(f)+'</td>'
         +'<td style="text-align:right;padding:5px 4px;font-weight:700;color:'+col+'">'+(d>0?'+':'')+invFmt(d)+'</td>'
@@ -3534,12 +3553,13 @@ function invCtAplicar(itemId){
   var a=invCtAct();if(!a)return;
   var l=a.lineas[itemId],it=invItem(itemId);if(!l||!it)return;
   var f=invCtFisico(l);if(f==null){toast('Ese producto aún no se ha contado','err');return;}
-  var actual=invStockEn(itemId,a.ubic),delta=Math.round((f-actual)*100)/100;
+  var ubL=invCtUbicDe(l),uo=invUbic(ubL);
+  var actual=invStockEn(itemId,ubL),delta=Math.round((f-actual)*100)/100;
   if(delta===0){l.estado='ajustado';guardarDB();invCtRevisar();toast('Ya coincidía — marcado','ok');return;}
-  var motivo=prompt('Motivo del ajuste de "'+it.nombre+'"\n('+invFmt(actual)+' → '+invFmt(f)+' '+(it.um||'u')+')\n\nEj: despacho no descargado, recepción no cargada, material dañado, ubicado en otra zona, merma sin explicación.',(a.modo==='inicial'?'Carga inicial':'Conteo físico')+' · '+a.nombre);
+  var motivo=prompt('Motivo del ajuste de "'+it.nombre+'" en '+((uo&&uo.nombre)||'')+'\n('+invFmt(actual)+' → '+invFmt(f)+' '+(it.um||'u')+')\n\nEj: despacho no descargado, recepción no cargada, material dañado, ubicado en otra zona, merma sin explicación.',(a.modo==='inicial'?'Carga inicial':'Conteo físico')+' · '+a.nombre);
   if(motivo===null)return;
   if(!motivo.trim()){toast('El motivo es obligatorio: sin razón no hay rastro que auditar','err');return;}
-  invMover('AJUSTE',itemId,a.ubic,delta,{motivo:motivo.trim()});
+  invMover('AJUSTE',itemId,ubL,delta,{motivo:motivo.trim()});
   l.estado='ajustado';
   guardarDB();invCtRevisar();toast('Ajustado ✓','ok');
 }
@@ -3556,8 +3576,9 @@ function invCtAplicarTodo(){
   var n=0,motivo=(a.modo==='inicial'?'Carga inicial':'Conteo físico')+' · '+a.nombre;
   ks.forEach(function(k){
     var l=a.lineas[k],f=invCtFisico(l);if(f==null)return;
-    var delta=Math.round((f-invStockEn(k,a.ubic))*100)/100;
-    if(delta!==0){invMover('AJUSTE',k,a.ubic,delta,{motivo:motivo});n++;}
+    var uL=invCtUbicDe(l);
+    var delta=Math.round((f-invStockEn(k,uL))*100)/100;
+    if(delta!==0){invMover('AJUSTE',k,uL,delta,{motivo:motivo});n++;}
     l.estado='ajustado';
   });
   guardarDB();cerrarModal('modal-inv');renderInventario(document.getElementById('content'));
@@ -3585,8 +3606,8 @@ function invCtCSV(){
   var rows=[['Producto','SKU','Unidad','Ubicacion','Sistema','Fisico','Diferencia','Conteo 1','Quien 1','Conteo 2','Quien 2','Estado','Foto']];
   Object.keys(a.lineas).forEach(function(k){
     var it=invItem(k),l=a.lineas[k];if(!it)return;
-    var f=invCtFisico(l);
-    rows.push([it.nombre,it.sku||'',it.um||'u',(ub&&ub.nombre)||'',l.teorico,f==null?'':f,f==null?'':(f-invNum(l.teorico)),l.qty==null?'':l.qty,l.usuario||'',l.qty2==null?'':l.qty2,l.usuario2||'',l.estado,it.foto||'']);
+    var f=invCtFisico(l),lu=invUbic(invCtUbicDe(l));
+    rows.push([it.nombre,it.sku||'',it.um||'u',(lu&&lu.nombre)||((ub&&ub.nombre)||''),l.teorico,f==null?'':f,f==null?'':(f-invNum(l.teorico)),l.qty==null?'':l.qty,l.usuario||'',l.qty2==null?'':l.qty2,l.usuario2||'',l.estado,it.foto||'']);
   });
   var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
   var el=document.createElement('a');
