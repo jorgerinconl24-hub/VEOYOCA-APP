@@ -22,8 +22,7 @@ var ARCHIVOS = [
   BASE + 'index.html',
   BASE + 'conteo.html',
   BASE + 'planificador.html',
-  BASE + 'manifest.json',
-  BASE + 'icon-192.png'
+  BASE + 'manifest.json'
 ];
 
 // Instalar el service worker
