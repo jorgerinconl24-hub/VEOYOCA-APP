@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#12212E">
+<title>Conteo ciego · VEOYOCA</title>
+
+<!--
+=====================================================================
+  VEOYOCA · CONTEO CIEGO DE INVENTARIO
+  Archivo único. Sube a GitHub Pages junto al resto de la app.
+=====================================================================
+
+  MODELO DE DATOS (Firestore)
+  ---------------------------
+  conteos/{sesionId}
+      nombre, estado: 'abierto'|'cerrado', creadoPor, creadoEn,
+      umbralPct, umbralUnid, corte (texto), zonas: []
+
+  conteos/{sesionId}/lineas/{sku}        <-- LO QUE VE EL ALMACENISTA
+      sku, descripcion, zona, ubicacion, orden, estado,
+      conteo1: {qty, usuario, ts}, conteo2: {qty, usuario, ts},
+      nota, incidencia
+
+  conteos/{sesionId}/teoricos/{sku}      <-- SOLO SUPERVISOR
+      teorico
+
+  conteos/{sesionId}/ajustes/{autoId}
+      sku, teorico, fisico, diferencia, motivo, autorizadoPor, ts
+
+  El teórico vive en OTRA colección a propósito: así el conteo es
+  ciego de verdad, no solo "oculto en pantalla".
+
+  REGLAS DE SEGURIDAD RECOMENDADAS (Firebase Console > Firestore > Reglas)
+  -----------------------------------------------------------------------
+  match /conteos/{sesion} {
+    allow read: if request.auth != null;
+    allow write: if request.auth.token.rol == 'supervisor';
+
+    match /lineas/{sku} {
+      allow read: if request.auth != null;
+      allow update: if request.auth != null;
+    }
+    match /teoricos/{sku} {
+      allow read, write: if request.auth.token.rol == 'supervisor';
+    }
+    match /ajustes/{id} {
+      allow read: if request.auth != null;
+      allow create: if request.auth.token.rol == 'supervisor';
+    }
+  }
+
+  Sin Firebase Auth, el PIN de abajo es una traba de conveniencia, no
+  seguridad real. Para separación de funciones de verdad hay que
+  activar Auth y el custom claim 'rol'.
+=====================================================================
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --acero:#12212E;
+  --acero-2:#2C4155;
+  --galv:#DDE3E8;
+  --galv-2:#C8D2DA;
+  --papel:#FFFFFF;
+  --tinta:#0B1620;
+  --tenue:#5F7183;
+  --verde:#186B4F;
+  --verde-cl:#D6EBE2;
+  --oxido:#B33418;
+  --oxido-cl:#F7DED7;
+  --ambar:#C97C00;
+  --ambar-cl:#FBEBCF;
+  --linea:2px solid var(--acero);
+  --sombra:4px 4px 0 var(--acero);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  background:var(--galv);
+  color:var(--tinta);
+  font-family:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  font-size:16px;line-height:1.45;
+  padding-bottom:env(safe-area-inset-bottom);
+}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.cond{font-family:'Barlow Condensed','IBM Plex Sans',sans-serif}
+
+/* ---------- estructura ---------- */
+.app{max-width:760px;margin:0 auto;min-height:100vh;background:var(--galv);display:flex;flex-direction:column}
+.barra{
+  background:var(--acero);color:#fff;padding:10px 14px;
+  display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:40;
+  border-bottom:2px solid var(--tinta);
+}
+.barra .marca{font-family:'Barlow Condensed';font-weight:700;font-size:20px;letter-spacing:.14em;text-transform:uppercase}
+.barra .sub{font-family:'IBM Plex Mono';font-size:11px;color:#8FA6B8;letter-spacing:.06em}
+.barra .der{margin-left:auto;display:flex;align-items:center;gap:8px}
+.contenido{padding:16px 14px 28px;flex:1}
+.pantalla{display:none}
+.pantalla.activa{display:block;animation:sube .18s ease-out}
+@keyframes sube{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* ---------- tipografía de sección ---------- */
+.rotulo{
+  font-family:'IBM Plex Mono';font-size:11px;font-weight:600;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--tenue);margin-bottom:6px;
+}
+h1.titulo{font-family:'Barlow Condensed';font-weight:700;font-size:32px;line-height:1;
+  letter-spacing:.01em;text-transform:uppercase;margin-bottom:14px}
+h2.sub{font-family:'Barlow Condensed';font-weight:600;font-size:22px;text-transform:uppercase;
+  letter-spacing:.03em;margin:22px 0 8px}
+
+/* ---------- tarjetas ---------- */
+.tarjeta{background:var(--papel);border:var(--linea);box-shadow:var(--sombra);padding:14px;margin-bottom:14px}
+.tarjeta.plana{box-shadow:none;margin-bottom:10px}
+
+/* ---------- formularios ---------- */
+label.campo{display:block;margin-bottom:12px}
+label.campo > span{display:block;font-family:'IBM Plex Mono';font-size:11px;font-weight:600;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--tenue);margin-bottom:4px}
+input,select,textarea{
+  width:100%;font-family:'IBM Plex Sans';font-size:16px;padding:11px 12px;
+  border:var(--linea);background:var(--papel);color:var(--tinta);border-radius:0;
+}
+input:focus,select:focus,textarea:focus,button:focus-visible{
+  outline:3px solid var(--ambar);outline-offset:1px
+}
+textarea{min-height:110px;font-family:'IBM Plex Mono';font-size:13px;line-height:1.6}
+
+/* ---------- botones ---------- */
+button{font-family:'Barlow Condensed';font-weight:600;font-size:18px;letter-spacing:.05em;
+  text-transform:uppercase;border:var(--linea);background:var(--papel);color:var(--tinta);
+  padding:12px 16px;cursor:pointer;border-radius:0;transition:transform .06s}
+button:active{transform:translate(2px,2px)}
+button.principal{background:var(--acero);color:#fff;box-shadow:var(--sombra)}
+button.principal:active{box-shadow:1px 1px 0 var(--acero)}
+button.ok{background:var(--verde);color:#fff;border-color:var(--tinta);box-shadow:var(--sombra)}
+button.peligro{background:var(--oxido);color:#fff;border-color:var(--tinta)}
+button.fantasma{background:transparent;border-color:var(--acero-2);color:var(--acero-2)}
+button.ancho{width:100%}
+button:disabled{opacity:.4;cursor:not-allowed}
+.fila-btn{display:flex;gap:10px;flex-wrap:wrap}
+.fila-btn > button{flex:1;min-width:120px}
+
+/* ---------- etiquetas de estado ---------- */
+.etq{display:inline-block;font-family:'IBM Plex Mono';font-size:10px;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;padding:3px 7px;border:1.5px solid var(--tinta)}
+.etq.pend{background:var(--galv-2)}
+.etq.cont{background:var(--verde-cl)}
+.etq.recu{background:var(--ambar-cl)}
+.etq.inci{background:var(--oxido-cl)}
+.etq.ajus{background:var(--acero);color:#fff}
+
+/* ---------- lista de conteo ---------- */
+.item{display:flex;align-items:stretch;background:var(--papel);border:var(--linea);
+  margin-bottom:8px;cursor:pointer;text-align:left;width:100%;padding:0;box-shadow:none}
+.item:active{transform:translate(2px,2px)}
+.item .rail{width:44px;flex-shrink:0;background:var(--galv-2);border-right:var(--linea);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'IBM Plex Mono';font-size:12px;font-weight:700}
+.item.hecho .rail{background:var(--verde);color:#fff}
+.item.recu .rail{background:var(--ambar);color:#fff}
+.item.inci .rail{background:var(--oxido);color:#fff}
+.item .cuerpo{padding:10px 12px;flex:1;min-width:0}
+.item .sku{font-family:'IBM Plex Mono';font-size:12px;font-weight:600;color:var(--tenue);letter-spacing:.04em}
+.item .desc{font-family:'IBM Plex Sans';font-size:15px;font-weight:500;text-transform:none;
+  letter-spacing:0;line-height:1.3;margin:1px 0 3px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .ubi{font-family:'IBM Plex Mono';font-size:11px;color:var(--acero-2)}
+
+/* ---------- ficha de conteo (signature) ---------- */
+.ficha{background:var(--papel);border:3px solid var(--acero);box-shadow:6px 6px 0 var(--acero-2);
+  padding:0;margin-bottom:14px;position:relative;overflow:hidden}
+.ficha .cabecera{background:var(--acero);color:#fff;padding:10px 14px}
+.ficha .cabecera .sku{font-family:'IBM Plex Mono';font-size:13px;font-weight:600;letter-spacing:.08em;color:#9FB6C8}
+.ficha .cabecera .desc{font-family:'Barlow Condensed';font-weight:600;font-size:24px;line-height:1.05;
+  text-transform:uppercase;letter-spacing:.02em;margin-top:2px}
+.ficha .ubic{padding:8px 14px;border-bottom:var(--linea);background:var(--galv);
+  font-family:'IBM Plex Mono';font-size:12px;letter-spacing:.05em;display:flex;justify-content:space-between;gap:8px}
+.ficha .lectura{padding:18px 14px 10px;text-align:center;position:relative}
+.ficha .lectura .n{font-family:'IBM Plex Mono';font-weight:700;font-size:76px;line-height:.9;
+  font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.ficha .lectura .u{font-family:'IBM Plex Mono';font-size:11px;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--tenue);margin-top:6px}
+.sello{
+  position:absolute;top:12px;right:10px;transform:rotate(-9deg);
+  border:2.5px solid var(--oxido);color:var(--oxido);opacity:.55;
+  font-family:'Barlow Condensed';font-weight:700;font-size:13px;letter-spacing:.22em;
+  text-transform:uppercase;padding:2px 8px;pointer-events:none
+}
+.chips{display:flex;gap:8px;padding:0 14px 12px}
+.chips button{flex:1;font-size:16px;padding:9px 0;background:var(--galv)}
+.teclado{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;background:var(--acero);
+  border-top:var(--linea);padding:2px}
+.teclado button{background:var(--papel);border:none;font-family:'IBM Plex Mono';font-weight:600;
+  font-size:26px;padding:16px 0;letter-spacing:0}
+.teclado button.aux{background:var(--galv-2);font-size:18px;font-family:'Barlow Condensed'}
+
+/* ---------- barra de avance ---------- */
+.avance{height:14px;border:var(--linea);background:var(--papel);display:flex;overflow:hidden}
+.avance i{display:block;height:100%}
+.avance i.v{background:var(--verde)}
+.avance i.a{background:var(--ambar)}
+
+/* ---------- tabla supervisor ---------- */
+.tabla-env{overflow-x:auto;border:var(--linea);background:var(--papel);box-shadow:var(--sombra)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--acero);color:#fff;font-family:'IBM Plex Mono';font-size:10px;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;padding:8px;text-align:left;white-space:nowrap}
+td{padding:8px;border-bottom:1px solid var(--galv-2);vertical-align:middle;white-space:nowrap}
+td.n{font-family:'IBM Plex Mono';font-variant-numeric:tabular-nums;text-align:right;font-weight:600}
+td.neg{color:var(--oxido)}
+td.pos{color:var(--verde)}
+tr:last-child td{border-bottom:none}
+
+/* ---------- varios ---------- */
+.reticula{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.dato{background:var(--papel);border:var(--linea);padding:10px 12px}
+.dato .k{font-family:'IBM Plex Mono';font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--tenue)}
+.dato .v{font-family:'Barlow Condensed';font-weight:700;font-size:30px;line-height:1}
+.vacio{border:2px dashed var(--acero-2);padding:26px 16px;text-align:center;color:var(--tenue);
+  font-family:'IBM Plex Mono';font-size:13px;line-height:1.7}
+.red{display:flex;align-items:center;gap:6px;font-family:'IBM Plex Mono';font-size:10px;
+  letter-spacing:.08em;text-transform:uppercase;padding:4px 8px;border:1.5px solid #fff;color:#fff}
+.red .punto{width:8px;height:8px;background:#5FD3A6;border-radius:50%}
+.red.off{border-color:var(--ambar);color:var(--ambar-cl)}
+.red.off .punto{background:var(--ambar)}
+.aviso{background:var(--ambar-cl);border:var(--linea);padding:10px 12px;font-size:14px;margin-bottom:12px}
+.aviso.malo{background:var(--oxido-cl)}
+.aviso.bueno{background:var(--verde-cl)}
+.pie{font-family:'IBM Plex Mono';font-size:11px;color:var(--tenue);text-align:center;padding:18px 10px;line-height:1.7}
+.migas{font-family:'IBM Plex Mono';font-size:11px;color:var(--tenue);letter-spacing:.06em;
+  text-transform:uppercase;margin-bottom:10px}
+.modal{position:fixed;inset:0;background:rgba(11,22,32,.72);display:none;align-items:center;
+  justify-content:center;padding:16px;z-index:90}
+.modal.abierto{display:flex}
+.modal .caja{background:var(--papel);border:3px solid var(--acero);box-shadow:8px 8px 0 var(--acero-2);
+  padding:16px;max-width:460px;width:100%;max-height:88vh;overflow:auto}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header class="barra">
+    <div>
+      <div class="marca">VEOYOCA</div>
+      <div class="sub">CONTEO CIEGO</div>
+    </div>
+    <div class="der">
+      <div id="estadoRed" class="red"><span class="punto"></span><span id="txtRed">En línea</span></div>
+      <button id="btnSalir" class="fantasma" style="display:none;font-size:14px;padding:6px 10px;color:#fff;border-color:#5F7183">Salir</button>
+    </div>
+  </header>
+
+  <main class="contenido">
+
+    <!-- ============ ACCESO ============ -->
+    <section id="pAcceso" class="pantalla activa">
+      <div class="rotulo">Paso 1 de 3</div>
+      <h1 class="titulo">¿Quién cuenta hoy?</h1>
+      <div class="tarjeta">
+        <label class="campo">
+          <span>Nombre y apellido</span>
+          <input id="inNombre" type="text" placeholder="Ej. Carlos Arcay" autocomplete="name">
+        </label>
+        <label class="campo">
+          <span>Función</span>
+          <select id="inRol">
+            <option value="almacenista">Almacenista — cuenta</option>
+            <option value="supervisor">Supervisor — revisa y ajusta</option>
+          </select>
+        </label>
+        <label class="campo" id="campoPin" style="display:none">
+          <span>PIN de supervisor</span>
+          <input id="inPin" type="password" inputmode="numeric" placeholder="••••">
+        </label>
+        <button id="btnEntrar" class="principal ancho">Entrar</button>
+      </div>
+      <div class="pie">Quien cuenta no ajusta.<br>El sistema guarda quién contó, qué y a qué hora.</div>
+    </section>
+
+    <!-- ============ SESIONES ============ -->
+    <section id="pSesiones" class="pantalla">
+      <div class="migas" id="migasSes">—</div>
+      <h1 class="titulo">Conteos abiertos</h1>
+      <div id="listaSesiones"></div>
+      <div id="zonaCrear" style="display:none">
+        <h2 class="sub">Abrir un conteo nuevo</h2>
+        <div class="tarjeta">
+          <label class="campo">
+            <span>Nombre del conteo</span>
+            <input id="inSesNombre" type="text" placeholder="Ej. Cíclico clase A — agosto">
+          </label>
+          <div class="reticula" style="margin-bottom:12px">
+            <label class="campo" style="margin:0">
+              <span>Umbral %</span>
+              <input id="inUmbralPct" type="number" value="5" min="0" step="0.5">
+            </label>
+            <label class="campo" style="margin:0">
+              <span>Umbral unidades</span>
+              <input id="inUmbralUnid" type="number" value="3" min="0" step="1">
+            </label>
+          </div>
+          <label class="campo">
+            <span>Corte documental</span>
+            <input id="inCorte" type="text" placeholder="Ej. Sin despachos desde 6:00 a.m. del 12/08">
+          </label>
+          <label class="campo">
+            <span>Renglones — pega desde Excel: SKU, descripción, zona, ubicación, teórico</span>
+            <textarea id="inRenglones" placeholder="EST-4N-90&#9;Estante 4 niveles 90cm&#9;Galpón 1&#9;A-03-2&#9;40&#10;GON-D-120&#9;Góndola doble 120cm&#9;Galpón 1&#9;A-04-1&#9;12"></textarea>
+          </label>
+          <div class="aviso">El teórico se guarda aparte. Nunca se descarga al teléfono de quien cuenta.</div>
+          <button id="btnCrearSesion" class="ok ancho">Abrir conteo</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ ZONAS ============ -->
+    <section id="pZonas" class="pantalla">
+      <div class="migas" id="migasZonas">—</div>
+      <h1 class="titulo">Tu recorrido</h1>
+      <div id="listaZonas"></div>
+      <button id="btnVolverSesiones" class="fantasma ancho" style="margin-top:8px">Cambiar de conteo</button>
+    </section>
+
+    <!-- ============ LISTA DE RENGLONES ============ -->
+    <section id="pLista" class="pantalla">
+      <div class="migas" id="migasLista">—</div>
+      <h1 class="titulo" id="tituloZona">Zona</h1>
+      <div class="avance" style="margin-bottom:6px"><i class="v" id="avV" style="width:0"></i><i class="a" id="avA" style="width:0"></i></div>
+      <div class="rotulo" id="txtAvance" style="margin-bottom:14px">—</div>
+      <div id="listaItems"></div>
+      <button id="btnVolverZonas" class="fantasma ancho" style="margin-top:8px">Otra zona</button>
+    </section>
+
+    <!-- ============ FICHA DE CONTEO ============ -->
+    <section id="pConteo" class="pantalla">
+      <div class="migas" id="migasConteo">—</div>
+      <div class="ficha">
+        <div class="cabecera">
+          <div class="sku" id="fSku">—</div>
+          <div class="desc" id="fDesc">—</div>
+        </div>
+        <div class="ubic">
+          <span id="fUbi">—</span>
+          <span id="fPos">—</span>
+        </div>
+        <div class="lectura">
+          <div class="sello" id="fSello">Ciego</div>
+          <div class="n mono" id="fNum">0</div>
+          <div class="u">Unidades contadas físicamente</div>
+        </div>
+        <div class="chips">
+          <button data-suma="1">+1</button>
+          <button data-suma="5">+5</button>
+          <button data-suma="10">+10</button>
+        </div>
+        <div class="teclado">
+          <button data-t="7">7</button><button data-t="8">8</button><button data-t="9">9</button>
+          <button data-t="4">4</button><button data-t="5">5</button><button data-t="6">6</button>
+          <button data-t="1">1</button><button data-t="2">2</button><button data-t="3">3</button>
+          <button class="aux" data-t="C">Borrar</button><button data-t="0">0</button><button class="aux" data-t="B">←</button>
+        </div>
+      </div>
+      <div class="fila-btn" style="margin-bottom:10px">
+        <button id="btnGuardar" class="ok">Guardar y seguir</button>
+        <button id="btnIncidencia" class="fantasma">Reportar problema</button>
+      </div>
+      <button id="btnVolverLista" class="fantasma ancho">Volver a la lista</button>
+      <div class="pie">No verás el número del sistema. Escribe lo que hay en el estante.</div>
+    </section>
+
+    <!-- ============ SUPERVISOR ============ -->
+    <section id="pSupervisor" class="pantalla">
+      <div class="migas" id="migasSup">—</div>
+      <h1 class="titulo" id="tituloSup">Revisión</h1>
+      <div class="reticula" style="margin-bottom:16px">
+        <div class="dato"><div class="k">Renglones</div><div class="v" id="dTotal">0</div></div>
+        <div class="dato"><div class="k">Contados</div><div class="v" id="dContados">0</div></div>
+        <div class="dato"><div class="k">A recontar</div><div class="v" id="dRecuento">0</div></div>
+        <div class="dato"><div class="k">Ajustados</div><div class="v" id="dAjustados">0</div></div>
+      </div>
+
+      <h2 class="sub">Diferencias</h2>
+      <div id="tablaDiferencias"></div>
+
+      <h2 class="sub">Movimientos ya autorizados</h2>
+      <div id="tablaAjustes"></div>
+
+      <h2 class="sub">Cierre y respaldo</h2>
+      <div class="tarjeta">
+        <div class="fila-btn" style="margin-bottom:10px">
+          <button id="btnCsvResultados" class="fantasma">Bajar resultados</button>
+          <button id="btnCsvAjustes" class="fantasma">Bajar ajustes</button>
+        </div>
+        <button id="btnCerrarSesion" class="peligro ancho">Cerrar este conteo</button>
+      </div>
+      <button id="btnSupVolver" class="fantasma ancho" style="margin-top:8px">Cambiar de conteo</button>
+    </section>
+
+  </main>
+
+  <div class="pie">VEOYOCA · Vitrinas Estantes de Occidente y Oriente C.A.</div>
+</div>
+
+<!-- ============ MODAL ============ -->
+<div class="modal" id="modal">
+  <div class="caja">
+    <div class="rotulo" id="mRotulo">—</div>
+    <h2 class="sub" id="mTitulo" style="margin-top:0">—</h2>
+    <div id="mCuerpo"></div>
+    <div class="fila-btn" style="margin-top:14px">
+      <button id="mCancelar" class="fantasma">Cancelar</button>
+      <button id="mAceptar" class="principal">Aceptar</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+/* ===================================================================
+   CONFIGURACIÓN — cambia solo esto
+   =================================================================== */
+const CONFIG = {
+  firebase: {
+    apiKey:            "AIzaSyD-fyGTFiZgn_FfZN-VC0fS_rFNtVsg5kc",
+    authDomain:        "veoyoca-54caf.firebaseapp.com",
+    projectId:         "veoyoca-54caf",
+    storageBucket:     "veoyoca-54caf.firebasestorage.app",
+    messagingSenderId: "510700319861",
+    appId:             "1:510700319861:web:1cc96074cec81134a7f43c"
+  },
+  coleccion: "conteos",
+
+  // ↓↓↓ PIN DE SUPERVISOR ↓↓↓
+  pinSupervisor: "2424",
+  // Exige que el recuento lo haga una persona distinta a la que contó primero
+  recuentoOtraPersona: true
+};
+
+/* ===================================================================
+   FIREBASE
+   =================================================================== */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import {
+  initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc,
+  query, where, orderBy, onSnapshot, serverTimestamp, writeBatch
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const app = initializeApp(CONFIG.firebase);
+const db  = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+});
+
+/* ===================================================================
+   ESTADO
+   =================================================================== */
+let usuario   = null;      // {nombre, rol}
+let sesion    = null;      // {id, ...datos}
+let zonaActiva = null;
+let lineas    = [];        // renglones de la sesión (sin teórico)
+let teoricos  = {};        // solo se llena si el rol es supervisor
+let itemActivo = null;
+let buffer    = "0";
+let escuchando = null;     // función para cancelar el onSnapshot
+
+/* ===================================================================
+   UTILIDADES
+   =================================================================== */
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+
+function ir(id){
+  $$(".pantalla").forEach(p => p.classList.remove("activa"));
+  $(id).classList.add("activa");
+  window.scrollTo(0,0);
+}
+
+function esc(t){
+  return String(t ?? "").replace(/[&<>"']/g, c =>
+    ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+}
+
+function hoyISO(){ return new Date().toISOString(); }
+
+function fecha(ts){
+  if(!ts) return "—";
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleString("es-VE",{day:"2-digit",month:"2-digit",year:"2-digit",hour:"2-digit",minute:"2-digit"});
+}
+
+function preguntar({rotulo, titulo, cuerpo, aceptar="Aceptar", cancelar="Cancelar"}){
+  return new Promise(resolve => {
+    $("#mRotulo").textContent = rotulo || "";
+    $("#mTitulo").textContent = titulo || "";
+    $("#mCuerpo").innerHTML   = cuerpo || "";
+    $("#mAceptar").textContent = aceptar;
+    $("#mCancelar").textContent = cancelar;
+    $("#modal").classList.add("abierto");
+    const cerrar = valor => {
+      $("#modal").classList.remove("abierto");
+      $("#mAceptar").onclick = null;
+      $("#mCancelar").onclick = null;
+      resolve(valor);
+    };
+    $("#mAceptar").onclick  = () => cerrar(true);
+    $("#mCancelar").onclick = () => cerrar(false);
+  });
+}
+
+function avisar(titulo, texto, tipo="bueno"){
+  return preguntar({
+    rotulo: tipo === "malo" ? "No se pudo" : "Listo",
+    titulo,
+    cuerpo: `<div class="aviso ${tipo}">${esc(texto)}</div>`,
+    aceptar: "Entendido",
+    cancelar: "Cerrar"
+  });
+}
+
+function bajarCSV(nombre, filas){
+  const csv = filas.map(f => f.map(c => {
+    const s = String(c ?? "");
+    return /[",;\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+  }).join(";")).join("\n");
+  const url = URL.createObjectURL(new Blob(["\uFEFF"+csv], {type:"text/csv;charset=utf-8"}));
+  const a = document.createElement("a");
+  a.href = url; a.download = nombre; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ===================================================================
+   RED
+   =================================================================== */
+function pintarRed(){
+  const off = !navigator.onLine;
+  $("#estadoRed").classList.toggle("off", off);
+  $("#txtRed").textContent = off ? "Sin señal · se guarda igual" : "En línea";
+}
+window.addEventListener("online", pintarRed);
+window.addEventListener("offline", pintarRed);
+pintarRed();
+
+/* ===================================================================
+   ACCESO
+   =================================================================== */
+$("#inRol").addEventListener("change", e => {
+  $("#campoPin").style.display = e.target.value === "supervisor" ? "block" : "none";
+});
+
+$("#btnEntrar").addEventListener("click", async () => {
+  const nombre = $("#inNombre").value.trim();
+  const rol    = $("#inRol").value;
+  if(nombre.length < 3) return avisar("Falta el nombre","Escribe nombre y apellido para que quede el rastro de quién contó.","malo");
+  if(rol === "supervisor" && $("#inPin").value !== CONFIG.pinSupervisor)
+    return avisar("PIN incorrecto","Ese PIN no corresponde a un supervisor.","malo");
+
+  usuario = { nombre, rol };
+  try { localStorage.setItem("veoyoca_conteo_usuario", JSON.stringify(usuario)); } catch(e){}
+  $("#btnSalir").style.display = "block";
+  $("#zonaCrear").style.display = rol === "supervisor" ? "block" : "none";
+  await cargarSesiones();
+  ir("#pSesiones");
+});
+
+$("#btnSalir").addEventListener("click", () => {
+  if(escuchando) escuchando();
+  usuario = null; sesion = null; lineas = []; teoricos = {};
+  try { localStorage.removeItem("veoyoca_conteo_usuario"); } catch(e){}
+  $("#btnSalir").style.display = "none";
+  ir("#pAcceso");
+});
+
+try {
+  const guardado = JSON.parse(localStorage.getItem("veoyoca_conteo_usuario") || "null");
+  if(guardado && guardado.nombre){
+    $("#inNombre").value = guardado.nombre;
+    $("#inRol").value = guardado.rol;
+    if(guardado.rol === "supervisor") $("#campoPin").style.display = "block";
+  }
+} catch(e){}
+
+/* ===================================================================
+   SESIONES
+   =================================================================== */
+async function cargarSesiones(){
+  $("#migasSes").textContent = `${usuario.nombre} · ${usuario.rol}`;
+  const cont = $("#listaSesiones");
+  cont.innerHTML = `<div class="vacio">Buscando conteos…</div>`;
+  try {
+    const snap = await getDocs(query(collection(db, CONFIG.coleccion), where("estado","==","abierto")));
+    const items = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    if(!items.length){
+      cont.innerHTML = `<div class="vacio">No hay conteos abiertos.${usuario.rol==="supervisor" ? "<br>Abre uno abajo." : "<br>Pídele a tu supervisor que abra uno."}</div>`;
+      return;
+    }
+    cont.innerHTML = items.map(s => `
+      <button class="item" data-ses="${esc(s.id)}">
+        <div class="rail">→</div>
+        <div class="cuerpo">
+          <div class="sku">${esc(s.corte || "Sin nota de corte")}</div>
+          <div class="desc">${esc(s.nombre)}</div>
+          <div class="ubi">Umbral ${esc(s.umbralPct)}% o ${esc(s.umbralUnid)} u · abierto por ${esc(s.creadoPor)}</div>
+        </div>
+      </button>`).join("");
+    cont.querySelectorAll("[data-ses]").forEach(b =>
+      b.addEventListener("click", () => abrirSesion(b.dataset.ses)));
+  } catch(err){
+    cont.innerHTML = `<div class="vacio">No se pudo leer Firestore.<br>${esc(err.message)}</div>`;
+  }
+}
+
+$("#btnCrearSesion").addEventListener("click", async () => {
+  const nombre = $("#inSesNombre").value.trim();
+  const texto  = $("#inRenglones").value.trim();
+  if(!nombre) return avisar("Falta el nombre","Ponle un nombre al conteo para poder ubicarlo después.","malo");
+  if(!texto)  return avisar("Faltan los renglones","Pega los artículos: SKU, descripción, zona, ubicación y teórico.","malo");
+
+  const filas = texto.split("\n").map(l => l.trim()).filter(Boolean).map(l => {
+    const p = l.includes("\t") ? l.split("\t") : (l.includes(";") ? l.split(";") : l.split(","));
+    return p.map(x => x.trim());
+  });
+
+  const malas = filas.filter(f => f.length < 5 || !f[0]);
+  if(malas.length) return avisar("Hay renglones incompletos",
+    `${malas.length} renglón(es) no tienen las 5 columnas. Revisa: SKU, descripción, zona, ubicación, teórico.`,"malo");
+
+  $("#btnCrearSesion").disabled = true;
+  $("#btnCrearSesion").textContent = "Guardando…";
+  try {
+    const zonas = [...new Set(filas.map(f => f[2] || "Sin zona"))];
+    const ref = doc(collection(db, CONFIG.coleccion));
+    await setDoc(ref, {
+      nombre, estado:"abierto", creadoPor: usuario.nombre, creadoEn: serverTimestamp(),
+      umbralPct: Number($("#inUmbralPct").value) || 0,
+      umbralUnid: Number($("#inUmbralUnid").value) || 0,
+      corte: $("#inCorte").value.trim(), zonas
+    });
+
+    // Se escribe en lotes: las líneas y los teóricos van separados a propósito.
+    for(let i = 0; i < filas.length; i += 200){
+      const lote = writeBatch(db);
+      filas.slice(i, i+200).forEach((f, j) => {
+        const sku = f[0];
+        lote.set(doc(db, CONFIG.coleccion, ref.id, "lineas", sku), {
+          sku, descripcion: f[1] || sku, zona: f[2] || "Sin zona",
+          ubicacion: f[3] || "—", orden: i + j, estado: "pendiente",
+          conteo1: null, conteo2: null, nota: "", incidencia: false
+        });
+        lote.set(doc(db, CONFIG.coleccion, ref.id, "teoricos", sku), {
+          teorico: Number(String(f[4]).replace(/[^\d.-]/g,"")) || 0
+        });
+      });
+      await lote.commit();
+    }
+    $("#inSesNombre").value = ""; $("#inRenglones").value = "";
+    await avisar("Conteo abierto", `${filas.length} renglones en ${zonas.length} zona(s). Ya los almacenistas pueden empezar.`);
+    await cargarSesiones();
+  } catch(err){
+    avisar("No se guardó", err.message, "malo");
+  } finally {
+    $("#btnCrearSesion").disabled = false;
+    $("#btnCrearSesion").textContent = "Abrir conteo";
+  }
+});
+
+async function abrirSesion(id){
+  const snap = await getDoc(doc(db, CONFIG.coleccion, id));
+  if(!snap.exists()) return avisar("Ese conteo ya no existe","Puede que lo hayan cerrado. Actualiza la lista.","malo");
+  sesion = { id, ...snap.data() };
+
+  if(escuchando) escuchando();
+  escuchando = onSnapshot(
+    query(collection(db, CONFIG.coleccion, id, "lineas"), orderBy("orden")),
+    snap => {
+      lineas = snap.docs.map(d => d.data());
+      if($("#pLista").classList.contains("activa")) pintarItems();
+      if($("#pZonas").classList.contains("activa")) pintarZonas();
+      if($("#pSupervisor").classList.contains("activa")) pintarSupervisor();
+    },
+    err => avisar("Se perdió la conexión con el conteo", err.message, "malo")
+  );
+
+  if(usuario.rol === "supervisor"){
+    const t = await getDocs(collection(db, CONFIG.coleccion, id, "teoricos"));
+    teoricos = {};
+    t.docs.forEach(d => teoricos[d.id] = d.data().teorico);
+    await cargarAjustes();
+    ir("#pSupervisor");
+    pintarSupervisor();
+  } else {
+    ir("#pZonas");
+    pintarZonas();
+  }
+}
+
+$("#btnVolverSesiones").addEventListener("click", async () => { await cargarSesiones(); ir("#pSesiones"); });
+$("#btnSupVolver").addEventListener("click", async () => { await cargarSesiones(); ir("#pSesiones"); });
+
+/* ===================================================================
+   ZONAS
+   =================================================================== */
+function resumenZona(z){
+  const l = lineas.filter(x => x.zona === z);
+  return {
+    total: l.length,
+    hechos: l.filter(x => x.estado === "contado" || x.estado === "validado" || x.estado === "ajustado").length,
+    recuento: l.filter(x => x.estado === "recuento").length
+  };
+}
+
+function pintarZonas(){
+  $("#migasZonas").textContent = `${usuario.nombre} · ${sesion.nombre}`;
+  const zonas = [...new Set(lineas.map(l => l.zona))];
+  const cont = $("#listaZonas");
+  if(!zonas.length){ cont.innerHTML = `<div class="vacio">Este conteo no tiene renglones cargados.</div>`; return; }
+  cont.innerHTML = zonas.map(z => {
+    const r = resumenZona(z);
+    const pct = r.total ? Math.round(r.hechos / r.total * 100) : 0;
+    return `
+      <button class="item ${pct===100?"hecho":""}" data-zona="${esc(z)}">
+        <div class="rail">${pct}%</div>
+        <div class="cuerpo">
+          <div class="desc">${esc(z)}</div>
+          <div class="ubi">${r.hechos} de ${r.total} contados${r.recuento ? ` · ${r.recuento} por recontar` : ""}</div>
+        </div>
+      </button>`;
+  }).join("");
+  cont.querySelectorAll("[data-zona]").forEach(b =>
+    b.addEventListener("click", () => { zonaActiva = b.dataset.zona; ir("#pLista"); pintarItems(); }));
+}
+
+/* ===================================================================
+   LISTA DE RENGLONES
+   =================================================================== */
+function pintarItems(){
+  $("#migasLista").textContent = `${sesion.nombre} · ${usuario.nombre}`;
+  $("#tituloZona").textContent = zonaActiva;
+  const l = lineas.filter(x => x.zona === zonaActiva);
+  const r = resumenZona(zonaActiva);
+  const pv = r.total ? r.hechos / r.total * 100 : 0;
+  const pa = r.total ? r.recuento / r.total * 100 : 0;
+  $("#avV").style.width = pv + "%";
+  $("#avA").style.width = pa + "%";
+  $("#txtAvance").textContent = `${r.hechos} de ${r.total} contados${r.recuento ? ` · ${r.recuento} por recontar` : ""}`;
+
+  $("#listaItems").innerHTML = l.map(x => {
+    const clase = x.incidencia ? "inci" : x.estado === "recuento" ? "recu"
+                : (x.estado !== "pendiente" ? "hecho" : "");
+    const marca = x.incidencia ? "!" : x.estado === "recuento" ? "2" : (x.estado !== "pendiente" ? "✓" : "·");
+    let pie = x.ubicacion;
+    if(x.estado === "recuento") pie += " · recuento pendiente";
+    else if(x.conteo1) pie += ` · contado por ${x.conteo1.usuario}`;
+    return `
+      <button class="item ${clase}" data-sku="${esc(x.sku)}">
+        <div class="rail">${marca}</div>
+        <div class="cuerpo">
+          <div class="sku">${esc(x.sku)}</div>
+          <div class="desc">${esc(x.descripcion)}</div>
+          <div class="ubi">${esc(pie)}</div>
+        </div>
+      </button>`;
+  }).join("") || `<div class="vacio">No hay renglones en esta zona.</div>`;
+
+  $("#listaItems").querySelectorAll("[data-sku]").forEach(b =>
+    b.addEventListener("click", () => abrirFicha(b.dataset.sku)));
+}
+
+$("#btnVolverZonas").addEventListener("click", () => { ir("#pZonas"); pintarZonas(); });
+$("#btnVolverLista").addEventListener("click", () => { ir("#pLista"); pintarItems(); });
+
+/* ===================================================================
+   FICHA DE CONTEO
+   =================================================================== */
+function abrirFicha(sku){
+  const x = lineas.find(l => l.sku === sku);
+  if(!x) return;
+
+  if(x.estado === "recuento" && CONFIG.recuentoOtraPersona &&
+     x.conteo1 && x.conteo1.usuario === usuario.nombre){
+    return avisar("Este lo cuenta otra persona",
+      "Ya contaste este renglón. El recuento tiene que hacerlo alguien distinto para que sirva de verificación.","malo");
+  }
+
+  itemActivo = x;
+  buffer = "0";
+  const l = lineas.filter(y => y.zona === zonaActiva);
+  const pos = l.findIndex(y => y.sku === sku) + 1;
+
+  $("#migasConteo").textContent = `${zonaActiva} · ${usuario.nombre}`;
+  $("#fSku").textContent  = x.sku;
+  $("#fDesc").textContent = x.descripcion;
+  $("#fUbi").textContent  = x.ubicacion;
+  $("#fPos").textContent  = `${pos} / ${l.length}`;
+  $("#fSello").textContent = x.estado === "recuento" ? "Recuento" : "Ciego";
+  pintarNumero();
+  ir("#pConteo");
+}
+
+function pintarNumero(){ $("#fNum").textContent = buffer; }
+
+$$(".teclado button").forEach(b => b.addEventListener("click", () => {
+  const t = b.dataset.t;
+  if(t === "C") buffer = "0";
+  else if(t === "B") buffer = buffer.length > 1 ? buffer.slice(0,-1) : "0";
+  else buffer = (buffer === "0" ? "" : buffer) + t;
+  if(buffer.length > 7) buffer = buffer.slice(0,7);
+  pintarNumero();
+}));
+
+$$(".chips button").forEach(b => b.addEventListener("click", () => {
+  buffer = String(Math.min(9999999, (parseInt(buffer,10) || 0) + Number(b.dataset.suma)));
+  pintarNumero();
+}));
+
+$("#btnGuardar").addEventListener("click", async () => {
+  if(!itemActivo) return;
+  const qty = parseInt(buffer, 10);
+  if(isNaN(qty) || qty < 0) return avisar("Cantidad inválida","Escribe cuántas unidades hay. Si no hay ninguna, deja el cero.","malo");
+
+  const esRecuento = itemActivo.estado === "recuento";
+  const registro = { qty, usuario: usuario.nombre, ts: hoyISO() };
+  const cambios = esRecuento
+    ? { conteo2: registro, estado: "contado" }
+    : { conteo1: registro, estado: "contado" };
+
+  $("#btnGuardar").disabled = true;
+  $("#btnGuardar").textContent = "Guardando…";
+  try {
+    await updateDoc(doc(db, CONFIG.coleccion, sesion.id, "lineas", itemActivo.sku), cambios);
+    // Con caché persistente, esto queda encolado si no hay señal y sube solo.
+    siguienteRenglon();
+  } catch(err){
+    avisar("No se guardó", err.message, "malo");
+  } finally {
+    $("#btnGuardar").disabled = false;
+    $("#btnGuardar").textContent = "Guardar y seguir";
+  }
+});
+
+function siguienteRenglon(){
+  const l = lineas.filter(x => x.zona === zonaActiva);
+  const i = l.findIndex(x => x.sku === itemActivo.sku);
+  const pendiente = l.slice(i+1).find(x => x.estado === "pendiente" || x.estado === "recuento")
+                 || l.find(x => x.estado === "pendiente" || x.estado === "recuento");
+  if(pendiente && pendiente.sku !== itemActivo.sku) abrirFicha(pendiente.sku);
+  else { ir("#pLista"); pintarItems(); }
+}
+
+$("#btnIncidencia").addEventListener("click", async () => {
+  if(!itemActivo) return;
+  const ok = await preguntar({
+    rotulo: "Renglón " + itemActivo.sku,
+    titulo: "¿Qué pasó?",
+    cuerpo: `<label class="campo"><span>Describe el problema</span>
+      <input id="mNota" type="text" placeholder="Ej. no está en A-03-2, apareció en B-01"></label>
+      <div class="aviso">El supervisor lo revisa antes de ajustar nada.</div>`,
+    aceptar: "Reportar"
+  });
+  if(!ok) return;
+  const nota = $("#mNota") ? $("#mNota").value.trim() : "";
+  try {
+    await updateDoc(doc(db, CONFIG.coleccion, sesion.id, "lineas", itemActivo.sku), {
+      incidencia: true, nota: `${nota} — ${usuario.nombre}`
+    });
+    siguienteRenglon();
+  } catch(err){ avisar("No se guardó", err.message, "malo"); }
+});
+
+/* ===================================================================
+   SUPERVISOR
+   =================================================================== */
+let ajustes = [];
+
+async function cargarAjustes(){
+  try {
+    const s = await getDocs(collection(db, CONFIG.coleccion, sesion.id, "ajustes"));
+    ajustes = s.docs.map(d => ({ id:d.id, ...d.data() }));
+  } catch(e){ ajustes = []; }
+}
+
+function fisicoDe(l){
+  if(l.conteo2) return l.conteo2.qty;
+  if(l.conteo1) return l.conteo1.qty;
+  return null;
+}
+
+function superaUmbral(teorico, fisico){
+  const dif = Math.abs(fisico - teorico);
+  const pct = teorico > 0 ? dif / teorico * 100 : (dif > 0 ? 100 : 0);
+  return dif > (sesion.umbralUnid ?? 0) && pct > (sesion.umbralPct ?? 0);
+}
+
+function pintarSupervisor(){
+  $("#migasSup").textContent = `${usuario.nombre} · supervisor`;
+  $("#tituloSup").textContent = sesion.nombre;
+
+  const contados  = lineas.filter(l => l.estado !== "pendiente");
+  const recuento  = lineas.filter(l => l.estado === "recuento");
+  const ajustados = lineas.filter(l => l.estado === "ajustado");
+  $("#dTotal").textContent     = lineas.length;
+  $("#dContados").textContent  = contados.length;
+  $("#dRecuento").textContent  = recuento.length;
+  $("#dAjustados").textContent = ajustados.length;
+
+  // Renglones con conteo hecho y aún sin ajustar
+  const revisables = lineas
+    .filter(l => l.estado === "contado" || l.incidencia)
+    .map(l => {
+      const t = teoricos[l.sku] ?? 0;
+      const f = fisicoDe(l);
+      return { l, t, f, dif: f === null ? null : f - t };
+    })
+    .sort((a,b) => Math.abs(b.dif ?? 0) - Math.abs(a.dif ?? 0));
+
+  if(!revisables.length){
+    $("#tablaDiferencias").innerHTML = `<div class="vacio">Todavía no hay renglones contados por revisar.</div>`;
+  } else {
+    $("#tablaDiferencias").innerHTML = `
+      <div class="tabla-env"><table>
+        <thead><tr>
+          <th>SKU</th><th>Descripción</th><th>Zona</th>
+          <th style="text-align:right">Sistema</th><th style="text-align:right">Físico</th>
+          <th style="text-align:right">Dif.</th><th>Contó</th><th>Acción</th>
+        </tr></thead>
+        <tbody>${revisables.map(r => {
+          const alerta = r.f !== null && superaUmbral(r.t, r.f) && !r.l.conteo2;
+          const clase = r.dif === null ? "" : r.dif < 0 ? "neg" : r.dif > 0 ? "pos" : "";
+          return `<tr>
+            <td class="mono">${esc(r.l.sku)}</td>
+            <td>${esc(r.l.descripcion)}${r.l.incidencia ? ` <span class="etq inci">Problema</span>` : ""}</td>
+            <td>${esc(r.l.zona)}</td>
+            <td class="n">${r.t}</td>
+            <td class="n">${r.f === null ? "—" : r.f}</td>
+            <td class="n ${clase}">${r.dif === null ? "—" : (r.dif > 0 ? "+" : "") + r.dif}</td>
+            <td style="font-size:12px">${esc(r.l.conteo2 ? r.l.conteo2.usuario + " (2º)" : (r.l.conteo1 ? r.l.conteo1.usuario : "—"))}</td>
+            <td>${alerta
+              ? `<button class="fantasma" style="font-size:13px;padding:5px 9px" data-recontar="${esc(r.l.sku)}">Mandar a recontar</button>`
+              : `<button class="principal" style="font-size:13px;padding:5px 9px;box-shadow:none" data-ajustar="${esc(r.l.sku)}">Ajustar</button>`}</td>
+          </tr>`;
+        }).join("")}</tbody>
+      </table></div>
+      ${r_nota(revisables)}`;
+  }
+
+  $("#tablaDiferencias").querySelectorAll("[data-recontar]").forEach(b =>
+    b.addEventListener("click", () => mandarARecontar(b.dataset.recontar)));
+  $("#tablaDiferencias").querySelectorAll("[data-ajustar]").forEach(b =>
+    b.addEventListener("click", () => ajustar(b.dataset.ajustar)));
+
+  $("#tablaAjustes").innerHTML = ajustes.length ? `
+    <div class="tabla-env"><table>
+      <thead><tr><th>SKU</th><th style="text-align:right">Sistema</th><th style="text-align:right">Físico</th>
+      <th style="text-align:right">Dif.</th><th>Motivo</th><th>Autorizó</th><th>Fecha</th></tr></thead>
+      <tbody>${ajustes.map(a => `<tr>
+        <td class="mono">${esc(a.sku)}</td>
+        <td class="n">${a.teorico}</td>
+        <td class="n">${a.fisico}</td>
+        <td class="n ${a.diferencia<0?"neg":a.diferencia>0?"pos":""}">${a.diferencia>0?"+":""}${a.diferencia}</td>
+        <td>${esc(a.motivo)}</td>
+        <td>${esc(a.autorizadoPor)}</td>
+        <td style="font-size:12px">${esc(fecha(a.ts))}</td>
+      </tr>`).join("")}</tbody>
+    </table></div>` : `<div class="vacio">Ningún ajuste autorizado todavía.</div>`;
+}
+
+function r_nota(revisables){
+  const n = revisables.filter(r => r.f !== null && superaUmbral(r.t, r.f) && !r.l.conteo2).length;
+  return n ? `<div class="aviso" style="margin-top:12px">${n} renglón(es) pasan el umbral de ${sesion.umbralPct}% y ${sesion.umbralUnid} unidades. Recuéntalos con otra persona antes de tocar el sistema.</div>` : "";
+}
+
+async function mandarARecontar(sku){
+  const l = lineas.find(x => x.sku === sku);
+  const ok = await preguntar({
+    rotulo: sku,
+    titulo: "Mandar a recontar",
+    cuerpo: `<p style="margin-bottom:10px">${esc(l.descripcion)} — ${esc(l.ubicacion)}</p>
+      <div class="aviso">Se borra el primer conteo de la vista del almacenista y otra persona vuelve a contar a ciegas.</div>`,
+    aceptar: "Mandar a recontar"
+  });
+  if(!ok) return;
+  try {
+    await updateDoc(doc(db, CONFIG.coleccion, sesion.id, "lineas", sku), { estado: "recuento" });
+  } catch(err){ avisar("No se guardó", err.message, "malo"); }
+}
+
+async function ajustar(sku){
+  const l = lineas.find(x => x.sku === sku);
+  const t = teoricos[sku] ?? 0;
+  const f = fisicoDe(l);
+  if(f === null) return avisar("Sin conteo","Este renglón todavía no lo han contado.","malo");
+  const dif = f - t;
+
+  const ok = await preguntar({
+    rotulo: sku,
+    titulo: "Autorizar el ajuste",
+    cuerpo: `
+      <div class="reticula" style="margin-bottom:12px">
+        <div class="dato"><div class="k">Sistema</div><div class="v">${t}</div></div>
+        <div class="dato"><div class="k">Físico</div><div class="v">${f}</div></div>
+        <div class="dato"><div class="k">Diferencia</div><div class="v" style="color:${dif<0?"var(--oxido)":dif>0?"var(--verde)":"inherit"}">${dif>0?"+":""}${dif}</div></div>
+      </div>
+      <label class="campo"><span>Motivo — obligatorio</span>
+        <select id="mMotivo">
+          <option value="">Elige un motivo…</option>
+          <option>Error de digitación en el sistema</option>
+          <option>Despacho no descargado</option>
+          <option>Recepción no cargada</option>
+          <option>Material dañado o desincorporado</option>
+          <option>Ubicado en otra zona</option>
+          <option>Merma / faltante sin explicación</option>
+          <option>Otro</option>
+        </select></label>
+      <label class="campo"><span>Detalle</span>
+        <input id="mDetalle" type="text" placeholder="Ej. guía 4471 despachada el 08/08"></label>`,
+    aceptar: "Autorizar ajuste"
+  });
+  if(!ok) return;
+
+  const motivo  = $("#mMotivo") ? $("#mMotivo").value : "";
+  const detalle = $("#mDetalle") ? $("#mDetalle").value.trim() : "";
+  if(!motivo) return avisar("Falta el motivo","Todo ajuste necesita una razón. Sin motivo no hay rastro que auditar después.","malo");
+
+  try {
+    await addDoc(collection(db, CONFIG.coleccion, sesion.id, "ajustes"), {
+      sku, teorico: t, fisico: f, diferencia: dif,
+      motivo: detalle ? `${motivo} — ${detalle}` : motivo,
+      autorizadoPor: usuario.nombre, ts: serverTimestamp()
+    });
+    await updateDoc(doc(db, CONFIG.coleccion, sesion.id, "lineas", sku), { estado: "ajustado" });
+    await setDoc(doc(db, CONFIG.coleccion, sesion.id, "teoricos", sku), { teorico: f });
+    teoricos[sku] = f;
+    await cargarAjustes();
+    pintarSupervisor();
+  } catch(err){ avisar("No se guardó", err.message, "malo"); }
+}
+
+/* ---------- exportar ---------- */
+$("#btnCsvResultados").addEventListener("click", () => {
+  const filas = [["SKU","Descripcion","Zona","Ubicacion","Sistema","Fisico","Diferencia","Conteo 1","Quien 1","Conteo 2","Quien 2","Estado","Nota"]];
+  lineas.forEach(l => {
+    const t = teoricos[l.sku] ?? 0;
+    const f = fisicoDe(l);
+    filas.push([l.sku, l.descripcion, l.zona, l.ubicacion, t, f ?? "", f === null ? "" : f - t,
+      l.conteo1?.qty ?? "", l.conteo1?.usuario ?? "", l.conteo2?.qty ?? "", l.conteo2?.usuario ?? "",
+      l.estado, l.nota || ""]);
+  });
+  bajarCSV(`conteo_${sesion.nombre.replace(/\W+/g,"_")}.csv`, filas);
+});
+
+$("#btnCsvAjustes").addEventListener("click", () => {
+  const filas = [["SKU","Sistema","Fisico","Diferencia","Motivo","Autorizo","Fecha"]];
+  ajustes.forEach(a => filas.push([a.sku, a.teorico, a.fisico, a.diferencia, a.motivo, a.autorizadoPor, fecha(a.ts)]));
+  bajarCSV(`ajustes_${sesion.nombre.replace(/\W+/g,"_")}.csv`, filas);
+});
+
+$("#btnCerrarSesion").addEventListener("click", async () => {
+  const faltan = lineas.filter(l => l.estado === "pendiente" || l.estado === "recuento").length;
+  const ok = await preguntar({
+    rotulo: sesion.nombre,
+    titulo: "Cerrar el conteo",
+    cuerpo: faltan
+      ? `<div class="aviso malo">Quedan ${faltan} renglones sin contar o sin recontar. Si cierras ahora, quedan como están.</div>`
+      : `<div class="aviso bueno">Todos los renglones están contados. Baja el respaldo antes de cerrar.</div>`,
+    aceptar: "Cerrar conteo"
+  });
+  if(!ok) return;
+  try {
+    await updateDoc(doc(db, CONFIG.coleccion, sesion.id), {
+      estado: "cerrado", cerradoPor: usuario.nombre, cerradoEn: serverTimestamp()
+    });
+    if(escuchando) escuchando();
+    await cargarSesiones();
+    ir("#pSesiones");
+  } catch(err){ avisar("No se guardó", err.message, "malo"); }
+});
+</script>
+</body>
+</html>
