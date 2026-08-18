@@ -949,7 +949,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v50 · anular solo Viannis o admin';
+var APP_VERSION='v51 · filtro CRM contactados por día';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1976,6 +1976,13 @@ function renderVentas(c){
     +'<button class="btn '+(VENTAS_VISTA==='tablero'?'btn-dark':'btn-ghost')+' btn-sm" onclick="cambiarVistaVentas(\'tablero\')">\u25A6 Tablero</button>'
     +'<button class="btn btn-ghost btn-sm" onclick="exportarClientesCSV()">CSV</button>'
     +'<button class="btn btn-green btn-sm" style="margin-left:auto" onclick="abrirCliente(null)">+ Nuevo cliente</button>'
+    +'</div>'
+    +'<div class="toolbar" style="border-top:none;align-items:center;gap:8px;flex-wrap:wrap">'
+    +'<span style="font-size:12px;color:var(--muted);font-weight:600">📅 Contactados '+(SESSION.rol==='admin'?'':'por mí ')+'el:</span>'
+    +'<input type="date" id="v-fecha-contacto" onchange="filtrarVentas()" style="padding:6px 8px;border:1px solid #d1d5db;border-radius:8px;font-size:13px">'
+    +'<button class="btn btn-ghost btn-sm" onclick="var i=document.getElementById(\'v-fecha-contacto\');if(i){i.value=fechaInput(fecha());filtrarVentas();}">Hoy</button>'
+    +'<button class="btn btn-ghost btn-sm" onclick="var i=document.getElementById(\'v-fecha-contacto\');if(i){i.value=\'\';filtrarVentas();}">Limpiar</button>'
+    +'<span id="v-fecha-count" style="font-size:12px;color:var(--info);font-weight:700"></span>'
     +'</div>';
   var pendCt=cls.filter(function(x){if(estaFinalizado(x))return false;var d=diasRestantes(x.proximoContacto);if(d===null||d>0)return false;return SESSION.rol==='admin'||x.vendedor===SESSION.nombre;});
   var bannerCt=pendCt.length?'<div onclick="var s=document.getElementById(\'v-est1\');if(s){s.value=\'__VENC__\';filtrarVentas();}" style="background:var(--warning);color:#fff;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;justify-content:space-between;gap:8px"><span>\uD83D\uDCC5 '+pendCt.length+' contacto'+(pendCt.length>1?'s':'')+' para hoy o vencido'+(pendCt.length>1?'s':'')+(SESSION.rol==='admin'?' (todos)':' tuyos')+'</span><span style="font-size:11px;opacity:.85">Toca para ver \u2192</span></div>':'';
@@ -1983,16 +1990,29 @@ function renderVentas(c){
   filtrarVentas();
 }
 function cambiarVistaVentas(v){VENTAS_VISTA=v;localStorage.setItem('veo_ventas_vista',v);renderVentas(document.getElementById('content'));}
+// ¿El cliente fue marcado como CONTACTADO en la fecha dada (DD/MM/YYYY) por 'quien'?
+// Si 'quien' viene vacío, cuenta a cualquier vendedor (para el admin).
+function contactadoEseDia(cl,fechaDDMM,quien){
+  if(!fechaDDMM||!Array.isArray(cl.seguimientos))return false;
+  return cl.seguimientos.some(function(s){
+    return (s.resultado==='CONTACTADO')&&((s.fecha||'')===fechaDDMM)&&(!quien||((s.usuario||'')===quien));
+  });
+}
 function clientesFiltrados(){
   var b=((document.getElementById('v-buscar')||{value:''}).value||'').toLowerCase();
   var fv=(document.getElementById('v-vendedor')||{value:''}).value;
   var fe=(document.getElementById('v-est1')||{value:''}).value;
+  var ffc=(document.getElementById('v-fecha-contacto')||{value:''}).value; // YYYY-MM-DD
+  var fechaSel=ffc?inputFecha(ffc):''; // -> DD/MM/YYYY
+  // Quién marcó: el vendedor elegido; si no, cada vendedor ve lo suyo (el admin ve de todos).
+  var quien=fv||(SESSION&&SESSION.rol==='admin'?'':(SESSION?SESSION.nombre:''));
   return getClientes().filter(function(cl){
     var texto=((cl.nombre||'')+' '+(cl.telefono||'')+' '+(cl.producto||'')+' '+(cl.ciudad||'')+' '+(cl.tipoNegocio||'')).toLowerCase();
     var mb=!b||texto.indexOf(b)>=0;
     var mv=!fv||cl.vendedor===fv;
     var me=!fe||(fe==='__VENC__'?(function(){if(estaFinalizado(cl))return false;var d=diasRestantes(cl.proximoContacto);return d!==null&&d<=0;})():fe==='__EMPRESA__'?esEmpresa(cl.nombre):est1De(cl)===fe);
-    return mb&&mv&&me;
+    var mfc=!fechaSel||contactadoEseDia(cl,fechaSel,quien);
+    return mb&&mv&&me&&mfc;
   });
 }
 function ordenarClientes(lista){
@@ -2125,6 +2145,8 @@ function clienteCardHTML(cl){
 function filtrarVentas(){
   var el=document.getElementById('ventas-lista');if(!el)return;
   var lista=ordenarClientes(clientesFiltrados());
+  var cnt=document.getElementById('v-fecha-count');
+  if(cnt){var ffc=(document.getElementById('v-fecha-contacto')||{value:''}).value;cnt.textContent=ffc?('✓ '+lista.length+' contactado'+(lista.length===1?'':'s')+' ese día'):'';}
   if(VENTAS_VISTA==='tabla'){renderTablaCRM(el,lista);return;}
   if(!getClientes().length){el.innerHTML='<div class="empty"><div class="empty-icon">\uD83D\uDCBC</div>A\u00FAn no hay clientes en el CRM<br><span style="font-size:12px">Toca "+ Nuevo cliente" para agregar el primero</span></div>';return;}
   if(!lista.length){el.innerHTML='<div class="empty"><div class="empty-icon">\uD83D\uDD0D</div>Ning\u00FAn cliente coincide con el filtro</div>';return;}
