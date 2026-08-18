@@ -949,7 +949,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v49 · anular pedido y reemplazo';
+var APP_VERSION='v50 · anular solo Viannis o admin';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1292,6 +1292,7 @@ function filtrarHome(){
   var h='';['vencido','urgente','LISTO','sf','ok'].forEach(function(t){if(!g[t]||!g[t].length)return;h+='<div class="sec-label">'+etq[t]+' ('+g[t].length+')</div>';g[t].forEach(function(p){h+=cardHTML(p,false);});});
   el.innerHTML=h;
 }
+function puedeAnular(){var s=SESSION||{};if(s.rol==='admin')return true;var n=((s.nombre||'')+' '+(s.username||'')).toLowerCase();return n.indexOf('viannis')>=0;}
 function cardHTML(p,conEntregar){
   var canEdit=SESSION.rol==='admin'||SESSION.username===p.creadoPor||SESSION.username===p.vendedor;
   var pid=p.id;var num=p.numero||pid.substring(0,6);
@@ -1324,7 +1325,7 @@ function cardHTML(p,conEntregar){
   if(p.pdfUrl)h+='<a href="'+p.pdfUrl+'" target="_blank" class="btn btn-blue btn-sm" style="text-decoration:none">📄 Ver PDF</a>';
   if(p.planoUrl)h+='<a href="'+esc(p.planoUrl)+'" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none">📐 Ver plano</a>';
   if(dgPorNumero(p.numero))h+='<button class="btn btn-ghost btn-sm" onclick="verDesglosePedido(\''+esc((p.numero||'').toString())+'\')">🧩 Desglose</button>';
-  if(canEdit){if(p.estatus==='ANULADO')h+='<button class="btn btn-ghost btn-sm" style="color:#16a34a" onclick="reactivarPedido(\''+pid+'\')">↩️ Reactivar</button>';else h+='<button class="btn btn-ghost btn-sm" style="color:#dc2626" onclick="anularPedido(\''+pid+'\')">🚫 Anular</button>';}
+  if(puedeAnular()){if(p.estatus==='ANULADO')h+='<button class="btn btn-ghost btn-sm" style="color:#16a34a" onclick="reactivarPedido(\''+pid+'\')">↩️ Reactivar</button>';else h+='<button class="btn btn-ghost btn-sm" style="color:#dc2626" onclick="anularPedido(\''+pid+'\')">🚫 Anular</button>';}
   if(conEntregar&&p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO'){h+='<input type="text" id="nota-'+pid+'" placeholder="Nota de entrega..."><button class="btn btn-green btn-sm" data-entregar="'+pid+'">Entregar</button>';}
   h+='</div></div>';return h;
 }
@@ -2641,8 +2642,8 @@ function dgFmtCant(n){n=+n;if(isNaN(n))return '?';return String(n);}
 function dgFind(id){return (DB.desgloses||[]).find(function(x){return x.id===id;});}
 function dgPorNumero(numero){var n=(numero||'').toString().replace(/^0+/,'');if(!n)return null;return (DB.desgloses||[]).find(function(x){return (x.numero||'').toString().replace(/^0+/,'')===n;});}
 function verDesglosePedido(numero){var d=dgPorNumero(numero);if(!d){toast('Aún no hay desglose para este pedido','warn');return;}if(d.pdfUrl){window.open(d.pdfUrl,'_blank');return;}PLAN_MODO='desgloses';DG_FILTRO=(numero||'').toString().replace(/^0+/,'');var nb=document.getElementById('nb-plan');if(nb)goTab('plan',nb);toast('Mostrando el desglose del pedido #'+numero,'ok');}
-function anularPedido(pid){var p=DB.pedidos.find(function(x){return x.id===pid;});if(!p)return;var r=prompt('¿Anular el pedido #'+(p.numero||'')+'?\nSi lo reemplaza otro pedido, escribe su número (o deja vacío):','');if(r===null)return;p.estatusPrev=(p.estatus&&p.estatus!=='ANULADO')?p.estatus:'PENDIENTE';p.estatus='ANULADO';p.anulado=true;p.anuladoTS=Date.now();var rr=(r||'').trim().replace(/^0+/,'');if(rr)p.reemplazadoPor=rr;else delete p.reemplazadoPor;guardarDB();toast('Pedido anulado','warn');if(TAB)goTab(TAB,document.getElementById('nb-'+TAB));}
-function reactivarPedido(pid){var p=DB.pedidos.find(function(x){return x.id===pid;});if(!p)return;if(!confirm('¿Reactivar el pedido #'+(p.numero||'')+'?'))return;p.estatus=p.estatusPrev||'PENDIENTE';p.anulado=false;delete p.reemplazadoPor;guardarDB();toast('Pedido reactivado','ok');if(TAB)goTab(TAB,document.getElementById('nb-'+TAB));}
+function anularPedido(pid){if(!puedeAnular()){toast('Solo Viannis o un admin pueden anular','err');return;}var p=DB.pedidos.find(function(x){return x.id===pid;});if(!p)return;var r=prompt('¿Anular el pedido #'+(p.numero||'')+'?\nSi lo reemplaza otro pedido, escribe su número (o deja vacío):','');if(r===null)return;p.estatusPrev=(p.estatus&&p.estatus!=='ANULADO')?p.estatus:'PENDIENTE';p.estatus='ANULADO';p.anulado=true;p.anuladoTS=Date.now();var rr=(r||'').trim().replace(/^0+/,'');if(rr)p.reemplazadoPor=rr;else delete p.reemplazadoPor;guardarDB();toast('Pedido anulado','warn');if(TAB)goTab(TAB,document.getElementById('nb-'+TAB));}
+function reactivarPedido(pid){if(!puedeAnular()){toast('Solo Viannis o un admin pueden reactivar','err');return;}var p=DB.pedidos.find(function(x){return x.id===pid;});if(!p)return;if(!confirm('¿Reactivar el pedido #'+(p.numero||'')+'?'))return;p.estatus=p.estatusPrev||'PENDIENTE';p.anulado=false;delete p.reemplazadoPor;guardarDB();toast('Pedido reactivado','ok');if(TAB)goTab(TAB,document.getElementById('nb-'+TAB));}
 function dgGuardarDeferido(){if(DG_SAVE_TIMER)clearTimeout(DG_SAVE_TIMER);DG_SAVE_TIMER=setTimeout(function(){guardarDB();},800);}
 function dgBuscar(v){DG_FILTRO=(v||'').toLowerCase();var l=document.getElementById('dg-lista');if(l)l.innerHTML=dgListaHTML();}
 function dgEditCant(id,tipo,idx,val){var d=dgFind(id);if(!d)return;var arr=tipo==='pieza'?(d.piezas||[]):(d.noComp||[]);if(!arr[idx])return;var n=parseFloat(val);arr[idx].cant=isNaN(n)?0:n;dgGuardarDeferido();}
