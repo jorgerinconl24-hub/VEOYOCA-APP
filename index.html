@@ -459,8 +459,35 @@ function chipOrden(o){
 
 async function guardarDB(){
   if(SAVING||!_db)return;SAVING=true;mostrarBadge('syncing');
-  try{var {setDoc,doc}=window._firestore;var _ua=Date.now();await setDoc(doc(_db,'veoyoca','data'),{usuarios:DB.usuarios,pedidos:DB.pedidos,bitacora:DB.bitacora.slice(-500),clientes:DB.clientes||[],presupuestosDoc:DB.presupuestosDoc||[],ofertasPrecios:DB.ofertasPrecios||{},instaladores:DB.instaladores||[],cargaPlan:DB.cargaPlan||{items:[]},desgloses:DB.desgloses||[],inv:DB.inv||{items:[],ubicaciones:[],movs:[],stock:{}},updatedAt:_ua},{merge:true});_lastAppliedUpdatedAt=_ua;mostrarBadge('ok');}
+  try{var {setDoc,doc}=window._firestore;var _ua=Date.now();await setDoc(doc(_db,'veoyoca','data'),{usuarios:DB.usuarios,pedidos:DB.pedidos,bitacora:DB.bitacora.slice(-500),presupuestosDoc:DB.presupuestosDoc||[],ofertasPrecios:DB.ofertasPrecios||{},instaladores:DB.instaladores||[],cargaPlan:DB.cargaPlan||{items:[]},desgloses:DB.desgloses||[],inv:DB.inv||{items:[],ubicaciones:[],movs:[],stock:{}},updatedAt:_ua},{merge:true});_lastAppliedUpdatedAt=_ua;mostrarBadge('ok');}
   catch(e){mostrarBadge('err');toast('Error: '+e.message,'err');}SAVING=false;
+}
+
+// ═══════════════════════════════════════════════════════════
+// CLIENTES DEL CRM — coleccion propia 'clientes', un documento por cliente.
+// Se guarda solo el cliente tocado, no la base entera: no hay tope de 1 MiB
+// y dos vendedores pueden trabajar a la vez sin pisarse.
+// ═══════════════════════════════════════════════════════════
+async function guardarCliente1(cl){
+  if(!_db||!cl||!cl.id)return;
+  mostrarBadge('syncing');
+  try{
+    var {setDoc,doc}=window._firestore;
+    cl.updatedAt=Date.now();
+    await setDoc(doc(_db,'clientes',cl.id),cl);
+    mostrarBadge('ok');
+  }catch(e){mostrarBadge('err');toast('No se guardo el cliente: '+e.message,'err');}
+  guardarDB();
+}
+async function borrarCliente1(id){
+  if(!_db||!id)return;
+  mostrarBadge('syncing');
+  try{
+    var {deleteDoc,doc}=window._firestore;
+    await deleteDoc(doc(_db,'clientes',id));
+    mostrarBadge('ok');
+  }catch(e){mostrarBadge('err');toast('No se elimino el cliente: '+e.message,'err');}
+  guardarDB();
 }
 
 function login(){
@@ -2226,7 +2253,7 @@ function crmCampo(id,campo,valor){
   // Al marcar la visita a la oficina a mano, se registra la fecha automaticamente
   if(campo==='visitoOficina'){ if(valor==='SÍ'){ if(!cl.fechaVisita)cl.fechaVisita=fecha(); } else { cl.fechaVisita=''; } }
   clearTimeout(CRM_SAVE_TIMER);
-  CRM_SAVE_TIMER=setTimeout(function(){guardarDB();},900);
+  CRM_SAVE_TIMER=setTimeout(function(){guardarCliente1(cl);},900);
   if(campo==='proximoContacto'&&valor)notificarProximoContacto(cl);
   if(campo==='redSocial'&&valor)notificarNuevoLeadGrupo(cl);
   // Si se registró un resultado, refresca la lista para que se vea la fecha de
@@ -2239,7 +2266,7 @@ async function crmQuickAdd(inp){
   getClientes().push(cl);
   registrarBitacora(cl.id,'CLIENTE CRM creado (tabla): '+nombre+' por '+SESSION.nombre);
   inp.value='';
-  await guardarDB();
+  await guardarCliente1(cl);
   filtrarVentas();
   setTimeout(function(){var n=document.getElementById('crm-nuevo');if(n)n.focus();},100);
   toast('Cliente "'+nombre+'" agregado','ok');
@@ -2383,7 +2410,7 @@ async function guardarCliente(){
   registrarBitacora(cl.id,(esNuevo?'CLIENTE CRM creado: ':'CLIENTE CRM editado: ')+nombre+' por '+SESSION.nombre);
   if(cl.proximoContacto&&cl.proximoContacto!==proxAntes)notificarProximoContacto(cl);
   if(cl.redSocial)notificarNuevoLeadGrupo(cl);
-  await guardarDB();
+  await guardarCliente1(cl);
   cerrarModal('modal-cliente');
   if(TAB==='ventas')renderVentas(document.getElementById('content'));
   toast(esNuevo?'Cliente agregado al CRM':'Cliente actualizado','ok');
@@ -2392,9 +2419,10 @@ async function eliminarClienteActual(){
   if(!CLIENTE_EDIT_ID)return;
   var cl=getClientes().find(function(x){return x.id===CLIENTE_EDIT_ID;});
   if(!cl||!confirm('Eliminar a "'+(cl.nombre||'')+'" del CRM? No se puede deshacer.'))return;
+  var _idBorrar=CLIENTE_EDIT_ID;
   DB.clientes=getClientes().filter(function(x){return x.id!==CLIENTE_EDIT_ID;});
   registrarBitacora(CLIENTE_EDIT_ID,'CLIENTE CRM eliminado: '+(cl.nombre||'')+' por '+SESSION.nombre);
-  await guardarDB();
+  await borrarCliente1(_idBorrar);
   cerrarModal('modal-cliente');
   if(TAB==='ventas')renderVentas(document.getElementById('content'));
   toast('Cliente eliminado','warn');
@@ -2412,7 +2440,7 @@ async function agregarSeguimiento(){
   document.getElementById('c-seg-texto').value='';
   renderSeguimientosCliente(cl);
   registrarBitacora(cl.id,'SEGUIMIENTO a '+(cl.nombre||'')+': '+texto.substring(0,60));
-  await guardarDB();
+  await guardarCliente1(cl);
   toast('Seguimiento registrado','ok');
 }
 function exportarClientesCSV(){
@@ -4073,10 +4101,29 @@ async function initFirebase(){
     var fb=await import('https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js');
     var fs=await import('https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js');
     var firebaseConfig={apiKey:'AIzaSyD-fyGTFiZgn_FfZN-VC0fS_rFNtVsg5kc',authDomain:'veoyoca-54caf.firebaseapp.com',projectId:'veoyoca-54caf',storageBucket:'veoyoca-54caf.firebasestorage.app',messagingSenderId:'510700319861',appId:'1:510700319861:web:1cc96074cec81134a7f43c'};
-    var app=fb.initializeApp(firebaseConfig);_db=fs.getFirestore(app);window._firestore=fs;
+    var app=fb.initializeApp(firebaseConfig);
+    // Cache local en disco: al reabrir la app solo se descargan los clientes que
+    // cambiaron, no los cientos que ya estan guardados en el navegador.
+    try{_db=fs.initializeFirestore(app,{localCache:fs.persistentLocalCache({tabManager:fs.persistentMultipleTabManager()})});}
+    catch(e){console.log('Cache local no disponible, usando modo normal:',e&&e.message);_db=fs.getFirestore(app);}
+    window._firestore=fs;
     var snap=await fs.getDoc(fs.doc(_db,'veoyoca','data'));
-    if(snap.exists()){var d=snap.data();DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];DB.clientes=d.clientes||[];DB.desgloses=d.desgloses||[];}
+    if(snap.exists()){var d=snap.data();DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];DB.desgloses=d.desgloses||[];}
     else{DB.usuarios=[{id:'admin',nombre:'Administrador',username:'admin',password:'admin123',rol:'admin',creado:fecha()}];await guardarDB();}
+    // Clientes del CRM: viven en su propia coleccion.
+    document.getElementById('splash-msg').textContent='Cargando clientes...';
+    try{
+      var csnap=await fs.getDocs(fs.collection(_db,'clientes'));
+      DB.clientes=csnap.docs.map(function(d){return d.data();});
+    }catch(e){console.error('No se pudieron cargar los clientes:',e);DB.clientes=DB.clientes||[];}
+    // Escucha en vivo: si otro vendedor agrega o edita, se refleja aqui.
+    fs.onSnapshot(fs.collection(_db,'clientes'),function(cs){
+      var mapa={};
+      cs.docs.forEach(function(d){mapa[d.id]=d.data();});
+      DB.clientes=Object.keys(mapa).map(function(k){return mapa[k];});
+      if(TAB==='ventas')programarRerender();
+    },function(e){console.error('Escucha de clientes:',e);});
+
     fs.onSnapshot(fs.doc(_db,'veoyoca','data'),function(snap){
       if(!snap.exists()||SAVING)return;
       var d=snap.data();
@@ -4084,7 +4131,7 @@ async function initFirebase(){
       if(d.updatedAt&&d.updatedAt===_lastAppliedUpdatedAt)return;
       _lastAppliedUpdatedAt=d.updatedAt||_lastAppliedUpdatedAt;
       // Actualizar los datos en memoria (barato).
-      DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];DB.clientes=d.clientes||[];DB.presupuestosDoc=d.presupuestosDoc||[];DB.ofertasPrecios=d.ofertasPrecios||{};DB.instaladores=d.instaladores||[];DB.cargaPlan=d.cargaPlan||{items:[]};DB.desgloses=d.desgloses||[];DB.inv=d.inv||{items:[],ubicaciones:[],movs:[],stock:{}};
+      DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];DB.presupuestosDoc=d.presupuestosDoc||[];DB.ofertasPrecios=d.ofertasPrecios||{};DB.instaladores=d.instaladores||[];DB.cargaPlan=d.cargaPlan||{items:[]};DB.desgloses=d.desgloses||[];DB.inv=d.inv||{items:[],ubicaciones:[],movs:[],stock:{}};
       // Pestañas con estado transitorio que no debe redibujarse en vivo.
       if(TAB==='cotizar')return;
       if(TAB==='plan'&&PLAN_MODO==='carga')return;
