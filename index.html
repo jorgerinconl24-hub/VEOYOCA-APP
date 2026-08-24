@@ -176,8 +176,8 @@ table.crm{border-collapse:collapse;font-size:12px;min-width:1780px}
 <div style="margin-top:12px;text-align:center"><a href="#" onclick="resetMostrar(true);return false" style="font-size:12px;color:#93c5fd;text-decoration:none">&#xBF;Olvidaste tu contrase&#xF1;a?</a></div></div>
 <div class="login-card" id="reset-card" style="display:none"><h2>Recuperar contrase&#xF1;a</h2>
 <div id="reset-step1">
-<div class="field"><label>Usuario o correo</label><input type="text" id="r-ident" placeholder="tu usuario o tu correo"></div>
-<button class="btn-primary" onclick="resetSolicitar()">Enviar c&#xF3;digo al correo</button></div>
+<div class="field"><label>Usuario o WhatsApp</label><input type="text" id="r-ident" placeholder="tu usuario o tu n&#xFA;mero"></div>
+<button class="btn-primary" onclick="resetSolicitar()">Enviar c&#xF3;digo por WhatsApp</button></div>
 <div id="reset-step2" style="display:none">
 <div class="field"><label>C&#xF3;digo (lleg&#xF3; a tu correo)</label><input type="text" id="r-code" placeholder="6 d&#xED;gitos" inputmode="numeric"></div>
 <div class="field"><label>Nueva contrase&#xF1;a</label><input type="password" id="r-newpass" placeholder="tu nueva clave"></div>
@@ -510,12 +510,12 @@ function resetMostrar(show){
 function resetErr(m){var e=document.getElementById('r-err');e.textContent=m||'';e.style.display=m?'block':'none';}
 function resetSolicitar(){
   var ident=(document.getElementById('r-ident').value||'').trim();
-  if(!ident){resetErr('Indica tu usuario o correo');return;}
+  if(!ident){resetErr('Indica tu usuario o tu n\u00FAmero de WhatsApp');return;}
   resetErr('');document.getElementById('r-msg').textContent='Enviando código...';
   fetch('https://veoyoca-webhook.onrender.com/reset-solicitar',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify({ident:ident})})
   .then(function(r){return r.json();}).then(function(res){
     if(!res||!res.ok){document.getElementById('r-msg').textContent='';resetErr((res&&res.error)||'No se pudo enviar el código');return;}
-    document.getElementById('r-msg').textContent='Enviamos un código a '+(res.correo||'tu correo')+'. Revisa tu bandeja (y spam).';
+    document.getElementById('r-msg').textContent='Enviamos un código por WhatsApp a '+(res.destino||'tu número')+'.';
     document.getElementById('reset-step2').style.display='block';
   }).catch(function(){document.getElementById('r-msg').textContent='';resetErr('Error de conexión con el servidor');});
 }
