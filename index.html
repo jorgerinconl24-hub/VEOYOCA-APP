@@ -994,7 +994,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v52 · más rápida (re-dibujos agrupados)';
+var APP_VERSION='v53 · foto de producto desde galería';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -3432,8 +3432,12 @@ function invThumb(it,px){
 }
 function invFotoVer(url){window.open(url,'_blank');}
 function invFotoBtn(itemId,label){
+  // Dos opciones: "Tomar foto" (cámara, capture) y "Agregar" (galería, sin capture).
+  // Si ya hay foto, la de cámara dice "Cambiar foto"; la de galería siempre "Agregar".
   return '<input type="file" accept="image/*" capture="environment" id="invfoto-'+itemId+'" style="display:none" onchange="invFotoSubir(\''+itemId+'\',this)">'
-    +'<button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'invfoto-'+itemId+'\').click()">📷 '+label+'</button>';
+    +'<input type="file" accept="image/*" id="invfotoadd-'+itemId+'" style="display:none" onchange="invFotoSubir(\''+itemId+'\',this)">'
+    +'<button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'invfoto-'+itemId+'\').click()">📷 '+label+'</button>'
+    +'<button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'invfotoadd-'+itemId+'\').click()" style="margin-left:6px">🖼️ Agregar</button>';
 }
 function invFotoSubir(itemId,inp){
   var file=inp.files&&inp.files[0];inp.value='';if(!file)return;
