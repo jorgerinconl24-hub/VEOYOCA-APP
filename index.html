@@ -294,7 +294,7 @@ table.crm{border-collapse:collapse;font-size:12px;min-width:1780px}
 <div class="sfield-row"><div class="sfield"><label>Red social/Recomendado</label><input type="text" id="c-red" list="dl-red" placeholder="Ej: INSTAGRAM"></div>
 <div class="sfield"><label>Tipo de negocio</label><input type="text" id="c-tipo" list="dl-tipo" placeholder="Ej: CONCESIONARIO"></div></div>
 <div class="sfield-row"><div class="sfield"><label>Estado 1</label><select id="c-est1"><option value="SIN CONTACTAR">Sin contactar</option><option value="CONTACTADO">Contactado</option><option value="NO CONTESTA">No contesta</option><option value="A COTIZAR">A cotizar</option><option value="CERRADO">Cerrado</option><option value="NO INTERESADO">No interesado</option></select></div>
-<div class="sfield"><label>Estado 2</label><select id="c-est2"><option value="">Sin estado</option><option value="PRESUPUESTO ENVIADO">Presupuesto enviado</option><option value="EN NEGOCIACION">En negociaci&#xF3;n</option><option value="COMPRO">Compr&#xF3;</option><option value="NO COMPRO">No compr&#xF3;</option></select></div></div>
+<div class="sfield"><label>Estado 2</label><select id="c-est2"><option value="">Sin estado</option><option value="POTENCIAL">Potencial</option><option value="INTERESADO">Interesado</option><option value="PRESUPUESTO ENVIADO">Presupuesto enviado</option><option value="EN NEGOCIACION">En negociaci&#xF3;n</option><option value="COMPRO">Compr&#xF3;</option><option value="NO COMPRO">No compr&#xF3;</option></select></div></div>
 <div class="sfield-row"><div class="sfield"><label>&#xDA;ltimo contacto</label><input type="date" id="c-ultimo"></div>
 <div class="sfield"><label>Pr&#xF3;ximo contacto</label><input type="date" id="c-proximo"></div></div>
 <div class="sfield"><label>Estatus/Objeci&#xF3;n</label><input type="text" id="c-objecion" placeholder="Ej: Esperando aprobaci&#xF3;n del due&#xF1;o"></div>
@@ -457,10 +457,18 @@ function chipOrden(o){
   return chip;
 }
 
+var _savePending=false;
 async function guardarDB(){
-  if(SAVING||!_db)return;SAVING=true;mostrarBadge('syncing');
+  if(!_db)return;
+  // Si ya hay un guardado en curso, en vez de descartar este (lo que borraba
+  // cambios recién hechos, p.ej. un usuario nuevo), lo dejamos pendiente para
+  // ejecutarlo apenas termine el actual.
+  if(SAVING){_savePending=true;return;}
+  SAVING=true;mostrarBadge('syncing');
   try{var {setDoc,doc}=window._firestore;var _ua=Date.now();await setDoc(doc(_db,'veoyoca','data'),{usuarios:DB.usuarios,pedidos:DB.pedidos,bitacora:DB.bitacora.slice(-500),presupuestosDoc:DB.presupuestosDoc||[],pedidosDoc:DB.pedidosDoc||[],ofertasPrecios:DB.ofertasPrecios||{},instaladores:DB.instaladores||[],cargaPlan:DB.cargaPlan||{items:[]},desgloses:DB.desgloses||[],inv:DB.inv||{items:[],ubicaciones:[],movs:[],stock:{}},updatedAt:_ua},{merge:true});_lastAppliedUpdatedAt=_ua;mostrarBadge('ok');}
-  catch(e){mostrarBadge('err');toast('Error: '+e.message,'err');}SAVING=false;
+  catch(e){mostrarBadge('err');toast('Error: '+e.message,'err');}
+  SAVING=false;
+  if(_savePending){_savePending=false;return guardarDB();} // corre el guardado que quedó pendiente
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -998,7 +1006,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v59 · documento de PEDIDO (correlativo e historial)';
+var APP_VERSION='v61 · fix: usuario nuevo no se borra (guardado en cola)';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -2251,6 +2259,16 @@ function autoAgendarProximo(cl,res){
   cl.proximoContacto=fechaMasDias(dias);
   return cl.proximoContacto;
 }
+// POTENCIAL: programa un recordatorio para MAÑANA. El webhook manda un WhatsApp
+// dedicado (solo de ese cliente) a su vendedor cuando llega el día.
+function aplicarPotencial(cl){
+  cl.proximoContacto=fechaMasDias(1); // mañana
+  cl.recordatorioPotencial={fecha:cl.proximoContacto,hecho:false,creado:fecha()};
+  if(!Array.isArray(cl.seguimientos))cl.seguimientos=[];
+  cl.seguimientos.push({texto:'Marcado como POTENCIAL — recordatorio para mañana ('+cl.proximoContacto+')',fecha:fecha(),hora:hora(),usuario:SESSION?SESSION.nombre:'App'});
+  cl.ultimoContacto=fecha();
+  toast('Cliente marcado POTENCIAL — recordatorio para mañana ✓','ok');
+}
 // Marca la hora de la PRIMERA atención del cliente (solo la primera vez).
 function _marcarAtendido(cl){ if(cl && !cl.atendidoTS) cl.atendidoTS=Date.now(); }
 // Momento en que se agregó el cliente: usa creadoTS (exacto) o, si no lo tiene,
@@ -2401,6 +2419,7 @@ function crmCampo(id,campo,valor){
   if(campo==='estado2'&&valor&&valor!==prev){
     if(valor==='PRESUPUESTO ENVIADO'){_logRes(cl,'PRESUPUESTO ENVIADO');autoAgendarProximo(cl,'PRESUPUESTO ENVIADO');logueado=true;}
     else if(valor==='COMPRO'){_logRes(cl,'VENTA');autoAgendarProximo(cl,'VENTA');logueado=true;}
+    else if(valor==='POTENCIAL'){aplicarPotencial(cl);logueado=true;}
   }
   // Al marcar la visita a la oficina a mano, se registra la fecha automaticamente
   if(campo==='visitoOficina'){ if(valor==='SÍ'){ if(!cl.fechaVisita)cl.fechaVisita=fecha(); } else { cl.fechaVisita=''; } }
@@ -2444,7 +2463,7 @@ function celdaSelect(id,campo,valor,opciones,vacio){
 function renderTablaCRM(el,lista){
   var vends={};DB.usuarios.forEach(function(u){vends[u.nombre]=1;});getClientes().forEach(function(x){if(x.vendedor)vends[x.vendedor]=1;});
   var vendArr=Object.keys(vends).sort();
-  var EST2=['PRESUPUESTO ENVIADO','EN NEGOCIACION','COMPRO','NO COMPRO'];
+  var EST2=['POTENCIAL','INTERESADO','PRESUPUESTO ENVIADO','EN NEGOCIACION','COMPRO','NO COMPRO'];
   var h='<div class="crm-wrap"><table class="crm" id="tabla-crm"><thead><tr>';
   var _cols=['Nombre','Tel\u00E9fono','Vendedor','Estado 1','Estado 2','Producto/Servicio','Ciudad','Red social','Tipo de negocio','Estatus/Objeci\u00F3n','Plan de acci\u00F3n','Cant.','Porqu\u00E9 compr\u00F3','Porqu\u00E9 NO compr\u00F3','\u00DAlt. contacto','Pr\u00F3x. contacto','Notas','Visit\u00F3 oficina','Presupuesto','Pedido'];
   if(SESSION.rol==='admin')_cols.push('\u23F1 Atenci\u00F3n');
@@ -2534,6 +2553,7 @@ async function guardarCliente(){
   var cl=esNuevo?{id:uid(),seguimientos:[],creadoPor:SESSION.username,fechaCreacion:fecha(),creadoTS:Date.now()}:getClientes().find(function(x){return x.id===CLIENTE_EDIT_ID;});
   if(!cl)return;
   var proxAntes=esNuevo?'':(cl.proximoContacto||'');
+  var est2Antes=esNuevo?'':(cl.estado2||'');
   cl.nombre=nombre;
   cl.telefono=document.getElementById('c-telefono').value.trim();
   // No permitir teléfonos duplicados: si ese número ya está en otro cliente, avisa y no guarda.
@@ -2557,6 +2577,7 @@ async function guardarCliente(){
   cl.porqueCompro=document.getElementById('c-porque-si').value.trim();
   cl.porqueNoCompro=document.getElementById('c-porque-no').value.trim();
   cl.notas=document.getElementById('c-notas').value.trim();
+  if(cl.estado2==='POTENCIAL'&&est2Antes!=='POTENCIAL')aplicarPotencial(cl); // recordatorio para mañana
   cl.ultimaEdicion=fecha()+' '+hora();cl.editadoPor=SESSION.nombre;
   if(esNuevo)getClientes().push(cl);
   registrarBitacora(cl.id,(esNuevo?'CLIENTE CRM creado: ':'CLIENTE CRM editado: ')+nombre+' por '+SESSION.nombre);
