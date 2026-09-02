@@ -459,7 +459,7 @@ function chipOrden(o){
 
 async function guardarDB(){
   if(SAVING||!_db)return;SAVING=true;mostrarBadge('syncing');
-  try{var {setDoc,doc}=window._firestore;var _ua=Date.now();await setDoc(doc(_db,'veoyoca','data'),{usuarios:DB.usuarios,pedidos:DB.pedidos,bitacora:DB.bitacora.slice(-500),presupuestosDoc:DB.presupuestosDoc||[],ofertasPrecios:DB.ofertasPrecios||{},instaladores:DB.instaladores||[],cargaPlan:DB.cargaPlan||{items:[]},desgloses:DB.desgloses||[],inv:DB.inv||{items:[],ubicaciones:[],movs:[],stock:{}},updatedAt:_ua},{merge:true});_lastAppliedUpdatedAt=_ua;mostrarBadge('ok');}
+  try{var {setDoc,doc}=window._firestore;var _ua=Date.now();await setDoc(doc(_db,'veoyoca','data'),{usuarios:DB.usuarios,pedidos:DB.pedidos,bitacora:DB.bitacora.slice(-500),presupuestosDoc:DB.presupuestosDoc||[],pedidosDoc:DB.pedidosDoc||[],ofertasPrecios:DB.ofertasPrecios||{},instaladores:DB.instaladores||[],cargaPlan:DB.cargaPlan||{items:[]},desgloses:DB.desgloses||[],inv:DB.inv||{items:[],ubicaciones:[],movs:[],stock:{}},updatedAt:_ua},{merge:true});_lastAppliedUpdatedAt=_ua;mostrarBadge('ok');}
   catch(e){mostrarBadge('err');toast('Error: '+e.message,'err');}SAVING=false;
 }
 
@@ -901,14 +901,18 @@ function renderCotizar(c){
     +'<button class="btn '+(COTIZAR_MODO==='rack'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'rack\')">🏗️ Cotizar rack</button>'
     +'<button class="btn '+(COTIZAR_MODO==='partes'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'partes\')">🔩 Partes de rack</button>'
     +'<button class="btn '+(COTIZAR_MODO==='presu'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'presu\')">📄 Hacer presupuesto</button>'
+    +'<button class="btn '+(COTIZAR_MODO==='pedido'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'pedido\')">📄 Hacer pedido</button>'
     +'<button class="btn '+(COTIZAR_MODO==='tasa'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'tasa\')">🧮 Calculadora de tasa</button>'
     +'<button class="btn '+(COTIZAR_MODO==='precios'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'precios\')">🏷️ Lista de precios</button>'
     +'<button class="btn '+(COTIZAR_MODO==='lista'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'lista\')">📋 Presupuestos</button>'
+    +'<button class="btn '+(COTIZAR_MODO==='listapedido'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'listapedido\')">📋 Pedidos</button>'
     +(esAdmin?'<button class="btn '+(COTIZAR_MODO==='stats'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:120px" onclick="cotSetModo(\'stats\')">📊 Estadísticas</button>':'')
     +'</div></div>';
   if(COTIZAR_MODO==='partes'){c.innerHTML=toggle+cotUIpartes();partesRenderFilas();rkvCargarTasas(null);return;}
-  if(COTIZAR_MODO==='presu'){c.innerHTML=toggle+cotUIpresu();presuInitForm();return;}
-  if(COTIZAR_MODO==='lista'){c.innerHTML=toggle+cotUIlista();return;}
+  if(COTIZAR_MODO==='presu'){c.innerHTML=toggle+cotUIpresu('presu');presuInitForm();return;}
+  if(COTIZAR_MODO==='pedido'){c.innerHTML=toggle+cotUIpresu('pedido');presuInitForm();return;}
+  if(COTIZAR_MODO==='lista'){c.innerHTML=toggle+cotUIlista('presu');return;}
+  if(COTIZAR_MODO==='listapedido'){c.innerHTML=toggle+cotUIlista('pedido');return;}
   if(COTIZAR_MODO==='stats'){c.innerHTML=toggle+cotUIstats();return;}
   if(COTIZAR_MODO==='tasa'){c.innerHTML=toggle+cotUItasa();if(RKV_TASAS)tasaCalc();rkvCargarTasas(function(){tasaCalc();});return;}
   if(COTIZAR_MODO==='precios'){c.innerHTML=toggle+'<div id="precios-cont"></div>';preciosRender();preciosCargarDyn();rkvCargarTasas(function(){preciosRender();});return;}
@@ -994,7 +998,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v58 · presupuesto: elegir vendedor del cliente';
+var APP_VERSION='v59 · documento de PEDIDO (correlativo e historial)';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1056,11 +1060,12 @@ function presuVendOpts(){
   if(actual&&arr.indexOf(actual)<0)arr.unshift(actual);
   return arr.map(function(n){return '<option value="'+esc(n)+'"'+(n===actual?' selected':'')+'>'+esc(n)+'</option>';}).join('');
 }
-function cotUIpresu(){
+function cotUIpresu(kind){
+  var esPed=(kind==='pedido');var _doc=esPed?'pedido':'presupuesto';
   return '<div class="section-pad" style="max-width:640px;margin:0 auto">'
     +'<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:14px">'
-    +'<div style="font-size:15px;font-weight:700;color:#1a1a2e;margin-bottom:4px">📄 Hacer presupuesto</div>'
-    +'<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Datos del cliente e ítems. Se arma el presupuesto con número de control e IVA 16%, para copiar o descargar en PDF.</div>'
+    +'<div style="font-size:15px;font-weight:700;color:#1a1a2e;margin-bottom:4px">📄 Hacer '+_doc+'</div>'
+    +'<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Datos del cliente e ítems. Se arma el '+_doc+' con número de control e IVA 16%, para copiar o descargar en PDF.</div>'
     +'<div style="margin-bottom:10px"><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">🔎 Cliente guardado (busca y selecciona, o deja vacío si es nuevo)</label><input id="pp-buscar" list="pp-cli-dl" placeholder="Escribe el nombre o teléfono..." onchange="presuElegirCliente(this.value)" oninput="presuElegirCliente(this.value)" style="width:100%;padding:9px;border:1px solid #d1d5db;border-radius:8px;font-size:14px"><datalist id="pp-cli-dl"></datalist></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
     +presuCampo('Nombre del cliente *','pp-nombre','')+presuCampo('Teléfono *','pp-tel','04141234567')
@@ -1072,7 +1077,7 @@ function cotUIpresu(){
     +'<button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="presuAddItem()">+ Agregar ítem</button>'
     +'<div style="margin-top:12px"><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Nota (opcional)</label><textarea id="pp-nota" rows="2" style="width:100%;padding:9px;border:1px solid #d1d5db;border-radius:8px;font-size:13px" placeholder="Ej: ESPALDAR EMPLAFONADO · COLOR BLANCO"></textarea></div>'
     +'<div id="pp-tot" style="margin-top:12px;font-size:13px"></div>'
-    +'<button class="btn btn-dark" style="width:100%;margin-top:12px" onclick="presuGenerar()">Generar presupuesto</button>'
+    +'<button class="btn btn-dark" style="width:100%;margin-top:12px" onclick="'+(esPed?'pedidoGenerar()':'presuGenerar()')+'">Generar '+_doc+'</button>'
     +'</div>'
     +'<div id="pp-result"></div>'
     +'<div style="font-size:10px;color:#cbd5e1;text-align:center;margin-top:8px">'+APP_VERSION+'</div>'
@@ -1175,10 +1180,11 @@ function presuGenerar(){
   document.getElementById('pp-result').innerHTML=presuResultHTML(p);
   toast('Presupuesto Nº'+presuNroFmt(p.nro)+' generado','ok');
 }
-function presuTexto(p){
+function presuTexto(p,kind){
+  var LBL=(kind==='pedido')?'PEDIDO':'PRESUPUESTO';
   var L=[];
   L.push(PRESU_EMPRESA.nombre); L.push('RIF: '+PRESU_EMPRESA.rif);
-  L.push('*PRESUPUESTO Nº '+presuNroFmt(p.nro)+'*'); L.push('Fecha: '+(p.fecha||''));
+  L.push('*'+LBL+' Nº '+presuNroFmt(p.nro)+'*'); L.push('Fecha: '+(p.fecha||''));
   L.push('');
   L.push('*Cliente:* '+p.cliente.nombre); L.push('*Teléfono:* '+p.cliente.telefono);
   if(p.cliente.rif)L.push('*RIF:* '+p.cliente.rif);
@@ -1192,22 +1198,25 @@ function presuTexto(p){
   L.push(''); L.push('Vendedor: '+(p.vendedor||''));
   return L.join('\n');
 }
-function presuResultHTML(p){
+function presuResultHTML(p,kind){
+  var esPed=(kind==='pedido');var LBL=esPed?'Pedido':'Presupuesto';
+  var fnPDF=esPed?'pedidoDescargarPDF':'presuDescargarPDF';var fnTxt=esPed?'pedidoCopiarTexto':'presuCopiarTexto';
   return '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px">'
-    +'<div style="font-size:14px;font-weight:700;color:#065f46">✅ Presupuesto Nº '+presuNroFmt(p.nro)+'</div>'
+    +'<div style="font-size:14px;font-weight:700;color:#065f46">✅ '+LBL+' Nº '+presuNroFmt(p.nro)+'</div>'
     +'<div style="font-size:12px;color:var(--muted);margin:4px 0 12px">Cliente: '+esc(p.cliente.nombre)+' · Total: '+fmtMoney(p.total)+'</div>'
-    +'<button class="btn btn-dark btn-sm" style="width:100%;margin-bottom:8px" onclick="presuDescargarPDF('+p.nro+')">📄 Descargar PDF</button>'
-    +'<button class="btn btn-ghost btn-sm" style="width:100%" onclick="presuCopiarTexto('+p.nro+')">📋 Copiar en texto</button>'
-    +'<pre style="white-space:pre-wrap;font-size:11px;color:#374151;background:#f9fafb;border-radius:8px;padding:10px;margin-top:10px;max-height:220px;overflow:auto">'+esc(presuTexto(p))+'</pre>'
+    +'<button class="btn btn-dark btn-sm" style="width:100%;margin-bottom:8px" onclick="'+fnPDF+'('+p.nro+')">📄 Descargar PDF</button>'
+    +'<button class="btn btn-ghost btn-sm" style="width:100%" onclick="'+fnTxt+'('+p.nro+')">📋 Copiar en texto</button>'
+    +'<pre style="white-space:pre-wrap;font-size:11px;color:#374151;background:#f9fafb;border-radius:8px;padding:10px;margin-top:10px;max-height:220px;overflow:auto">'+esc(presuTexto(p,kind))+'</pre>'
     +'</div>';
 }
 function presuCopiarTexto(nro){var p=presuFind(nro);if(!p){toast('No encontré ese presupuesto','err');return;}copiarAlPortapapeles(presuTexto(p),'Presupuesto copiado');}
-function presuPDF(p){
+function presuPDF(p,kind){
+  var LBLP=(kind==='pedido')?'Pedido':'Presupuesto';
   var jsPDF=window.jspdf.jsPDF;var doc=new jsPDF({unit:'pt',format:'a4'});
   var W=doc.internal.pageSize.getWidth(),M=40;
   doc.setFont('helvetica','bold');doc.setFontSize(12);doc.text(PRESU_EMPRESA.nombre,M,48,{maxWidth:W-230});
   doc.setFont('helvetica','normal');doc.setFontSize(8);doc.text('RIF: '+PRESU_EMPRESA.rif,M,62);
-  doc.setFont('helvetica','bold');doc.setFontSize(13);doc.text('Presupuesto Nro.',W-M,48,{align:'right'});
+  doc.setFont('helvetica','bold');doc.setFontSize(13);doc.text(LBLP+' Nro.',W-M,48,{align:'right'});
   doc.setFontSize(11);doc.text(presuNroFmt(p.nro),W-M,64,{align:'right'});
   doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text('Fecha Emisión: '+(p.fecha||''),W-M,84,{align:'right'});
   var cy=108;doc.setFontSize(9);
@@ -1226,11 +1235,59 @@ function presuPDF(p){
   return doc;
 }
 function presuDescargarPDF(nro){var p=presuFind(nro);if(!p){toast('No encontré ese presupuesto','err');return;}toast('Generando PDF...','ok');cargarLibsPDF().then(function(){var doc=presuPDF(p);doc.save('Presupuesto-'+presuNroFmt(p.nro)+'.pdf');}).catch(function(){toast('No se pudo generar el PDF','err');});}
-function cotUIlista(){
-  var arr=(DB.presupuestosDoc||[]).slice();
+// ===== DOCUMENTOS DE PEDIDO (idéntico al presupuesto, pero dice PEDIDO) =====
+function pedidoNextNro(){var mx=0;(DB.pedidosDoc||[]).forEach(function(p){if(p.nro>mx)mx=p.nro;});return mx+1;}
+function pedidoFind(nro){return (DB.pedidosDoc||[]).find(function(p){return p.nro===nro;});}
+function pedidoGenerar(){
+  var nombre=(document.getElementById('pp-nombre').value||'').trim();
+  var telRaw=(document.getElementById('pp-tel').value||'').trim();
+  var tel=telRaw.replace(/[^0-9]/g,'');
+  if(!nombre){toast('El nombre del cliente es obligatorio','err');return;}
+  if(tel.length<7){toast('El teléfono del cliente es obligatorio','err');return;}
+  var items=PRESU_ITEMS.map(function(it){var c=parseFloat(it.cant)||0,p=parseFloat(it.precio)||0;return {desc:(it.desc||'').trim(),cant:c,precio:p,total:c*p};}).filter(function(it){return it.desc&&it.cant>0;});
+  if(!items.length){toast('Agrega al menos un ítem con descripción y cantidad','err');return;}
+  var t=presuTotales();
+  var vendSel=(document.getElementById('pp-vendedor')||{value:''}).value||(SESSION?SESSION.nombre:'');
+  if(!Array.isArray(DB.pedidosDoc))DB.pedidosDoc=[];
+  var p={nro:pedidoNextNro(),vendedor:vendSel,hechoPor:SESSION?SESSION.nombre:'',cliente:{nombre:nombre,telefono:tel,rif:(document.getElementById('pp-rif').value||'').trim(),direccion:(document.getElementById('pp-dir').value||'').trim()},items:items,nota:(document.getElementById('pp-nota').value||'').trim(),subtotal:t.sub,iva:t.iva,total:t.total,fecha:fecha(),hora:hora(),origen:'app',tipoDoc:'PEDIDO'};
+  DB.pedidosDoc.push(p);
+  registrarBitacora('peddoc'+p.nro,'PEDIDO (documento) Nº'+p.nro+' generado para '+nombre+' (vendedor: '+vendSel+') por '+(SESSION?SESSION.nombre:''));
+  guardarDB();
+  var _cl=presuGuardarCliente(p.cliente,vendSel);
+  pedidoAdjuntarPDFaCliente(p,_cl);
+  document.getElementById('pp-result').innerHTML=presuResultHTML(p,'pedido');
+  toast('Pedido Nº'+presuNroFmt(p.nro)+' generado','ok');
+}
+function pedidoAdjuntarPDFaCliente(p,cl){
+  if(!cl||!p)return;
+  cargarLibsPDF().then(function(){
+    var doc=presuPDF(p,'pedido');
+    var dataUrl=doc.output('datauristring');
+    fetch('https://veoyoca-webhook.onrender.com/subir-pdf-orden',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify({data:dataUrl,mediaType:'application/pdf',nombre:'pedido_'+presuNroFmt(p.nro)})})
+      .then(function(r){return r.json();})
+      .then(function(res){
+        if(res&&res.ok&&res.url){
+          var c=getClientes().find(function(x){return x.id===cl.id;})||cl;
+          if(!Array.isArray(c.pedidos))c.pedidos=[];
+          c.pedidos.push({url:res.url,numero:presuNroFmt(p.nro),fecha:p.fecha});
+          var pd=pedidoFind(p.nro);if(pd)pd.pdfUrl=res.url;
+          try{guardarCliente1(c);}catch(e){}
+          guardarDB();
+          toast('PDF del pedido adjuntado al cliente ✓','ok');
+        }else{toast('Pedido listo, pero no se pudo adjuntar el PDF al cliente','err');}
+      })
+      .catch(function(){toast('Pedido guardado; el PDF no subió (revisa conexión). Puedes descargarlo abajo.','err');});
+  }).catch(function(){toast('Pedido guardado; no cargaron las librerías del PDF','err');});
+}
+function pedidoCopiarTexto(nro){var p=pedidoFind(nro);if(!p){toast('No encontré ese pedido','err');return;}copiarAlPortapapeles(presuTexto(p,'pedido'),'Pedido copiado');}
+function pedidoDescargarPDF(nro){var p=pedidoFind(nro);if(!p){toast('No encontré ese pedido','err');return;}toast('Generando PDF...','ok');cargarLibsPDF().then(function(){var doc=presuPDF(p,'pedido');doc.save('Pedido-'+presuNroFmt(p.nro)+'.pdf');}).catch(function(){toast('No se pudo generar el PDF','err');});}
+function cotUIlista(kind){
+  var esPed=(kind==='pedido');
+  var arr=((esPed?DB.pedidosDoc:DB.presupuestosDoc)||[]).slice();
   if(SESSION&&SESSION.rol!=='admin')arr=arr.filter(function(p){return p.vendedor===SESSION.nombre;});
   arr.sort(function(a,b){return b.nro-a.nro;});
-  if(!arr.length)return '<div class="section-pad" style="max-width:640px;margin:0 auto"><div class="empty"><div class="empty-icon">📄</div>Aún no hay presupuestos generados</div></div>';
+  var fnPDF=esPed?'pedidoDescargarPDF':'presuDescargarPDF';var fnTxt=esPed?'pedidoCopiarTexto':'presuCopiarTexto';
+  if(!arr.length)return '<div class="section-pad" style="max-width:640px;margin:0 auto"><div class="empty"><div class="empty-icon">📄</div>Aún no hay '+(esPed?'pedidos':'presupuestos')+' generados</div></div>';
   var h='<div class="section-pad" style="max-width:640px;margin:0 auto">';
   arr.forEach(function(p){
     h+='<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin-bottom:8px">'
@@ -1238,8 +1295,8 @@ function cotUIlista(){
       +'<div style="font-size:13px;margin:2px 0">'+esc((p.cliente&&p.cliente.nombre)||'—')+' · '+fmtMoney(p.total)+'</div>'
       +'<div style="font-size:11px;color:var(--muted)">Vendedor: '+esc(p.vendedor||'—')+(p.origen==='bot'?' · por WhatsApp':'')+'</div>'
       +'<div style="display:flex;gap:6px;margin-top:8px">'
-      +'<button class="btn btn-dark btn-sm" style="flex:1" onclick="presuDescargarPDF('+p.nro+')">📄 PDF</button>'
-      +'<button class="btn btn-ghost btn-sm" style="flex:1" onclick="presuCopiarTexto('+p.nro+')">📋 Texto</button>'
+      +'<button class="btn btn-dark btn-sm" style="flex:1" onclick="'+fnPDF+'('+p.nro+')">📄 PDF</button>'
+      +'<button class="btn btn-ghost btn-sm" style="flex:1" onclick="'+fnTxt+'('+p.nro+')">📋 Texto</button>'
       +'</div></div>';
   });
   return h+'</div>';
@@ -4207,7 +4264,7 @@ async function initFirebase(){
     catch(e){console.log('Cache local no disponible, usando modo normal:',e&&e.message);_db=fs.getFirestore(app);}
     window._firestore=fs;
     var snap=await fs.getDoc(fs.doc(_db,'veoyoca','data'));
-    if(snap.exists()){var d=snap.data();DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];DB.desgloses=d.desgloses||[];}
+    if(snap.exists()){var d=snap.data();DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];DB.desgloses=d.desgloses||[];DB.presupuestosDoc=d.presupuestosDoc||[];DB.pedidosDoc=d.pedidosDoc||[];}
     else{DB.usuarios=[{id:'admin',nombre:'Administrador',username:'admin',password:'admin123',rol:'admin',creado:fecha()}];await guardarDB();}
     // Clientes del CRM: viven en su propia coleccion.
     document.getElementById('splash-msg').textContent='Cargando clientes...';
@@ -4230,7 +4287,7 @@ async function initFirebase(){
       if(d.updatedAt&&d.updatedAt===_lastAppliedUpdatedAt)return;
       _lastAppliedUpdatedAt=d.updatedAt||_lastAppliedUpdatedAt;
       // Actualizar los datos en memoria (barato).
-      DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];DB.presupuestosDoc=d.presupuestosDoc||[];DB.ofertasPrecios=d.ofertasPrecios||{};DB.instaladores=d.instaladores||[];DB.cargaPlan=d.cargaPlan||{items:[]};DB.desgloses=d.desgloses||[];DB.inv=d.inv||{items:[],ubicaciones:[],movs:[],stock:{}};
+      DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];DB.presupuestosDoc=d.presupuestosDoc||[];DB.pedidosDoc=d.pedidosDoc||[];DB.ofertasPrecios=d.ofertasPrecios||{};DB.instaladores=d.instaladores||[];DB.cargaPlan=d.cargaPlan||{items:[]};DB.desgloses=d.desgloses||[];DB.inv=d.inv||{items:[],ubicaciones:[],movs:[],stock:{}};
       // Pestañas con estado transitorio que no debe redibujarse en vivo.
       if(TAB==='cotizar')return;
       if(TAB==='plan'&&PLAN_MODO==='carga')return;
