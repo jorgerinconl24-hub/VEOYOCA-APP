@@ -11,7 +11,7 @@ importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js");
 // Sube este numero cada vez que cambies un archivo de la lista.
 // Ese bump es lo que obliga al navegador a bajar la version nueva.
 // ───────────────────────────────────────────────────────────
-var CACHE_NAME = 'veoyoca-v9';
+var CACHE_NAME = 'veoyoca-v10';
 
 var BASE = '/VEOYOCA-APP/';
 
