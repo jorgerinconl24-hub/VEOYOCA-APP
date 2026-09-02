@@ -994,7 +994,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v54 · foto/imagen en cada orden del pedido';
+var APP_VERSION='v55 · presupuestos: cliente reutilizable + correlativo 00001';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1014,7 +1014,35 @@ function copiarAlPortapapeles(txt,okMsg){
   if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(function(){toast(okMsg,'ok');}).catch(function(){fallback();});}
   else{fallback();}
 }
-function presuNroFmt(n){return ('0000000000'+(n||0)).slice(-10);}
+function presuNroFmt(n){var s=''+(n||0);return s.length>=5?s:('00000'+s).slice(-5);}
+// Clientes ya usados: unión del CRM y de los presupuestos anteriores, sin repetir (por teléfono).
+function presuClientesGuardados(){
+  var mapa={};
+  function put(nombre,tel,rif,dir){
+    var t=(tel||'').toString().replace(/[^0-9]/g,'');
+    var nom=(nombre||'').toString().trim();
+    if(!nom&&!t)return;
+    var key=t||('n:'+nom.toLowerCase());
+    if(!mapa[key])mapa[key]={nombre:nom,telefono:t,rif:(rif||'').toString().trim(),direccion:(dir||'').toString().trim()};
+    else{var e=mapa[key];if(!e.nombre&&nom)e.nombre=nom;if(!e.rif&&rif)e.rif=(''+rif).trim();if(!e.direccion&&dir)e.direccion=(''+dir).trim();}
+  }
+  (DB.clientes||[]).forEach(function(c){put(c.nombre,c.telefono,c.rif,c.direccion);});
+  (DB.presupuestosDoc||[]).forEach(function(p){if(p&&p.cliente)put(p.cliente.nombre,p.cliente.telefono,p.cliente.rif,p.cliente.direccion);});
+  return Object.keys(mapa).map(function(k){return mapa[k];}).sort(function(a,b){return (a.nombre||'').localeCompare(b.nombre||'');});
+}
+function presuElegirCliente(val){
+  var lista=presuClientesGuardados();
+  var sel=lista.find(function(c){return (c.nombre+' · '+c.telefono)===val;});
+  if(!sel){var v=(val||'').trim().toLowerCase();var vt=(val||'').replace(/[^0-9]/g,'');sel=lista.find(function(c){return (c.nombre||'').toLowerCase()===v||(vt&&c.telefono===vt);});}
+  if(sel){
+    var g=function(id){return document.getElementById(id);};
+    if(g('pp-nombre'))g('pp-nombre').value=sel.nombre||'';
+    if(g('pp-tel'))g('pp-tel').value=sel.telefono||'';
+    if(g('pp-rif'))g('pp-rif').value=sel.rif||'';
+    if(g('pp-dir'))g('pp-dir').value=sel.direccion||'';
+    toast('Cliente cargado: '+(sel.nombre||''),'ok');
+  }
+}
 function presuNextNro(){var mx=0;(DB.presupuestosDoc||[]).forEach(function(p){if(p.nro>mx)mx=p.nro;});return mx+1;}
 function presuFind(nro){return (DB.presupuestosDoc||[]).find(function(p){return p.nro===nro;});}
 // Lista de presupuestos adjuntos a un cliente (varios). Migra el campo viejo (uno solo).
@@ -1027,6 +1055,7 @@ function cotUIpresu(){
     +'<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:14px">'
     +'<div style="font-size:15px;font-weight:700;color:#1a1a2e;margin-bottom:4px">📄 Hacer presupuesto</div>'
     +'<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Datos del cliente e ítems. Se arma el presupuesto con número de control e IVA 16%, para copiar o descargar en PDF.</div>'
+    +'<div style="margin-bottom:10px"><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">🔎 Cliente guardado (busca y selecciona, o deja vacío si es nuevo)</label><input id="pp-buscar" list="pp-cli-dl" placeholder="Escribe el nombre o teléfono..." onchange="presuElegirCliente(this.value)" oninput="presuElegirCliente(this.value)" style="width:100%;padding:9px;border:1px solid #d1d5db;border-radius:8px;font-size:14px"><datalist id="pp-cli-dl"></datalist></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
     +presuCampo('Nombre del cliente *','pp-nombre','')+presuCampo('Teléfono *','pp-tel','04141234567')
     +presuCampo('RIF','pp-rif','')+presuCampo('Dirección','pp-dir','')
@@ -1042,7 +1071,10 @@ function cotUIpresu(){
     +'<div style="font-size:10px;color:#cbd5e1;text-align:center;margin-top:8px">'+APP_VERSION+'</div>'
     +'</div>';
 }
-function presuInitForm(){PRESU_ITEMS=[{desc:'',cant:'',precio:''}];presuRenderItems();presuActualizarTotales();}
+function presuInitForm(){PRESU_ITEMS=[{desc:'',cant:'',precio:''}];presuRenderItems();presuActualizarTotales();
+  var dl=document.getElementById('pp-cli-dl');
+  if(dl){dl.innerHTML=presuClientesGuardados().map(function(c){return '<option value="'+esc(c.nombre+' · '+c.telefono)+'">';}).join('');}
+}
 function presuRenderItems(){
   var el=document.getElementById('pp-items');if(!el)return;var h='';
   PRESU_ITEMS.forEach(function(it,i){
@@ -1064,6 +1096,32 @@ function presuActualizarTotales(){var t=presuTotales();var el=document.getElemen
     +'<div style="display:flex;justify-content:space-between"><span>IVA 16%:</span><b>'+fmtMoney(t.iva)+'</b></div>'
     +'<div style="display:flex;justify-content:space-between;font-size:15px;color:#065f46;font-weight:700"><span>Total:</span><b>'+fmtMoney(t.total)+'</b></div>';
 }
+// Registra el cliente del presupuesto para reusarlo a futuro (y lo deja en el CRM).
+// Deduplica por teléfono; si ya existe, solo completa datos vacíos.
+function presuGuardarCliente(cli){
+  if(!cli||(!cli.telefono&&!cli.nombre))return;
+  if(!Array.isArray(DB.clientes))DB.clientes=[];
+  var tel=(cli.telefono||'').toString().replace(/[^0-9]/g,'');
+  var ex=null;
+  if(tel)ex=DB.clientes.find(function(x){return (x.telefono||'').toString().replace(/[^0-9]/g,'')===tel;});
+  if(!ex&&cli.nombre)ex=DB.clientes.find(function(x){return (x.nombre||'').trim().toLowerCase()===cli.nombre.trim().toLowerCase();});
+  if(ex){
+    if(!ex.rif&&cli.rif)ex.rif=cli.rif;
+    if(!ex.direccion&&cli.direccion)ex.direccion=cli.direccion;
+    if(!ex.telefono&&tel)ex.telefono=tel;
+    if(!ex.estado2)ex.estado2='PRESUPUESTO ENVIADO';
+    ex.ultimoContacto=fecha();
+    try{guardarCliente1(ex);}catch(e){}
+    return;
+  }
+  var nuevo={id:uid(),nombre:cli.nombre||('Cliente '+tel),telefono:tel,correo:'',rif:cli.rif||'',direccion:cli.direccion||'',
+    vendedor:SESSION?SESSION.nombre:'',redSocial:'PRESUPUESTO',tipoNegocio:'',
+    estado1:'A COTIZAR',estado2:'PRESUPUESTO ENVIADO',estatusObjecion:'',planAccion:'',porqueCompro:'',porqueNoCompro:'',cantidadMuebles:'',
+    ultimoContacto:fecha(),proximoContacto:fecha(),notas:'Registrado desde un presupuesto',seguimientos:[],
+    creadoPor:SESSION?SESSION.nombre:'App',fechaCreacion:fecha(),creadoTS:Date.now()};
+  DB.clientes.push(nuevo);
+  try{guardarCliente1(nuevo);}catch(e){}
+}
 function presuGenerar(){
   var nombre=(document.getElementById('pp-nombre').value||'').trim();
   var telRaw=(document.getElementById('pp-tel').value||'').trim();
@@ -1078,8 +1136,9 @@ function presuGenerar(){
   DB.presupuestosDoc.push(p);
   registrarBitacora('presu'+p.nro,'PRESUPUESTO Nº'+p.nro+' generado para '+nombre+' por '+(SESSION?SESSION.nombre:''));
   guardarDB();
+  presuGuardarCliente(p.cliente);
   document.getElementById('pp-result').innerHTML=presuResultHTML(p);
-  toast('Presupuesto Nº'+p.nro+' generado','ok');
+  toast('Presupuesto Nº'+presuNroFmt(p.nro)+' generado','ok');
 }
 function presuTexto(p){
   var L=[];
