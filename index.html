@@ -994,7 +994,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v53 · foto de producto desde galería';
+var APP_VERSION='v54 · foto/imagen en cada orden del pedido';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1523,8 +1523,9 @@ function renderOrdenesBody(){
     }
     h+='<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">';
     if(!recib&&o.estado!=='ENTREGADA')h+='<button class="btn btn-green btn-sm" onclick="ordRecibida('+i+')">\u2713 Recibida en almac\u00e9n</button>';
-    if(o.pdfUrl)h+='<a href="'+esc(o.pdfUrl)+'" target="_blank" class="btn btn-blue btn-sm" style="text-decoration:none">📄 Ver PDF</a>';
-    h+='<input type="file" id="ord-file-'+i+'" accept=".pdf,image/*" style="display:none" onchange="ordAdjuntarPDF('+i+',this)"><button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'ord-file-'+i+'\').click()">📎 '+(o.pdfUrl?'Cambiar PDF':'Adjuntar PDF')+'</button>';
+    if(o.pdfUrl)h+='<a href="'+esc(o.pdfUrl)+'" target="_blank" class="btn btn-blue btn-sm" style="text-decoration:none">📄 Ver</a>';
+    h+='<input type="file" id="ord-cam-'+i+'" accept="image/*" capture="environment" style="display:none" onchange="ordAdjuntarPDF('+i+',this)"><button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'ord-cam-'+i+'\').click()">📷 Foto</button>';
+    h+='<input type="file" id="ord-file-'+i+'" accept="image/*,.pdf" style="display:none" onchange="ordAdjuntarPDF('+i+',this)"><button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'ord-file-'+i+'\').click()">🖼️ '+(o.pdfUrl?'Cambiar imagen/PDF':'Adjuntar imagen o PDF')+'</button>';
     h+='<button class="btn btn-red btn-sm" style="margin-left:auto" onclick="ordEliminar('+i+')">Eliminar</button></div>';
     h+='</div>';
   });
@@ -1572,7 +1573,7 @@ function ordAdjuntarPDF(i,inp){
   var file=inp.files&&inp.files[0];if(!file){return;}
   if(file.size>20*1024*1024){toast('El archivo es muy grande (máx 20MB)','err');inp.value='';return;}
   var p=pedidoOrd();if(!p||!p.ordenes[i]){inp.value='';return;}
-  toast('Subiendo PDF...','ok');
+  toast('Subiendo archivo...','ok');
   var reader=new FileReader();
   reader.onload=function(e){
     var mt=file.type||'application/pdf';
@@ -1580,7 +1581,7 @@ function ordAdjuntarPDF(i,inp){
     fetch('https://veoyoca-webhook.onrender.com/subir-pdf-orden',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify({data:e.target.result,mediaType:mt,nombre:nombre})})
       .then(function(r){return r.json();})
       .then(function(res){
-        if(res&&res.ok&&res.url){var pp=pedidoOrd();if(pp&&pp.ordenes[i]){pp.ordenes[i].pdfUrl=res.url;guardarDB();renderOrdenesBody();toast('PDF adjuntado ✓','ok');}}
+        if(res&&res.ok&&res.url){var pp=pedidoOrd();if(pp&&pp.ordenes[i]){pp.ordenes[i].pdfUrl=res.url;guardarDB();renderOrdenesBody();toast('Archivo adjuntado ✓','ok');}}
         else{toast('No se pudo subir: '+((res&&res.error)||'error'),'err');}
       })
       .catch(function(){toast('Error de conexión al subir el PDF','err');});
