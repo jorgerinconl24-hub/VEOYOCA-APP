@@ -994,7 +994,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v55 · presupuestos: cliente reutilizable + correlativo 00001';
+var APP_VERSION='v58 · presupuesto: elegir vendedor del cliente';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1050,6 +1050,12 @@ function presuListaCliente(cl){var arr=Array.isArray(cl.presupuestos)?cl.presupu
 // Lista de pedidos adjuntos a un cliente (un pedido = venta cerrada).
 function pedidoListaCliente(cl){var arr=Array.isArray(cl.pedidos)?cl.pedidos.slice():[];if(!arr.length&&cl.pedidoUrl)arr=[{url:cl.pedidoUrl,numero:'',fecha:cl.pedidoFecha||''}];return arr;}
 function presuCampo(label,id,ph){return '<div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">'+label+'</label><input type="text" id="'+id+'" placeholder="'+(ph||'')+'" style="width:100%;padding:9px;border:1px solid #d1d5db;border-radius:8px;font-size:14px"></div>';}
+function presuVendOpts(){
+  var actual=SESSION?SESSION.nombre:'';
+  var arr=(DB.usuarios||[]).map(function(u){return u.nombre;}).filter(function(n){return !!n;});
+  if(actual&&arr.indexOf(actual)<0)arr.unshift(actual);
+  return arr.map(function(n){return '<option value="'+esc(n)+'"'+(n===actual?' selected':'')+'>'+esc(n)+'</option>';}).join('');
+}
 function cotUIpresu(){
   return '<div class="section-pad" style="max-width:640px;margin:0 auto">'
     +'<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:14px">'
@@ -1060,6 +1066,7 @@ function cotUIpresu(){
     +presuCampo('Nombre del cliente *','pp-nombre','')+presuCampo('Teléfono *','pp-tel','04141234567')
     +presuCampo('RIF','pp-rif','')+presuCampo('Dirección','pp-dir','')
     +'</div>'
+    +'<div style="margin-top:10px"><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">👤 Vendedor dueño de este cliente *</label><select id="pp-vendedor" style="width:100%;padding:9px;border:1px solid #d1d5db;border-radius:8px;font-size:14px">'+presuVendOpts()+'</select></div>'
     +'<div style="font-size:13px;font-weight:700;margin:14px 0 6px">Ítems (descripción · cantidad · precio unit. sin IVA)</div>'
     +'<div id="pp-items"></div>'
     +'<button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="presuAddItem()">+ Agregar ítem</button>'
@@ -1096,12 +1103,14 @@ function presuActualizarTotales(){var t=presuTotales();var el=document.getElemen
     +'<div style="display:flex;justify-content:space-between"><span>IVA 16%:</span><b>'+fmtMoney(t.iva)+'</b></div>'
     +'<div style="display:flex;justify-content:space-between;font-size:15px;color:#065f46;font-weight:700"><span>Total:</span><b>'+fmtMoney(t.total)+'</b></div>';
 }
-// Registra el cliente del presupuesto para reusarlo a futuro (y lo deja en el CRM).
-// Deduplica por teléfono; si ya existe, solo completa datos vacíos.
-function presuGuardarCliente(cli){
-  if(!cli||(!cli.telefono&&!cli.nombre))return;
+// Registra el cliente del presupuesto en el CRM para reusarlo a futuro.
+// Deduplica por teléfono; asigna el cliente al vendedor que hizo el presupuesto.
+// Devuelve el objeto cliente (existente o nuevo).
+function presuGuardarCliente(cli,vendSel){
+  if(!cli||(!cli.telefono&&!cli.nombre))return null;
   if(!Array.isArray(DB.clientes))DB.clientes=[];
   var tel=(cli.telefono||'').toString().replace(/[^0-9]/g,'');
+  var vend=(vendSel||'').trim()||(SESSION?SESSION.nombre:'');
   var ex=null;
   if(tel)ex=DB.clientes.find(function(x){return (x.telefono||'').toString().replace(/[^0-9]/g,'')===tel;});
   if(!ex&&cli.nombre)ex=DB.clientes.find(function(x){return (x.nombre||'').trim().toLowerCase()===cli.nombre.trim().toLowerCase();});
@@ -1109,18 +1118,42 @@ function presuGuardarCliente(cli){
     if(!ex.rif&&cli.rif)ex.rif=cli.rif;
     if(!ex.direccion&&cli.direccion)ex.direccion=cli.direccion;
     if(!ex.telefono&&tel)ex.telefono=tel;
+    if(vend)ex.vendedor=vend;                 // el cliente queda asignado al vendedor que cotizó
     if(!ex.estado2)ex.estado2='PRESUPUESTO ENVIADO';
     ex.ultimoContacto=fecha();
     try{guardarCliente1(ex);}catch(e){}
-    return;
+    return ex;
   }
   var nuevo={id:uid(),nombre:cli.nombre||('Cliente '+tel),telefono:tel,correo:'',rif:cli.rif||'',direccion:cli.direccion||'',
-    vendedor:SESSION?SESSION.nombre:'',redSocial:'PRESUPUESTO',tipoNegocio:'',
+    vendedor:vend,redSocial:'PRESUPUESTO',tipoNegocio:'',
     estado1:'A COTIZAR',estado2:'PRESUPUESTO ENVIADO',estatusObjecion:'',planAccion:'',porqueCompro:'',porqueNoCompro:'',cantidadMuebles:'',
-    ultimoContacto:fecha(),proximoContacto:fecha(),notas:'Registrado desde un presupuesto',seguimientos:[],
+    ultimoContacto:fecha(),proximoContacto:fecha(),notas:'Registrado desde un presupuesto',seguimientos:[],presupuestos:[],
     creadoPor:SESSION?SESSION.nombre:'App',fechaCreacion:fecha(),creadoTS:Date.now()};
   DB.clientes.push(nuevo);
   try{guardarCliente1(nuevo);}catch(e){}
+  return nuevo;
+}
+// Genera el PDF del presupuesto, lo sube y lo adjunta al cliente en el CRM.
+function presuAdjuntarPDFaCliente(p,cl){
+  if(!cl||!p)return;
+  cargarLibsPDF().then(function(){
+    var doc=presuPDF(p);
+    var dataUrl=doc.output('datauristring');
+    fetch('https://veoyoca-webhook.onrender.com/subir-pdf-orden',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify({data:dataUrl,mediaType:'application/pdf',nombre:'presupuesto_'+presuNroFmt(p.nro)})})
+      .then(function(r){return r.json();})
+      .then(function(res){
+        if(res&&res.ok&&res.url){
+          var c=getClientes().find(function(x){return x.id===cl.id;})||cl;
+          if(!Array.isArray(c.presupuestos))c.presupuestos=[];
+          c.presupuestos.push({url:res.url,numero:presuNroFmt(p.nro),fecha:p.fecha});
+          var pd=presuFind(p.nro);if(pd)pd.pdfUrl=res.url;
+          try{guardarCliente1(c);}catch(e){}
+          guardarDB();
+          toast('PDF adjuntado al cliente en el CRM ✓','ok');
+        }else{toast('Presupuesto listo, pero no se pudo adjuntar el PDF al cliente','err');}
+      })
+      .catch(function(){toast('Presupuesto guardado; el PDF no subió (revisa conexión). Puedes descargarlo abajo.','err');});
+  }).catch(function(){toast('Presupuesto guardado; no cargaron las librerías del PDF','err');});
 }
 function presuGenerar(){
   var nombre=(document.getElementById('pp-nombre').value||'').trim();
@@ -1131,12 +1164,14 @@ function presuGenerar(){
   var items=PRESU_ITEMS.map(function(it){var c=parseFloat(it.cant)||0,p=parseFloat(it.precio)||0;return {desc:(it.desc||'').trim(),cant:c,precio:p,total:c*p};}).filter(function(it){return it.desc&&it.cant>0;});
   if(!items.length){toast('Agrega al menos un ítem con descripción y cantidad','err');return;}
   var t=presuTotales();
+  var vendSel=(document.getElementById('pp-vendedor')||{value:''}).value||(SESSION?SESSION.nombre:'');
   if(!Array.isArray(DB.presupuestosDoc))DB.presupuestosDoc=[];
-  var p={nro:presuNextNro(),vendedor:SESSION?SESSION.nombre:'',cliente:{nombre:nombre,telefono:tel,rif:(document.getElementById('pp-rif').value||'').trim(),direccion:(document.getElementById('pp-dir').value||'').trim()},items:items,nota:(document.getElementById('pp-nota').value||'').trim(),subtotal:t.sub,iva:t.iva,total:t.total,fecha:fecha(),hora:hora(),origen:'app'};
+  var p={nro:presuNextNro(),vendedor:vendSel,hechoPor:SESSION?SESSION.nombre:'',cliente:{nombre:nombre,telefono:tel,rif:(document.getElementById('pp-rif').value||'').trim(),direccion:(document.getElementById('pp-dir').value||'').trim()},items:items,nota:(document.getElementById('pp-nota').value||'').trim(),subtotal:t.sub,iva:t.iva,total:t.total,fecha:fecha(),hora:hora(),origen:'app'};
   DB.presupuestosDoc.push(p);
-  registrarBitacora('presu'+p.nro,'PRESUPUESTO Nº'+p.nro+' generado para '+nombre+' por '+(SESSION?SESSION.nombre:''));
+  registrarBitacora('presu'+p.nro,'PRESUPUESTO Nº'+p.nro+' generado para '+nombre+' (vendedor: '+vendSel+') por '+(SESSION?SESSION.nombre:''));
   guardarDB();
-  presuGuardarCliente(p.cliente);
+  var _cl=presuGuardarCliente(p.cliente,vendSel);
+  presuAdjuntarPDFaCliente(p,_cl);
   document.getElementById('pp-result').innerHTML=presuResultHTML(p);
   toast('Presupuesto Nº'+presuNroFmt(p.nro)+' generado','ok');
 }
@@ -2354,7 +2389,7 @@ function renderTablaCRM(el,lista){
   var vendArr=Object.keys(vends).sort();
   var EST2=['PRESUPUESTO ENVIADO','EN NEGOCIACION','COMPRO','NO COMPRO'];
   var h='<div class="crm-wrap"><table class="crm" id="tabla-crm"><thead><tr>';
-  var _cols=['Nombre','Tel\u00E9fono','Vendedor','Estado 1','Producto/Servicio','Ciudad','Red social','Tipo de negocio','Estatus/Objeci\u00F3n','Plan de acci\u00F3n','Cant.','Porqu\u00E9 compr\u00F3','Porqu\u00E9 NO compr\u00F3','\u00DAlt. contacto','Pr\u00F3x. contacto','Notas','Estado 2','Visit\u00F3 oficina','Presupuesto','Pedido'];
+  var _cols=['Nombre','Tel\u00E9fono','Vendedor','Estado 1','Estado 2','Producto/Servicio','Ciudad','Red social','Tipo de negocio','Estatus/Objeci\u00F3n','Plan de acci\u00F3n','Cant.','Porqu\u00E9 compr\u00F3','Porqu\u00E9 NO compr\u00F3','\u00DAlt. contacto','Pr\u00F3x. contacto','Notas','Visit\u00F3 oficina','Presupuesto','Pedido'];
   if(SESSION.rol==='admin')_cols.push('\u23F1 Atenci\u00F3n');
   _cols.forEach(function(t,i){
     h+='<th'+(i===0?' class="colfija"':'')+'>'+t+'</th>';
@@ -2369,6 +2404,7 @@ function renderTablaCRM(el,lista){
     h+='<td>'+celdaInput(id,'telefono',cl.telefono,'tel')+'</td>';
     h+='<td>'+celdaSelect(id,'vendedor',cl.vendedor||'',vendArr,'\u2014')+'</td>';
     h+='<td>'+celdaSelect(id,'estado1',est1De(cl),EST1_OPCIONES)+'</td>';
+    h+='<td style="min-width:170px">'+celdaSelect(id,'estado2',cl.estado2||'',EST2,'\u2014')+'</td>';
     h+='<td>'+celdaInput(id,'producto',cl.producto)+'</td>';
     h+='<td>'+celdaInput(id,'ciudad',cl.ciudad)+'</td>';
     h+='<td>'+celdaInput(id,'redSocial',cl.redSocial)+'</td>';
@@ -2381,7 +2417,6 @@ function renderTablaCRM(el,lista){
     h+='<td>'+celdaFecha(id,'ultimoContacto',cl.ultimoContacto)+'</td>';
     h+='<td class="'+(proxVencido(cl)?'venc':'')+'">'+celdaFecha(id,'proximoContacto',cl.proximoContacto)+'</td>';
     h+='<td style="min-width:210px">'+celdaInput(id,'notas',cl.notas)+'</td>';
-    h+='<td style="min-width:170px">'+celdaSelect(id,'estado2',cl.estado2||'',EST2,'\u2014')+'</td>';
     h+='<td style="min-width:130px">'+celdaSelect(id,'visitoOficina',cl.visitoOficina||'',['S\u00cd'],'\u2014')+(cl.fechaVisita?'<div style="font-size:10px;color:var(--muted)">'+esc(cl.fechaVisita)+'</div>':'')+'</td>';
     var _plT=presuListaCliente(cl);h+='<td style="min-width:120px">'+(_plT.length?_plT.map(function(p){return '<a href="'+esc(p.url)+'" target="_blank" style="color:var(--info)">\ud83d\udcc4 '+(p.numero?('N\u00ba'+esc(p.numero)):'Ver')+'</a>'+(p.fecha?' <span style="font-size:10px;color:var(--muted)">'+esc(p.fecha)+'</span>':'');}).join('<br>'):'\u2014')+'</td>';
     var _pedT=pedidoListaCliente(cl);h+='<td style="min-width:120px">'+(_pedT.length?_pedT.map(function(p){return '<a href="'+esc(p.url)+'" target="_blank" style="color:#166534;font-weight:600">\ud83d\uded2 '+(p.numero?('N\u00ba'+esc(p.numero)):'Ver')+'</a>'+(p.fecha?' <span style="font-size:10px;color:var(--muted)">'+esc(p.fecha)+'</span>':'');}).join('<br>'):'\u2014')+'</td>';
