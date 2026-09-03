@@ -307,6 +307,10 @@ table.crm{border-collapse:collapse;font-size:12px;min-width:1780px}
 <div style="display:flex;gap:8px"><input type="text" id="c-seg-texto" placeholder="Ej: Llam&#xE9;, pidi&#xF3; fotos del rack..." style="flex:1;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:14px"><button class="btn btn-dark" onclick="agregarSeguimiento()">+ Agregar</button></div></div>
 </div>
 <div class="sheet-foot"><button class="btn btn-red" id="c-eliminar" style="margin-right:auto;display:none" onclick="eliminarClienteActual()">Eliminar</button><button class="btn btn-ghost" onclick="cerrarModal('modal-cliente')">Cancelar</button><button class="btn btn-dark" onclick="guardarCliente()">Guardar</button></div></div></div>
+<div class="overlay" id="modal-historial"><div class="sheet"><div class="sheet-handle"></div>
+<div class="sheet-head"><h2 id="hist-titulo">Pedido entregado</h2><button class="sheet-close" onclick="cerrarModal('modal-historial')">&#x2715;</button></div>
+<div class="sheet-body" id="historial-body"></div>
+<div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal('modal-historial')">Cerrar</button></div></div></div>
 <div class="overlay" id="modal-reporte"><div class="sheet"><div class="sheet-handle"></div>
 <div class="sheet-head"><h2>&#x1F4C4; Reporte de pedidos</h2><button class="sheet-close" onclick="cerrarModal('modal-reporte')">&#x2715;</button></div>
 <div class="sheet-body" id="reporte-body"></div>
@@ -1075,7 +1079,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v61 · fix: usuario nuevo no se borra (guardado en cola)';
+var APP_VERSION='v63 · boton Entregado + historial · inventario sin pisarse';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1504,7 +1508,7 @@ function goTab(tab,btn){
   var titulos={home:'Pedidos',entregar:'Despacho',nuevo:'Nuevo pedido',reportes:'Reportes',admin:'Administracion',plan:'Planificación',ia:'Plan IA',notif:'Alertas y Notificaciones',ventas:'Ventas / CRM',cotizar:'Cotizador de Racks',inventario:'Inventario'};
   document.getElementById('topbar-sub').textContent=titulos[tab]||SESSION.nombre;
   var c=document.getElementById('content');
-  c.onclick=function(e){var ed=e.target.getAttribute('data-edit');var en=e.target.getAttribute('data-entregar');var or=e.target.getAttribute('data-ordenes');var ins=e.target.getAttribute('data-instalacion');var tr=e.target.getAttribute('data-transporte');if(ed)abrirEditar(ed);if(en)marcarEntregado(en);if(or)abrirOrdenes(or);if(ins)abrirInstalacion(ins);if(tr)transporteToggle(tr);if(!ed&&!en&&!or&&!ins&&!tr&&e.target.closest){var pv=e.target.closest('[data-prov-toggle]');if(pv)toggleProv(pv.getAttribute('data-prov-toggle'));}};
+  c.onclick=function(e){var ed=e.target.getAttribute('data-edit');var en=e.target.getAttribute('data-entregar');var or=e.target.getAttribute('data-ordenes');var ins=e.target.getAttribute('data-instalacion');var tr=e.target.getAttribute('data-transporte');var me=e.target.getAttribute('data-marcar-entregado');var hi=e.target.getAttribute('data-historial');if(ed)abrirEditar(ed);if(en)marcarEntregado(en);if(or)abrirOrdenes(or);if(ins)abrirInstalacion(ins);if(tr)transporteToggle(tr);if(me)entregarDesdeTarjeta(me);if(hi)abrirHistorial(hi);if(!ed&&!en&&!or&&!ins&&!tr&&!me&&!hi&&e.target.closest){var pv=e.target.closest('[data-prov-toggle]');if(pv)toggleProv(pv.getAttribute('data-prov-toggle'));}};
   if(tab==='home')renderHome(c);else if(tab==='entregar')renderEntregar(c);else if(tab==='nuevo')renderNuevo(c);
   else if(tab==='reportes')renderReportes(c);else if(tab==='admin')renderAdmin(c);
   else if(tab==='plan')renderPlanificacion(c);else if(tab==='ia')renderPlanIA(c);else if(tab==='notif')renderNotificaciones(c);else if(tab==='ventas')renderVentas(c);
@@ -1526,30 +1530,117 @@ function renderHome(c){
     +'</div>';
   var sf=ordenesSinFecha();
   var bannerSF=sf.length?'<div onclick="aplicarFiltro(\'SINFECHA\')" style="background:var(--warning);color:#fff;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px"><span>\u26A0\uFE0F '+sf.length+' orden'+(sf.length>1?'es':'')+' sin fecha estimada de entrega</span><span style="font-size:11px;opacity:.85;white-space:nowrap">Toca para ver \u2192</span></div>':'';
-  c.innerHTML=statsBar+bannerSF+'<div class="prog-wrap"><div class="prog-bar"><div class="prog-fill" style="width:'+pct+'%"></div></div><div class="prog-label">'+ent+' de '+total+' entregados ('+pct+'%)</div></div><div class="toolbar"><input type="text" id="h-buscar" placeholder="Buscar cliente o numero..." oninput="filtrarHome()"><select id="h-est" onchange="filtrarHome()"><option value="">Todos</option><option value="vencido">Vencidos</option><option value="urgente">Urgentes</option><option value="sf">Sin fecha</option><option value="ok">Con tiempo</option><option value="LISTO">Listos</option><option value="ORDENES">Con \u00F3rdenes pendientes</option><option value="SINFECHA">\u00D3rdenes sin fecha estimada</option></select><button class="btn btn-dark btn-sm" onclick="generarReporte()" style="align-self:center">\uD83D\uDCC4 Generar Reporte</button></div><div class="section-pad" id="home-lista"></div>';
+  c.innerHTML=statsBar+bannerSF+'<div class="prog-wrap"><div class="prog-bar"><div class="prog-fill" style="width:'+pct+'%"></div></div><div class="prog-label">'+ent+' de '+total+' entregados ('+pct+'%)</div></div><div class="toolbar"><input type="text" id="h-buscar" placeholder="Buscar cliente o numero..." oninput="filtrarHome()"><select id="h-est" onchange="filtrarHome()"><option value="">Todos</option><option value="vencido">Vencidos</option><option value="urgente">Urgentes</option><option value="sf">Sin fecha</option><option value="ok">Con tiempo</option><option value="LISTO">Listos</option><option value="ORDENES">Con \u00F3rdenes pendientes</option><option value="SINFECHA">\u00D3rdenes sin fecha estimada</option><option value="ENTREGADOS">\u2705 Historial de entregados</option></select><button class="btn btn-dark btn-sm" onclick="generarReporte()" style="align-self:center">\uD83D\uDCC4 Generar Reporte</button></div><div class="section-pad" id="home-lista"></div>';
   filtrarHome();
 }
 function aplicarFiltro(valor){
   var sel=document.getElementById('h-est');
   if(sel){sel.value=valor;filtrarHome();}
 }
-function aplicarFiltroEntregados(){
-  var el=document.getElementById('home-lista');if(!el)return;
-  var lista=DB.pedidos.filter(function(p){return p.estatus==='ENTREGADO';});
-  lista.sort(function(a,b){return (b.fechaEntrega||'').localeCompare(a.fechaEntrega||'');});
-  if(!lista.length){el.innerHTML='<div class="empty"><div class="empty-icon">📦</div>No hay pedidos entregados</div>';return;}
+// ═══════════════════════════════════════════════════════════
+// HISTORIAL DE ENTREGADOS
+// Guarda el pedido completo: ordenes con sus items, guias de despacho,
+// notas de entrega, instalacion y quien lo entrego. Nada se borra.
+// ═══════════════════════════════════════════════════════════
+var HIST_BUSCA='';
+function histLista(){
+  var q=HIST_BUSCA.toLowerCase().trim();
+  var l=DB.pedidos.filter(function(p){return p.estatus==='ENTREGADO';});
+  if(q)l=l.filter(function(p){return ((p.numero||'')+' '+(p.cliente||'')+' '+(p.ciudad||'')+' '+(p.vendedor||'')+' '+(p.descripcion||'')).toLowerCase().indexOf(q)>=0;});
+  l.sort(function(a,b){return (b.entregadoTS||0)-(a.entregadoTS||0)||(b.fechaEntrega||'').localeCompare(a.fechaEntrega||'');});
+  return l;
+}
+function histBuscar(v){HIST_BUSCA=v||'';var el=document.getElementById('hist-cont');if(el)el.innerHTML=histFilasHTML();}
+function histFilasHTML(){
+  var lista=histLista();
+  if(!lista.length)return '<div class="empty"><div class="empty-icon">'+(HIST_BUSCA?'🔍':'📦')+'</div>'+(HIST_BUSCA?'Ningún pedido entregado coincide con la búsqueda':'Aún no hay pedidos entregados')+'</div>';
   var h='<div class="sec-label">Entregados ('+lista.length+')</div>';
   lista.forEach(function(p){
-    var num=p.numero||p.id.substring(0,6);
-    h+='<div class="card"><div class="card-head"><div class="card-num">#'+num+'</div><div class="card-body"><div class="card-cliente">'+(p.cliente||'Sin nombre')+'</div><div class="card-meta">'+(p.ciudad||'')+(p.vendedor?' - '+p.vendedor:'')+'</div><div class="card-desc">'+(p.descripcion||'')+'</div></div><span class="badge b-success">Entregado</span></div>';
-    h+='<div class="card-foot"><span style="font-size:11px;color:var(--muted)">'+( p.fechaEntrega||'')+(p.entregadoPor?' por '+p.entregadoPor:'')+'</span></div></div>';
+    var num=p.numero||p.id.substring(0,6),r=resumenOrdenes(p);
+    h+='<div class="card" style="margin-bottom:8px"><div class="card-head" style="cursor:pointer" data-historial="'+p.id+'"><div class="card-num">#'+esc(num)+'</div><div class="card-body">';
+    h+='<div class="card-cliente">'+esc(p.cliente||'Sin nombre')+'</div>';
+    h+='<div class="card-meta">'+esc(p.ciudad||'')+(p.vendedor?' · '+esc(p.vendedor):'')+'</div>';
+    h+='<div style="font-size:11px;color:var(--success);font-weight:600;margin-top:3px">✅ '+esc(p.fechaEntrega||'')+(p.horaEntrega?' '+esc(p.horaEntrega):'')+(p.entregadoPor?' · por '+esc(p.entregadoPor):'')+'</div>';
+    if(p.notaEntrega)h+='<div style="font-size:11px;color:var(--muted);margin-top:2px">📝 '+esc(p.notaEntrega)+'</div>';
+    if(r.total)h+='<div style="font-size:11px;color:var(--muted);margin-top:2px">🧾 '+r.total+' orden(es)</div>';
+    h+='</div><span class="badge b-success">Entregado</span></div>';
+    h+='<div class="card-foot"><button class="btn btn-ghost btn-sm" data-historial="'+p.id+'">🔍 Ver todo el contenido</button>';
+    if(p.pdfUrl)h+='<a href="'+esc(p.pdfUrl)+'" target="_blank" class="btn btn-blue btn-sm" style="text-decoration:none">📄 PDF</a>';
+    if(puedeEntregar())h+='<button class="btn btn-ghost btn-sm" style="margin-left:auto;color:#d97706" onclick="histReabrir(\''+p.id+'\')">↩️ Reabrir</button>';
+    h+='</div></div>';
   });
-  el.innerHTML=h;
-  var sel=document.getElementById('h-est');if(sel)sel.value='';
+  return h;
+}
+function aplicarFiltroEntregados(){
+  var el=document.getElementById('home-lista');if(!el)return;
+  HIST_BUSCA='';
+  el.innerHTML='<div style="margin-bottom:10px"><input type="text" placeholder="Buscar en el historial: cliente, número, ciudad, producto..." oninput="histBuscar(this.value)" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px"></div><div id="hist-cont">'+histFilasHTML()+'</div>';
+  var sel=document.getElementById('h-est');if(sel)sel.value='ENTREGADOS';
+}
+function histReabrir(id){
+  if(!puedeEntregar()){toast('Solo un administrador o majul pueden reabrir un pedido','err');return;}
+  var p=DB.pedidos.find(function(x){return x.id===id;});if(!p)return;
+  if(!confirm('¿Devolver el pedido #'+(p.numero||'')+' a pendientes?\n\nSe conserva el registro de quién lo había entregado.'))return;
+  p.estatus=p.estatusPrev||'PENDIENTE';
+  registrarBitacora(id,'REABIERTO (estaba entregado el '+(p.fechaEntrega||'?')+') por '+SESSION.nombre);
+  guardarDB();aplicarFiltroEntregados();toast('Pedido reabierto','warn');
+}
+// Ficha completa: todo lo que quedó del pedido, para revisarlo después.
+function abrirHistorial(id){
+  var p=DB.pedidos.find(function(x){return x.id===id;});if(!p)return;
+  document.getElementById('hist-titulo').textContent='#'+(p.numero||'')+' — '+(p.cliente||'');
+  var h='';
+  h+='<div style="background:var(--sbg);border:1px solid #bbf7d0;border-radius:10px;padding:10px 12px;margin-bottom:12px">';
+  h+='<div style="font-size:13px;font-weight:700;color:var(--success)">✅ Entregado el '+esc(p.fechaEntrega||'?')+(p.horaEntrega?' a las '+esc(p.horaEntrega):'')+'</div>';
+  h+='<div style="font-size:12px;color:#166534;margin-top:2px">Marcado por '+esc(p.entregadoPor||'?')+'</div>';
+  if(p.notaEntrega)h+='<div style="font-size:12px;color:#166534;margin-top:4px">📝 '+esc(p.notaEntrega)+'</div>';
+  h+='</div>';
+  function dato(k,v){return v?('<div style="display:flex;gap:8px;font-size:13px;padding:4px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted);min-width:104px;flex-shrink:0">'+k+'</span><span style="flex:1">'+esc(v)+'</span></div>'):'';}
+  h+='<div class="sec-label">Datos del pedido</div><div style="margin-bottom:12px">';
+  h+=dato('Cliente',p.cliente)+dato('Ciudad',p.ciudad)+dato('Dirección',p.direccion)+dato('Vendedor',p.vendedor);
+  h+=dato('Transporte',p.transporte==='retira'?'Retira en sitio':p.transporte==='envio'?'Envío':'')
+    +dato('Fecha límite',p.fechaLimite)+dato('Creado',(p.fechaCreacion||'')+(p.creadoPorNombre?' por '+p.creadoPorNombre:''));
+  h+='</div>';
+  if(p.descripcion){h+='<div class="sec-label">Descripción</div><div style="font-size:13px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;white-space:pre-wrap;margin-bottom:12px">'+esc(p.descripcion)+'</div>';}
+  var os=getOrdenes(p);
+  if(os.length){
+    h+='<div class="sec-label">Órdenes ('+os.length+')</div>';
+    os.forEach(function(o){
+      h+='<div style="border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:7px;background:#fff">';
+      h+='<div style="font-size:13px;font-weight:700">'+esc(tipoLabel(o.tipo))+(o.numeroOC?' #'+esc(o.numeroOC):'')+'</div>';
+      h+='<div style="font-size:11px;color:var(--muted);margin-top:2px">'+esc(o.proveedor||'—')+' · '+esc(o.estado||'PENDIENTE')+(o.fechaRecepcion?' · recibida '+esc(o.fechaRecepcion):'')+(o.fechaEstimadaEntrega?' · estimada '+esc(o.fechaEstimadaEntrega):'')+'</div>';
+      if(o.items&&o.items.length){h+='<div style="margin-top:5px">';o.items.forEach(function(m){h+='<div style="font-size:12px;color:#475569;padding:1px 0">• '+esc(m.cantidad||m.cant||'')+' × '+esc(m.descripcion||m.desc||'')+'</div>';});h+='</div>';}
+      if(Array.isArray(o.guias)&&o.guias.length)h+='<div style="font-size:11px;color:var(--info);margin-top:4px">🚚 Guías: '+o.guias.map(function(g){return g.pdfUrl?('<a href="'+esc(g.pdfUrl)+'" target="_blank" style="color:var(--info)">#'+esc(g.numeroGuia||'?')+'</a>'):('#'+esc(g.numeroGuia||'?'));}).join(' · ')+'</div>';
+      if(o.guiaDespacho){var gd=o.guiaDespacho;h+='<div style="font-size:11px;color:'+(gd.cuadra===true?'var(--success)':gd.cuadra===false?'var(--danger)':'var(--muted)')+';margin-top:3px">'+(gd.cuadra===true?'✅ Guía #'+esc(gd.numeroGuia||'?')+' cuadra':gd.cuadra===false?'⚠️ Guía #'+esc(gd.numeroGuia||'?')+' con diferencias':'📄 Guía #'+esc(gd.numeroGuia||'?'))+'</div>';}
+      if(Array.isArray(o.notasEntrega)&&o.notasEntrega.length)h+='<div style="font-size:11px;color:var(--muted);margin-top:3px">📄 Notas de entrega: '+o.notasEntrega.map(function(n){return n.pdfUrl?('<a href="'+esc(n.pdfUrl)+'" target="_blank" style="color:var(--info)">#'+esc(n.numeroControl||'?')+'</a>'):('#'+esc(n.numeroControl||'?'));}).join(' · ')+'</div>';
+      if(o.pdfUrl)h+='<div style="margin-top:5px"><a href="'+esc(o.pdfUrl)+'" target="_blank" class="btn btn-blue btn-sm" style="text-decoration:none">📄 Ver orden</a></div>';
+      h+='</div>';
+    });
+  }
+  var it=p.instalacion;
+  if(it&&it.lleva){
+    h+='<div class="sec-label">Instalación</div><div style="border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:12px;background:#fff">';
+    h+='<div style="font-size:13px;font-weight:700">'+esc(it.estado||'')+(it.fecha?' · '+esc(it.fecha):'')+'</div>';
+    if(it.instaladores&&it.instaladores.length)h+='<div style="font-size:12px;margin-top:3px">👷 '+esc(it.instaladores.join(', '))+'</div>';
+    if(it.tiempoEstim)h+='<div style="font-size:12px;color:var(--muted)">⏱ '+esc(it.tiempoEstim)+'</div>';
+    if(it.materiales&&it.materiales.length)h+='<div style="font-size:12px;margin-top:3px">🧰 '+esc(it.materiales.map(function(m){return (m.desc||'')+(m.cant?' x'+m.cant:'');}).join(', '))+'</div>';
+    if(it.notas)h+='<div style="font-size:12px;color:var(--muted);margin-top:3px">'+esc(it.notas)+'</div>';
+    if(it.fotos&&it.fotos.length){h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">';it.fotos.forEach(function(u){h+='<a href="'+esc(u)+'" target="_blank"><img src="'+esc(u)+'" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border)"></a>';});h+='</div>';}
+    h+='</div>';
+  }
+  var bit=(DB.bitacora||[]).filter(function(b){return b.pedidoId===p.id;});
+  if(bit.length){
+    h+='<div class="sec-label">Bitácora ('+bit.length+')</div><div style="margin-bottom:6px">';
+    bit.slice().reverse().forEach(function(b){h+='<div style="font-size:12px;padding:5px 0;border-bottom:1px solid var(--border)"><div>'+esc(b.accion||'')+'</div><div style="font-size:10px;color:var(--muted)">'+esc(b.fecha||'')+' '+esc(b.hora||'')+(b.usuario?' · '+esc(b.usuario):'')+'</div></div>';});
+    h+='</div>';
+  }
+  document.getElementById('historial-body').innerHTML=h;
+  abrirModal('modal-historial');
 }
 function filtrarHome(){
   var b=(document.getElementById('h-buscar')||{value:''}).value.toLowerCase();
   var fe=(document.getElementById('h-est')||{value:''}).value;
+  if(fe==='ENTREGADOS'){aplicarFiltroEntregados();return;}
   var lista=DB.pedidos.filter(function(p){if(p.estatus==='ENTREGADO')return false;var mb=!b||((p.cliente||'').toLowerCase().indexOf(b)>=0||(p.numero||'').indexOf(b)>=0);var mfe=!fe||clasif(p)===fe||(fe==='LISTO'&&p.estatus==='LISTO')||(fe==='ORDENES'&&(function(){var r=resumenOrdenes(p);return r.total>0&&r.listas<r.total;})())||(fe==='SINFECHA'&&getOrdenes(p).some(function(o){return !ordenRecibida(o)&&!o.fechaEstimadaEntrega;}));return mb&&mfe;});
   lista.sort(function(a,b){var da=diasRestantes(a.fechaLimite),db=diasRestantes(b.fechaLimite);if(da===null&&db===null)return 0;if(da===null)return 1;if(db===null)return -1;return da-db;});
   var el=document.getElementById('home-lista');if(!el)return;
@@ -1564,6 +1655,13 @@ function filtrarHome(){
   var etq={vencido:'Vencidos',urgente:'Urgentes',sf:'Sin fecha',ok:'Con tiempo',LISTO:'Listos para entregar'};
   var h='';['vencido','urgente','LISTO','sf','ok'].forEach(function(t){if(!g[t]||!g[t].length)return;h+='<div class="sec-label">'+etq[t]+' ('+g[t].length+')</div>';g[t].forEach(function(p){h+=cardHTML(p,false);});});
   el.innerHTML=h;
+}
+// Marcar un pedido como ENTREGADO solo lo puede hacer un administrador
+// o el usuario majul. Los demas ven el boton pero no se ejecuta.
+function puedeEntregar(){
+  var s=SESSION||{};
+  if(s.rol==='admin')return true;
+  return ((s.username||'').toLowerCase().trim()==='majul');
 }
 function puedeAnular(){var s=SESSION||{};if(s.rol==='admin')return true;var n=((s.nombre||'')+' '+(s.username||'')).toLowerCase();return n.indexOf('viannis')>=0;}
 function cardHTML(p,conEntregar){
@@ -1600,6 +1698,12 @@ function cardHTML(p,conEntregar){
   if(dgPorNumero(p.numero))h+='<button class="btn btn-ghost btn-sm" onclick="verDesglosePedido(\''+esc((p.numero||'').toString())+'\')">🧩 Desglose</button>';
   if(puedeAnular()){if(p.estatus==='ANULADO')h+='<button class="btn btn-ghost btn-sm" style="color:#16a34a" onclick="reactivarPedido(\''+pid+'\')">↩️ Reactivar</button>';else h+='<button class="btn btn-ghost btn-sm" style="color:#dc2626" onclick="anularPedido(\''+pid+'\')">🚫 Anular</button>';}
   if(conEntregar&&p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO'){h+='<input type="text" id="nota-'+pid+'" placeholder="Nota de entrega..."><button class="btn btn-green btn-sm" data-entregar="'+pid+'">Entregar</button>';}
+  // Boton de entrega a la derecha del pie. Se muestra a todos; solo se
+  // ejecuta si quien lo toca es admin o majul.
+  if(!conEntregar&&p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO'){
+    var _ok=puedeEntregar();
+    h+='<button class="btn '+(_ok?'btn-green':'btn-ghost')+' btn-sm" style="margin-left:auto'+(_ok?'':';opacity:.55')+'" data-marcar-entregado="'+pid+'"'+(_ok?'':' title="Solo un administrador o majul pueden marcar entregado"')+'>\u2705 Entregado</button>';
+  }
   h+='</div></div>';return h;
 }
 
@@ -1614,13 +1718,31 @@ function renderEntregar(c){
   var vn=vencidos.filter(function(p){return p.estatus!=='LISTO'&&clasif(p)!=='urgente';});if(vn.length){html+='<div class="sec-label">Vencidos</div>';vn.forEach(function(p){html+=cardHTML(p,true);});}}
   c.innerHTML=html+'</div>';
 }
+// Entrega desde el boton de la tarjeta (pestana Pedidos).
+async function entregarDesdeTarjeta(id){
+  if(!puedeEntregar()){toast('Solo un administrador o majul pueden marcar un pedido como entregado','err');return;}
+  var p=DB.pedidos.find(function(x){return x.id===id;});if(!p)return;
+  var r=resumenOrdenes(p);
+  if(r.total>0&&r.listas<r.total&&!confirm('Este pedido tiene '+(r.total-r.listas)+' orden(es) sin recibir.\n\n¿Marcarlo ENTREGADO de todas formas?'))return;
+  var nota=prompt('Nota de entrega para #'+(p.numero||'')+' — '+(p.cliente||'')+'\n(quién recibió, observaciones... puedes dejarlo vacío)','');
+  if(nota===null)return;
+  p.estatus='ENTREGADO';p.fechaEntrega=fecha();p.horaEntrega=hora();p.notaEntrega=(nota||'').trim();
+  p.entregadoPor=SESSION.nombre;p.entregadoTS=Date.now();
+  registrarBitacora(id,'ENTREGADO por '+SESSION.nombre+(nota?'. Nota: '+nota:''));
+  await guardarDB();
+  goTab(TAB,document.getElementById('nb-'+TAB));
+  toast('Pedido #'+(p.numero||'')+' entregado — está en el historial','ok');
+  enviarPushOneSignal('✅ Pedido entregado #'+(p.numero||''),'Cliente: '+(p.cliente||'')+' · por '+SESSION.nombre+(nota?' — '+nota:''));
+}
+
 async function marcarEntregado(id){
+  if(!puedeEntregar()){toast('Solo un administrador o majul pueden marcar un pedido como entregado','err');return;}
   var p=DB.pedidos.find(function(x){return x.id===id;});if(!p)return;
   var r=resumenOrdenes(p);
   if(r.total>0&&r.listas<r.total&&!confirm('Este pedido tiene '+(r.total-r.listas)+' orden(es) sin recibir. Marcar como ENTREGADO de todas formas?'))return;
   var nota=(document.getElementById('nota-'+id)||{}).value||'';
-  p.estatus='ENTREGADO';p.fechaEntrega=fecha();p.notaEntrega=nota;p.entregadoPor=SESSION.nombre;
-  registrarBitacora(id,'ENTREGADO. Nota: '+nota);await guardarDB();
+  p.estatus='ENTREGADO';p.fechaEntrega=fecha();p.horaEntrega=hora();p.notaEntrega=nota;p.entregadoPor=SESSION.nombre;p.entregadoTS=Date.now();
+  registrarBitacora(id,'ENTREGADO por '+SESSION.nombre+'. Nota: '+nota);await guardarDB();
   var card=document.getElementById('card-'+id);
   if(card){card.style.opacity='.4';card.querySelector('.card-foot').innerHTML='<span style="color:var(--success);font-size:13px;font-weight:600">Entregado hoy</span>';}
   toast('Pedido entregado','ok');
