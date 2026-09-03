@@ -372,7 +372,23 @@ function veoIcono(txt,dudoso){
 function cerrarModal(id){document.getElementById(id).classList.remove('open');}
 function abrirModal(id){document.querySelectorAll('.overlay.open').forEach(function(o){o.classList.remove('open');});document.getElementById(id).classList.add('open');}
 function toast(msg,tipo){var t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(tipo==='ok'?' t-ok':tipo==='err'?' t-err':tipo==='warn'?' t-warn':'');setTimeout(function(){t.className='toast';},4000);}
-function mostrarBadge(tipo){var b=document.getElementById('sync-badge');b.className='sync-badge show'+(tipo==='syncing'?' syncing':tipo==='err'?' err':'');b.textContent=tipo==='syncing'?'Guardando...':tipo==='err'?'Error al guardar':'Guardado';if(tipo!=='syncing')setTimeout(function(){b.className='sync-badge';},2500);}
+function mostrarBadge(tipo){
+  var b=document.getElementById('sync-badge');
+  var cls='sync-badge show'+(tipo==='syncing'?' syncing':(tipo==='err'?' err':(tipo==='pend'?' syncing':'')));
+  var txt=tipo==='syncing'?'Guardando...':tipo==='err'?'Error al guardar':tipo==='pend'?'Sin senal - pendiente de subir':'Guardado en el servidor';
+  b.className=cls;b.textContent=txt;
+  if(tipo!=='syncing'&&tipo!=='pend')setTimeout(function(){b.className='sync-badge';},2500);
+}
+// Confirma si la escritura llego DE VERDAD al servidor. Con cache local,
+// el await de setDoc resuelve al guardar en el telefono, no en la nube:
+// sin esto la app dice "Guardado" cuando en realidad quedo en cola.
+function confirmarEnServidor(){
+  var fs=window._firestore;
+  if(!fs||!fs.waitForPendingWrites||!_db){mostrarBadge('ok');return;}
+  if(!navigator.onLine)mostrarBadge('pend');
+  fs.waitForPendingWrites(_db).then(function(){mostrarBadge('ok');})
+   .catch(function(){mostrarBadge('pend');});
+}
 function diasRestantes(f){if(!f)return null;var p=f.split('/');if(p.length!==3)return null;var d=parseInt(p[0]),m=parseInt(p[1])-1,y=parseInt(p[2]);if(y<100)y+=2000;var dt=new Date(y,m,d);dt.setHours(0,0,0,0);var hoy=new Date();hoy.setHours(0,0,0,0);return isNaN(dt.getTime())?null:Math.round((dt-hoy)/86400000);}
 function clasif(p){if(p.estatus==='ENTREGADO')return 'done';var d=diasRestantes(p.fechaLimite);if(d===null)return 'sf';if(d<0)return 'vencido';if(d<=7)return 'urgente';return 'ok';}
 function badgeHTML(p){var d=diasRestantes(p.fechaLimite);if(p.estatus==='ANULADO')return '<span class="badge b-danger">ANULADO</span>';if(p.estatus==='LISTO')return '<span class="badge b-success">Listo</span>';if(p.estatus==='EN PROCESO')return '<span class="badge b-info">En proceso</span>';if(d===null)return '<span class="badge b-muted">Sin fecha</span>';if(d<0)return '<span class="badge b-danger">Vencido '+Math.abs(d)+'d</span>';if(d<=7)return '<span class="badge b-warning">En '+d+'d</span>';return '<span class="badge b-muted">En '+d+'d</span>';}
@@ -458,17 +474,70 @@ function chipOrden(o){
 }
 
 var _savePending=false;
+
+// ═══════════════════════════════════════════════════════════
+// GUARDADO POR CAMPO MODIFICADO
+//
+// El documento veoyoca/data se escribe con merge, asi que un campo que NO
+// va en el payload queda intacto en el servidor. Antes se mandaban los diez
+// campos siempre: si Carlos editaba un cliente, su copia vieja de 'inv'
+// pisaba el inventario que David acababa de cargar desde el galpon.
+//
+// Ahora se guarda una huella de como estaba cada campo al leerlo, y solo
+// viaja lo que este aparato realmente cambio. Cada uno escribe lo suyo.
+// ═══════════════════════════════════════════════════════════
+var _campoHuella={};
+function _campoValor(k){
+  if(k==='bitacora')return DB.bitacora.slice(-500);
+  if(k==='usuarios')return DB.usuarios||[];
+  if(k==='pedidos')return DB.pedidos||[];
+  if(k==='presupuestosDoc')return DB.presupuestosDoc||[];
+  if(k==='pedidosDoc')return DB.pedidosDoc||[];
+  if(k==='ofertasPrecios')return DB.ofertasPrecios||{};
+  if(k==='instaladores')return DB.instaladores||[];
+  if(k==='cargaPlan')return DB.cargaPlan||{items:[]};
+  if(k==='desgloses')return DB.desgloses||[];
+  if(k==='inv')return DB.inv||{items:[],ubicaciones:[],movs:[],stock:{}};
+  return null;
+}
+var _CAMPOS=['usuarios','pedidos','bitacora','presupuestosDoc','pedidosDoc','ofertasPrecios','instaladores','cargaPlan','desgloses','inv'];
+// Marca todos los campos como "iguales al servidor" (al cargar o al recibir cambios).
+function _sellarHuellas(){
+  _CAMPOS.forEach(function(k){try{_campoHuella[k]=JSON.stringify(_campoValor(k));}catch(e){_campoHuella[k]='';}});
+}
+// Marca un solo campo, tras confirmar que se guardo.
+function _sellarCampo(k,j){_campoHuella[k]=j;}
+
 async function guardarDB(){
   if(!_db)return;
   // Si ya hay un guardado en curso, en vez de descartar este (lo que borraba
   // cambios recién hechos, p.ej. un usuario nuevo), lo dejamos pendiente para
   // ejecutarlo apenas termine el actual.
   if(SAVING){_savePending=true;return;}
+  // Armar el payload solo con lo que cambio en ESTE aparato.
+  var carga={},cambiados=[],huellasNuevas={};
+  _CAMPOS.forEach(function(k){
+    var v=_campoValor(k),j;
+    try{j=JSON.stringify(v);}catch(e){return;}
+    if(j===_campoHuella[k])return;      // sin cambios locales: no se manda
+    carga[k]=v;cambiados.push(k);huellasNuevas[k]=j;
+  });
+  if(!cambiados.length){if(_savePending)_savePending=false;return;} // nada que guardar
   SAVING=true;mostrarBadge('syncing');
-  try{var {setDoc,doc}=window._firestore;var _ua=Date.now();await setDoc(doc(_db,'veoyoca','data'),{usuarios:DB.usuarios,pedidos:DB.pedidos,bitacora:DB.bitacora.slice(-500),presupuestosDoc:DB.presupuestosDoc||[],pedidosDoc:DB.pedidosDoc||[],ofertasPrecios:DB.ofertasPrecios||{},instaladores:DB.instaladores||[],cargaPlan:DB.cargaPlan||{items:[]},desgloses:DB.desgloses||[],inv:DB.inv||{items:[],ubicaciones:[],movs:[],stock:{}},updatedAt:_ua},{merge:true});_lastAppliedUpdatedAt=_ua;mostrarBadge('ok');}
+  try{
+    var {setDoc,doc}=window._firestore;var _ua=Date.now();
+    carga.updatedAt=_ua;
+    await setDoc(doc(_db,'veoyoca','data'),carga,{merge:true});
+    _lastAppliedUpdatedAt=_ua;
+    cambiados.forEach(function(k){_sellarCampo(k,huellasNuevas[k]);});
+    console.log('Guardado:',cambiados.join(', '));
+    confirmarEnServidor();
+  }
   catch(e){mostrarBadge('err');toast('Error: '+e.message,'err');}
   SAVING=false;
   if(_savePending){_savePending=false;return guardarDB();} // corre el guardado que quedó pendiente
+  // Si llegaron cambios de otro aparato mientras guardabamos, aplicarlos ahora.
+  if(_snapPendiente){var d=_snapPendiente;_snapPendiente=null;_aplicarSnap(d);}
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -3674,10 +3743,20 @@ function invCtActivoHTML(a){
   h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"><button class="btn btn-dark btn-sm" onclick="invCtNuevoProducto()">➕ Producto nuevo</button>';
   if(invCtEsAdmin())h+='<button class="btn btn-blue btn-sm" onclick="invCtRevisar()">🔍 Revisar y aplicar</button><button class="btn btn-ghost btn-sm" onclick="invCtCSV()">📄 CSV</button><button class="btn btn-red btn-sm" onclick="invCtCerrar()">Cerrar</button>';
   h+='</div>';
+  h+=invCtEstadoRed();
   h+='<input type="text" placeholder="Buscar producto..." value="'+esc(INV_CT_BUSCA)+'" oninput="INV_CT_BUSCA=this.value;invCtRefrescarLista()" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;margin-bottom:8px">';
   h+='<div id="ct-lista">'+invCtListaHTML()+'</div>';
   return h+'</div>';
 }
+// Aviso honesto de conexion: en el galpon la senal se cae y el almacenista
+// necesita saber si lo que conto ya esta en el servidor o solo en su telefono.
+function invCtEstadoRed(){
+  if(navigator.onLine)return '<div style="display:flex;align-items:center;gap:6px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:7px 10px;font-size:11px;color:#166534;margin-bottom:8px"><span style="width:8px;height:8px;background:#16a34a;border-radius:50%;flex-shrink:0"></span>En línea — lo que cuentes sube al instante</div>';
+  return '<div style="display:flex;align-items:center;gap:6px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:7px 10px;font-size:11px;color:#92400e;margin-bottom:8px"><span style="width:8px;height:8px;background:#d97706;border-radius:50%;flex-shrink:0"></span><b>Sin señal.</b> Sigue contando: se guarda en el teléfono y sube solo al recuperar conexión. No cierres la app hasta que vuelva la señal.</div>';
+}
+window.addEventListener('online',function(){if(TAB==='inventario'&&INV_MODO==='conteo')renderInventario(document.getElementById('content'));});
+window.addEventListener('offline',function(){if(TAB==='inventario'&&INV_MODO==='conteo')renderInventario(document.getElementById('content'));});
+
 function invCtRefrescarLista(){var el=document.getElementById('ct-lista');if(el)el.innerHTML=invCtListaHTML();}
 function invCtListaHTML(){
   var a=invCtAct();if(!a)return '';
@@ -3799,9 +3878,10 @@ function invCtGuardar(){
   if(a.modo==='conteo'&&l.estado==='recuento'){l.qty2=q;l.usuario2=invCtYo();l.estado='contado';}
   else{l.qty=q;l.usuario=invCtYo();l.ts=Date.now();l.estado='contado';}
   guardarDB();
+  if(!navigator.onLine)toast('Contado y guardado en el teléfono — se sube solo al recuperar señal','warn');
   var sig=invCtSiguiente(INV_CT_ITEM);
-  if(sig){toast('Guardado ✓','ok');invCtFicha(sig);}
-  else{toast('Guardado ✓ — no quedan pendientes','ok');invCtCerrarFicha();}
+  if(sig){if(navigator.onLine)toast('Guardado ✓','ok');invCtFicha(sig);}
+  else{if(navigator.onLine)toast('Guardado ✓ — no quedan pendientes','ok');invCtCerrarFicha();}
 }
 function invCtSiguiente(actual){
   var a=invCtAct();if(!a)return null;
@@ -4286,7 +4366,10 @@ async function initFirebase(){
     window._firestore=fs;
     var snap=await fs.getDoc(fs.doc(_db,'veoyoca','data'));
     if(snap.exists()){var d=snap.data();DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];DB.desgloses=d.desgloses||[];DB.presupuestosDoc=d.presupuestosDoc||[];DB.pedidosDoc=d.pedidosDoc||[];}
-    else{DB.usuarios=[{id:'admin',nombre:'Administrador',username:'admin',password:'admin123',rol:'admin',creado:fecha()}];await guardarDB();}
+    else{DB.usuarios=[{id:'admin',nombre:'Administrador',username:'admin',password:'admin123',rol:'admin',creado:fecha()}];}
+    // Huella de partida: a partir de aqui solo se manda lo que cambie aqui.
+    _sellarHuellas();
+    if(!DB.usuarios.length){DB.usuarios=[{id:'admin',nombre:'Administrador',username:'admin',password:'admin123',rol:'admin',creado:fecha()}];await guardarDB();}
     // Clientes del CRM: viven en su propia coleccion.
     document.getElementById('splash-msg').textContent='Cargando clientes...';
     try{
@@ -4302,18 +4385,12 @@ async function initFirebase(){
     },function(e){console.error('Escucha de clientes:',e);});
 
     fs.onSnapshot(fs.doc(_db,'veoyoca','data'),function(snap){
-      if(!snap.exists()||SAVING)return;
-      var d=snap.data();
-      // Sin cambios reales (o es el eco de nuestro propio guardado): no hacer nada.
-      if(d.updatedAt&&d.updatedAt===_lastAppliedUpdatedAt)return;
-      _lastAppliedUpdatedAt=d.updatedAt||_lastAppliedUpdatedAt;
-      // Actualizar los datos en memoria (barato).
-      DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];DB.presupuestosDoc=d.presupuestosDoc||[];DB.pedidosDoc=d.pedidosDoc||[];DB.ofertasPrecios=d.ofertasPrecios||{};DB.instaladores=d.instaladores||[];DB.cargaPlan=d.cargaPlan||{items:[]};DB.desgloses=d.desgloses||[];DB.inv=d.inv||{items:[],ubicaciones:[],movs:[],stock:{}};
-      // Pestañas con estado transitorio que no debe redibujarse en vivo.
-      if(TAB==='cotizar')return;
-      if(TAB==='plan'&&PLAN_MODO==='carga')return;
-      // Re-dibujo agrupado y sin interrumpir lo que el usuario esté escribiendo.
-      programarRerender();
+      if(!snap.exists())return;
+      // Si estamos guardando, NO se descarta el cambio (antes se perdia y la
+      // copia en memoria quedaba vieja para siempre): se guarda y se aplica
+      // en cuanto termine el guardado.
+      if(SAVING){_snapPendiente=snap.data();return;}
+      _aplicarSnap(snap.data());
     });
     var sess=null;try{sess=JSON.parse(localStorage.getItem('veo_session')||'null');}catch(e){}
     if(sess){var u=DB.usuarios.find(function(x){return x.id===sess.id;});if(u){SESSION=u;mostrarApp();return;}}
@@ -4323,6 +4400,37 @@ async function initFirebase(){
     document.getElementById('l-user').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('l-pass').focus();});
     document.getElementById('l-pass').addEventListener('keydown',function(e){if(e.key==='Enter')login();});
   }catch(e){document.getElementById('splash-msg').textContent='Error: '+e.message;console.error('Firebase error:',e);}
+}
+
+// Aplica los cambios que llegan de otro aparato. Al terminar vuelve a sellar
+// las huellas: lo que vino del servidor NO se considera un cambio local, asi
+// no se reenvia de vuelta pisando a quien lo escribio.
+var _snapPendiente=null;
+function _aplicarSnap(d){
+  if(!d)return;
+  if(d.updatedAt&&d.updatedAt===_lastAppliedUpdatedAt){_sellarHuellas();return;}
+  _lastAppliedUpdatedAt=d.updatedAt||_lastAppliedUpdatedAt;
+  // Un campo con cambios locales sin guardar no se sobrescribe: se respeta lo
+  // que el usuario acaba de hacer y su proximo guardado lo manda al servidor.
+  _CAMPOS.forEach(function(k){
+    var j;try{j=JSON.stringify(_campoValor(k));}catch(e){j=null;}
+    if(j!==null&&j!==_campoHuella[k])return;   // hay cambios locales pendientes
+    if(k==='usuarios')DB.usuarios=d.usuarios||[];
+    else if(k==='pedidos')DB.pedidos=d.pedidos||[];
+    else if(k==='bitacora')DB.bitacora=d.bitacora||[];
+    else if(k==='presupuestosDoc')DB.presupuestosDoc=d.presupuestosDoc||[];
+    else if(k==='pedidosDoc')DB.pedidosDoc=d.pedidosDoc||[];
+    else if(k==='ofertasPrecios')DB.ofertasPrecios=d.ofertasPrecios||{};
+    else if(k==='instaladores')DB.instaladores=d.instaladores||[];
+    else if(k==='cargaPlan')DB.cargaPlan=d.cargaPlan||{items:[]};
+    else if(k==='desgloses')DB.desgloses=d.desgloses||[];
+    else if(k==='inv')DB.inv=d.inv||{items:[],ubicaciones:[],movs:[],stock:{}};
+    _campoHuella[k]=(k==='bitacora')?JSON.stringify(DB.bitacora.slice(-500)):JSON.stringify(_campoValor(k));
+  });
+  // Pestañas con estado transitorio que no debe redibujarse en vivo.
+  if(TAB==='cotizar')return;
+  if(TAB==='plan'&&PLAN_MODO==='carga')return;
+  programarRerender();
 }
 
 function verificarGoto(){var goto=localStorage.getItem('veo_goto');if(goto&&SESSION){localStorage.removeItem('veo_goto');setTimeout(function(){goTab(goto,document.getElementById('nb-'+goto));},300);}}
