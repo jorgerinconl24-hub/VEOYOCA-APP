@@ -1079,7 +1079,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v63 · boton Entregado + historial · inventario sin pisarse';
+var APP_VERSION='v64 · boton Entregar + historial · inventario sin pisarse';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1702,7 +1702,7 @@ function cardHTML(p,conEntregar){
   // ejecuta si quien lo toca es admin o majul.
   if(!conEntregar&&p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO'){
     var _ok=puedeEntregar();
-    h+='<button class="btn '+(_ok?'btn-green':'btn-ghost')+' btn-sm" style="margin-left:auto'+(_ok?'':';opacity:.55')+'" data-marcar-entregado="'+pid+'"'+(_ok?'':' title="Solo un administrador o majul pueden marcar entregado"')+'>\u2705 Entregado</button>';
+    h+='<button class="btn '+(_ok?'btn-green':'btn-ghost')+' btn-sm" style="margin-left:auto'+(_ok?'':';opacity:.55')+'" data-marcar-entregado="'+pid+'"'+(_ok?'':' title="Solo un administrador o majul pueden marcar entregado"')+'>\u2705 Entregar</button>';
   }
   h+='</div></div>';return h;
 }
