@@ -1079,7 +1079,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v64 · boton Entregar + historial · inventario sin pisarse';
+var APP_VERSION='v65 · potencial: aviso al instante + seguimiento a 3 dias';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -2453,12 +2453,31 @@ function autoAgendarProximo(cl,res){
 // POTENCIAL: programa un recordatorio para MAÑANA. El webhook manda un WhatsApp
 // dedicado (solo de ese cliente) a su vendedor cuando llega el día.
 function aplicarPotencial(cl){
-  cl.proximoContacto=fechaMasDias(1); // mañana
-  cl.recordatorioPotencial={fecha:cl.proximoContacto,hecho:false,creado:fecha()};
+  cl.proximoContacto=fechaMasDias(3); // en 3 dias
+  cl.recordatorioPotencial={fecha:cl.proximoContacto,hecho:false,creado:fecha(),creadoPor:SESSION?SESSION.nombre:'App'};
   if(!Array.isArray(cl.seguimientos))cl.seguimientos=[];
-  cl.seguimientos.push({texto:'Marcado como POTENCIAL — recordatorio para mañana ('+cl.proximoContacto+')',fecha:fecha(),hora:hora(),usuario:SESSION?SESSION.nombre:'App'});
+  cl.seguimientos.push({texto:'Marcado como POTENCIAL — seguimiento programado para el '+cl.proximoContacto+' (3 días)',fecha:fecha(),hora:hora(),usuario:SESSION?SESSION.nombre:'App'});
   cl.ultimoContacto=fecha();
-  toast('Cliente marcado POTENCIAL — recordatorio para mañana ✓','ok');
+  notificarPotencial(cl);
+  toast('Marcado POTENCIAL — seguimiento el '+cl.proximoContacto+' ✓','ok');
+}
+// Aviso inmediato de cliente potencial: el servidor lo manda al WhatsApp del
+// vendedor, al de los administradores y al grupo. A los 3 dias el servidor
+// vuelve con el listado de los potenciales que toca retomar.
+var _potAvisado={};
+function notificarPotencial(cl){
+  try{
+    if(!cl||!cl.nombre)return;
+    if(_potAvisado[cl.id])return;           // no repetir en la misma sesion
+    _potAvisado[cl.id]=1;
+    fetch('https://veoyoca-webhook.onrender.com/potencial-crm',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify({
+      nombre:cl.nombre,telefono:cl.telefono||'',producto:cl.producto||'',ciudad:cl.ciudad||'',
+      notas:cl.notas||'',vendedor:cl.vendedor||'',marcadoPor:SESSION?SESSION.nombre:'',
+      fechaSeguimiento:cl.proximoContacto||''
+    })}).then(function(r){return r.json();})
+      .then(function(d){if(d&&d.ok)toast('Potencial avisado al vendedor, admins y grupo','ok');})
+      .catch(function(e){console.log('potencial-crm err',e);});
+  }catch(e){console.log('notificarPotencial err',e);}
 }
 // Marca la hora de la PRIMERA atención del cliente (solo la primera vez).
 function _marcarAtendido(cl){ if(cl && !cl.atendidoTS) cl.atendidoTS=Date.now(); }
@@ -2768,7 +2787,7 @@ async function guardarCliente(){
   cl.porqueCompro=document.getElementById('c-porque-si').value.trim();
   cl.porqueNoCompro=document.getElementById('c-porque-no').value.trim();
   cl.notas=document.getElementById('c-notas').value.trim();
-  if(cl.estado2==='POTENCIAL'&&est2Antes!=='POTENCIAL')aplicarPotencial(cl); // recordatorio para mañana
+  if(cl.estado2==='POTENCIAL'&&est2Antes!=='POTENCIAL')aplicarPotencial(cl); // seguimiento a 3 dias + aviso
   cl.ultimaEdicion=fecha()+' '+hora();cl.editadoPor=SESSION.nombre;
   if(esNuevo)getClientes().push(cl);
   registrarBitacora(cl.id,(esNuevo?'CLIENTE CRM creado: ':'CLIENTE CRM editado: ')+nombre+' por '+SESSION.nombre);
