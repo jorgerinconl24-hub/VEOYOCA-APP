@@ -626,6 +626,7 @@ function mostrarApp(){
   sincronizarPushId();
   goTab('home',document.getElementById('nb-home'));
   setTimeout(verificarGoto,500);
+  setTimeout(verificarClienteURL,700);
   setTimeout(verificarCamposIncompletosAlEntrar, 4000);
   setInterval(verificarCamposIncompletosAlEntrar, 60*60*1000);
 }
@@ -1079,7 +1080,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v65 · potencial: aviso al instante + seguimiento a 3 dias';
+var APP_VERSION='v67 · columna Seguimientos en la tabla · los del bot no cuentan';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -2675,14 +2676,14 @@ function renderTablaCRM(el,lista){
   var vendArr=Object.keys(vends).sort();
   var EST2=['POTENCIAL','INTERESADO','PRESUPUESTO ENVIADO','EN NEGOCIACION','COMPRO','NO COMPRO'];
   var h='<div class="crm-wrap"><table class="crm" id="tabla-crm"><thead><tr>';
-  var _cols=['Nombre','Tel\u00E9fono','Vendedor','Estado 1','Estado 2','Producto/Servicio','Ciudad','Red social','Tipo de negocio','Estatus/Objeci\u00F3n','Plan de acci\u00F3n','Cant.','Porqu\u00E9 compr\u00F3','Porqu\u00E9 NO compr\u00F3','\u00DAlt. contacto','Pr\u00F3x. contacto','Notas','Visit\u00F3 oficina','Presupuesto','Pedido'];
+  var _cols=['Nombre','Tel\u00E9fono','Vendedor','Estado 1','Estado 2','Seguimientos','Producto/Servicio','Ciudad','Red social','Tipo de negocio','Estatus/Objeci\u00F3n','Plan de acci\u00F3n','Cant.','Porqu\u00E9 compr\u00F3','Porqu\u00E9 NO compr\u00F3','\u00DAlt. contacto','Pr\u00F3x. contacto','Notas','Visit\u00F3 oficina','Presupuesto','Pedido'];
   if(SESSION.rol==='admin')_cols.push('\u23F1 Atenci\u00F3n');
   _cols.forEach(function(t,i){
     h+='<th'+(i===0?' class="colfija"':'')+'>'+t+'</th>';
   });
   h+='</tr></thead><tbody>';
   // Fila de alta rapida, como la fila "Nuevo" de Notion
-  h+='<tr><td class="colfija" style="background:var(--ibg)"><input id="crm-nuevo" placeholder="+ Nuevo cliente (Enter)" onkeydown="if(event.key===\'Enter\')crmQuickAdd(this)"></td><td colspan="'+(SESSION.rol==='admin'?20:19)+'" style="padding:8px 10px;font-size:11px;color:var(--muted);background:var(--ibg)">Escribe el nombre, presiona Enter y llena las casillas directamente \u2014 los cambios se guardan solos. Toca \uD83D\uDCC2 para abrir la ficha y los seguimientos.</td></tr>';
+  h+='<tr><td class="colfija" style="background:var(--ibg)"><input id="crm-nuevo" placeholder="+ Nuevo cliente (Enter)" onkeydown="if(event.key===\'Enter\')crmQuickAdd(this)"></td><td colspan="'+(SESSION.rol==='admin'?21:20)+'" style="padding:8px 10px;font-size:11px;color:var(--muted);background:var(--ibg)">Escribe el nombre, presiona Enter y llena las casillas directamente \u2014 los cambios se guardan solos. Toca \uD83D\uDCC2 para abrir la ficha y los seguimientos.</td></tr>';
   lista.forEach(function(cl){
     var id=cl.id;
     h+='<tr>';
@@ -2691,6 +2692,7 @@ function renderTablaCRM(el,lista){
     h+='<td>'+celdaSelect(id,'vendedor',cl.vendedor||'',vendArr,'\u2014')+'</td>';
     h+='<td>'+celdaSelect(id,'estado1',est1De(cl),EST1_OPCIONES)+'</td>';
     h+='<td style="min-width:170px">'+celdaSelect(id,'estado2',cl.estado2||'',EST2,'\u2014')+'</td>';
+    h+='<td style="min-width:250px">'+celdaSeguimiento(cl)+'</td>';
     h+='<td>'+celdaInput(id,'producto',cl.producto)+'</td>';
     h+='<td>'+celdaInput(id,'ciudad',cl.ciudad)+'</td>';
     h+='<td>'+celdaInput(id,'redSocial',cl.redSocial)+'</td>';
@@ -2713,6 +2715,58 @@ function renderTablaCRM(el,lista){
   if(!lista.length&&getClientes().length)h+='<div class="empty" style="padding:20px">Ning\u00FAn cliente coincide con el filtro</div>';
   el.innerHTML=h;
 }
+// ═══════════════════════════════════════════════════════════
+// COLUMNA DE SEGUIMIENTOS EN LA TABLA
+// Se escribe y se agrega sin abrir la ficha: escribir y Enter. Muestra el
+// ultimo seguimiento HUMANO (los del bot se ven distinto y no cuentan como
+// atencion del vendedor).
+// ═══════════════════════════════════════════════════════════
+function esSegBot(sg){
+  var u=(sg&&sg.usuario||'').toString().toLowerCase();
+  return u.indexOf('bot')>=0||u==='app'||u==='sistema';
+}
+function segsHumanos(cl){return (cl.seguimientos||[]).filter(function(sg){return !esSegBot(sg);});}
+function ultimoSegTxt(cl){
+  var hs=segsHumanos(cl);
+  if(!hs.length){
+    var bots=(cl.seguimientos||[]).length;
+    return bots?('<span style="color:#94a3b8">solo '+bots+' del bot \u2014 sin seguimiento del vendedor</span>'):'<span style="color:#cbd5e1">sin seguimientos</span>';
+  }
+  var u=hs[hs.length-1];
+  var hoy=fecha();
+  var col=(u.fecha===hoy)?'#166534':'#64748b';
+  return '<span style="color:'+col+'">'+(u.fecha===hoy?'\u2705 hoy':esc(u.fecha||''))+' \u00B7 '+esc((u.texto||'').substring(0,46))+((u.texto||'').length>46?'\u2026':'')+'</span>';
+}
+function celdaSeguimiento(cl){
+  var n=segsHumanos(cl).length;
+  return '<div style="padding:4px 6px">'
+    +'<div id="seg-ult-'+cl.id+'" style="font-size:10px;line-height:1.3;margin-bottom:3px;white-space:normal">'+ultimoSegTxt(cl)+'</div>'
+    +'<div style="display:flex;gap:3px;align-items:center">'
+    +'<input id="seg-in-'+cl.id+'" placeholder="Qu\u00E9 pas\u00F3 + Enter" onkeydown="if(event.key===\'Enter\')crmSegAgregar(\''+cl.id+'\')" style="flex:1;min-width:120px;border:1px solid var(--border);border-radius:6px;padding:5px 7px;font-size:11px">'
+    +'<button onclick="abrirCliente(\''+cl.id+'\',true)" title="Ver todo el historial" style="border:none;background:none;cursor:pointer;font-size:12px;padding:0 3px">\uD83D\uDD52'+(n?'<span style="font-size:9px;color:var(--muted)">'+n+'</span>':'')+'</button>'
+    +'</div></div>';
+}
+async function crmSegAgregar(id){
+  var inp=document.getElementById('seg-in-'+id);if(!inp)return;
+  var texto=(inp.value||'').trim();
+  if(!texto){toast('Escribe qu\u00E9 pas\u00F3 en el contacto','err');return;}
+  var cl=getClientes().find(function(x){return x.id===id;});if(!cl)return;
+  if(!Array.isArray(cl.seguimientos))cl.seguimientos=[];
+  _marcarAtendido(cl);
+  cl.seguimientos.push({texto:texto,fecha:fecha(),hora:hora(),usuario:SESSION.nombre});
+  cl.ultimoContacto=fecha();
+  cl.ultimaEdicion=fecha()+' '+hora();cl.editadoPor=SESSION.nombre;
+  if(est1De(cl)==='SIN CONTACTAR')cl.estado1='CONTACTADO';
+  inp.value='';
+  // Se actualiza solo la celda: re-dibujar la tabla entera perderia el
+  // desplazamiento y el foco, y la tabla es muy ancha.
+  var ult=document.getElementById('seg-ult-'+id);
+  if(ult)ult.innerHTML=ultimoSegTxt(cl);
+  registrarBitacora(cl.id,'SEGUIMIENTO (tabla) a '+(cl.nombre||'')+': '+texto.substring(0,60));
+  await guardarCliente1(cl);
+  toast('Seguimiento registrado \u2713','ok');
+}
+
 function renderSeguimientosCliente(cl){
   var box=document.getElementById('c-seguimientos');if(!box)return;
   var segs=Array.isArray(cl.seguimientos)?cl.seguimientos.slice().reverse():[];
@@ -4572,6 +4626,30 @@ function _aplicarSnap(d){
   if(TAB==='cotizar')return;
   if(TAB==='plan'&&PLAN_MODO==='carga')return;
   programarRerender();
+}
+
+// El WhatsApp del recordatorio trae un enlace por cliente:
+//   .../VEOYOCA-APP/?cliente=<id>
+// Al abrirlo, la app va directo a Ventas y abre su ficha con el cuadro de
+// seguimiento enfocado. Antes habia que entrar, ir a Ventas, buscarlo y
+// abrirlo: cuatro pasos que a media manana nadie da.
+function verificarClienteURL(){
+  try{
+    var id=new URLSearchParams(location.search).get('cliente');
+    if(!id)return;
+    // Se limpia la URL para que al recargar no vuelva a abrir la ficha.
+    try{history.replaceState({},'',location.pathname);}catch(e){}
+    var abrir=function(intentos){
+      var cl=getClientes().find(function(x){return x.id===id;});
+      if(!cl){
+        if(intentos>0){setTimeout(function(){abrir(intentos-1);},700);return;}
+        toast('No encontré ese cliente — puede que lo hayan eliminado','err');return;
+      }
+      goTab('ventas',document.getElementById('nb-ventas'));
+      setTimeout(function(){abrirCliente(id,true);},250);
+    };
+    abrir(6);   // los clientes llegan por la escucha; se reintenta unos segundos
+  }catch(e){console.log('verificarClienteURL',e);}
 }
 
 function verificarGoto(){var goto=localStorage.getItem('veo_goto');if(goto&&SESSION){localStorage.removeItem('veo_goto');setTimeout(function(){goTab(goto,document.getElementById('nb-'+goto));},300);}}
