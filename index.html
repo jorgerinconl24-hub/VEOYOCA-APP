@@ -491,6 +491,11 @@ var _savePending=false;
 // viaja lo que este aparato realmente cambio. Cada uno escribe lo suyo.
 // ═══════════════════════════════════════════════════════════
 var _campoHuella={};
+// Hasta no haber leido el documento del servidor, este aparato NO tiene una
+// base valida contra la cual comparar. Mandar 'inv' o 'cargaPlan' en ese
+// estado equivale a borrarlos. Se bloquean hasta tener datos reales.
+var _servidorLeido=false;
+var _CAMPOS_PROTEGIDOS=['inv','cargaPlan','pedidos','ofertasPrecios','instaladores'];
 function _campoValor(k){
   if(k==='bitacora')return DB.bitacora.slice(-500);
   if(k==='usuarios')return DB.usuarios||[];
@@ -524,6 +529,10 @@ async function guardarDB(){
     var v=_campoValor(k),j;
     try{j=JSON.stringify(v);}catch(e){return;}
     if(j===_campoHuella[k])return;      // sin cambios locales: no se manda
+    if(!_servidorLeido&&_CAMPOS_PROTEGIDOS.indexOf(k)>=0){
+      console.warn('No se manda "'+k+'": todavía no se ha leído el servidor.');
+      return;                            // evita borrar por escribir sobre vacio
+    }
     carga[k]=v;cambiados.push(k);huellasNuevas[k]=j;
   });
   if(!cambiados.length){if(_savePending)_savePending=false;return;} // nada que guardar
@@ -1080,7 +1089,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v67 · columna Seguimientos en la tabla · los del bot no cuentan';
+var APP_VERSION='v68 · fix: inventario ya no se borra por base vacia al arrancar';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -4560,7 +4569,18 @@ async function initFirebase(){
     catch(e){console.log('Cache local no disponible, usando modo normal:',e&&e.message);_db=fs.getFirestore(app);}
     window._firestore=fs;
     var snap=await fs.getDoc(fs.doc(_db,'veoyoca','data'));
-    if(snap.exists()){var d=snap.data();DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];DB.desgloses=d.desgloses||[];DB.presupuestosDoc=d.presupuestosDoc||[];DB.pedidosDoc=d.pedidosDoc||[];}
+    if(snap.exists()){
+      var d=snap.data();
+      DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];
+      DB.desgloses=d.desgloses||[];DB.presupuestosDoc=d.presupuestosDoc||[];DB.pedidosDoc=d.pedidosDoc||[];
+      // Estos cuatro faltaban y era un hueco grave: si no se cargan aqui, la
+      // huella se sella contra un objeto VACIO. El primer guardado del aparato
+      // mandaria un inventario vacio y borraria el del servidor.
+      DB.ofertasPrecios=d.ofertasPrecios||{};DB.instaladores=d.instaladores||[];
+      DB.cargaPlan=d.cargaPlan||{items:[]};
+      DB.inv=d.inv||{items:[],ubicaciones:[],movs:[],stock:{}};
+      _servidorLeido=true;
+    }
     else{DB.usuarios=[{id:'admin',nombre:'Administrador',username:'admin',password:'admin123',rol:'admin',creado:fecha()}];}
     // Huella de partida: a partir de aqui solo se manda lo que cambie aqui.
     _sellarHuellas();
@@ -4603,6 +4623,7 @@ async function initFirebase(){
 var _snapPendiente=null;
 function _aplicarSnap(d){
   if(!d)return;
+  _servidorLeido=true;
   if(d.updatedAt&&d.updatedAt===_lastAppliedUpdatedAt){_sellarHuellas();return;}
   _lastAppliedUpdatedAt=d.updatedAt||_lastAppliedUpdatedAt;
   // Un campo con cambios locales sin guardar no se sobrescribe: se respeta lo
