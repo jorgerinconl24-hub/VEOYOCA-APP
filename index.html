@@ -1091,7 +1091,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v70 · nuevo modulo Finanzas (solo admin)';
+var APP_VERSION='v71 · Finanzas + cuenta Terramoda';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -3611,7 +3611,7 @@ function invListaHTML(){
     items.forEach(function(it){
       var qy=invStockEn(it.id,f),est=invEstadoUb(it,qy,f);
       h+='<div class="card" style="margin-bottom:6px;padding:10px 12px">';
-      h+='<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">'+invThumb(it,46)+'<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700">'+esc(it.nombre)+(it.sku?' <span style="font-weight:400;color:#94a3b8;font-size:11px">'+esc(it.sku)+'</span>':'')+'</div>'+(it.categoria?'<div style="font-size:11px;color:#94a3b8">'+esc(it.categoria)+'</div>':'')+'</div><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+est.bg+';color:'+est.c+';flex-shrink:0">'+est.t+'</span></div>';
+      h+='<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">'+invThumb(it,46)+'<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700">'+esc(it.nombre)+(it.sku?' <span style="font-weight:400;color:#94a3b8;font-size:11px">'+esc(it.sku)+'</span>':'')+'</div>'+(it.categoria?'<div style="font-size:11px;color:#94a3b8">'+esc(it.categoria)+'</div>':'')+((it.proveedor||'').toUpperCase()==='TERRAMODA'?'<div style="font-size:10px;font-weight:700;color:#7c3aed;margin-top:2px">\uD83E\uDD1D TERRAMODA</div>':'')+'</div><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+est.bg+';color:'+est.c+';flex-shrink:0">'+est.t+'</span></div>';
       h+='<div style="margin-top:6px"><span style="font-size:20px;font-weight:800">'+invFmt(qy)+'</span> <span style="font-size:12px;color:#64748b">'+esc(it.um||'u')+' · aquí (total '+invFmt(invStockItem(it.id))+')</span></div>';
       h+='<div style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:#64748b">Reorden en esta ubicación: <input type="number" step="any" value="'+esc(invReordenUbOf(it,f)||'')+'" onchange="invItemReordenUb(\''+it.id+'\',\''+f+'\',this.value)" style="width:74px;padding:4px 6px;border:1px solid #e5e7eb;border-radius:6px;font-size:12px"></div>';
       h+='<div style="display:flex;gap:6px;margin-top:8px"><button class="btn btn-green btn-sm" onclick="invMovAbrir(\'ENTRADA\',\''+it.id+'\',\''+f+'\')">➕ Cargar</button><button class="btn btn-ghost btn-sm" onclick="invMovAbrir(\'SALIDA\',\''+it.id+'\',\''+f+'\')">➖ Descontar</button><button class="btn btn-ghost btn-sm" onclick="invMovAbrir(\'TRASLADO\',\''+it.id+'\',\''+f+'\')">🔀</button><button class="btn btn-ghost btn-sm" onclick="invItemAbrir(\''+it.id+'\')" style="margin-left:auto">✏️</button></div>';
@@ -3623,7 +3623,7 @@ function invListaHTML(){
     var total=invStockItem(it.id),est=invEstado(it,total),valor=total*invNum(it.costo),s=invStockRaw()[it.id]||{};
     var porUb=Object.keys(s).filter(function(k){return s[k];}).map(function(k){var u=invUbic(k);return (u?esc(u.nombre):'?')+': '+invFmt(s[k]);}).join(' · ');
     h+='<div class="card" style="margin-bottom:6px;padding:10px 12px">';
-    h+='<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">'+invThumb(it,46)+'<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700">'+esc(it.nombre)+(it.sku?' <span style="font-weight:400;color:#94a3b8;font-size:11px">'+esc(it.sku)+'</span>':'')+'</div>'+(it.categoria?'<div style="font-size:11px;color:#94a3b8">'+esc(it.categoria)+'</div>':'')+'</div><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+est.bg+';color:'+est.c+';flex-shrink:0">'+est.t+'</span></div>';
+    h+='<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">'+invThumb(it,46)+'<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700">'+esc(it.nombre)+(it.sku?' <span style="font-weight:400;color:#94a3b8;font-size:11px">'+esc(it.sku)+'</span>':'')+'</div>'+(it.categoria?'<div style="font-size:11px;color:#94a3b8">'+esc(it.categoria)+'</div>':'')+((it.proveedor||'').toUpperCase()==='TERRAMODA'?'<div style="font-size:10px;font-weight:700;color:#7c3aed;margin-top:2px">\uD83E\uDD1D TERRAMODA</div>':'')+'</div><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+est.bg+';color:'+est.c+';flex-shrink:0">'+est.t+'</span></div>';
     h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px"><div><span style="font-size:20px;font-weight:800">'+invFmt(total)+'</span> <span style="font-size:12px;color:#64748b">'+esc(it.um||'u')+'</span></div><div style="font-size:11px;color:#64748b;text-align:right">'+(invNum(it.reorden)?'reorden '+invFmt(it.reorden):'')+(invNum(it.costo)?' · $'+invFmt(valor):'')+'</div></div>';
     if(porUb)h+='<div style="font-size:11px;color:#64748b;margin-top:3px">📍 '+porUb+'</div>';
     h+='<div style="display:flex;gap:6px;margin-top:8px"><button class="btn btn-green btn-sm" onclick="invMovAbrir(\'ENTRADA\',\''+it.id+'\')">➕ Cargar</button><button class="btn btn-ghost btn-sm" onclick="invMovAbrir(\'SALIDA\',\''+it.id+'\')">➖ Descontar</button><button class="btn btn-ghost btn-sm" onclick="invMovAbrir(\'TRASLADO\',\''+it.id+'\')">🔀</button><button class="btn btn-ghost btn-sm" onclick="invItemAbrir(\''+it.id+'\')" style="margin-left:auto">✏️</button></div>';
@@ -3722,7 +3722,9 @@ function invItemAbrir(id){
   h+='<input type="hidden" id="iv-id" value="'+(it?esc(it.id):'')+'">';
   h+='<div class="sfield"><label>Nombre *</label><input type="text" id="iv-nombre" value="'+(it?esc(it.nombre):'')+'" placeholder="Ej: Viga rack light 2.00"></div>';
   h+='<div class="sfield-row"><div class="sfield"><label>SKU / código</label><input type="text" id="iv-sku" value="'+(it?esc(it.sku||''):'')+'" placeholder="opcional"></div><div class="sfield"><label>Unidad</label><input type="text" id="iv-um" value="'+(it?esc(it.um||''):'')+'" placeholder="u, m, kg, par..."></div></div>';
-  h+='<div class="sfield"><label>Categoría</label><input type="text" id="iv-cat" value="'+(it?esc(it.categoria||''):'')+'" placeholder="Ej: Vigas, Marcos, Tornillería"></div>';
+  h+='<div class="sfield-row"><div class="sfield"><label>Categoría</label><input type="text" id="iv-cat" value="'+(it?esc(it.categoria||''):'')+'" placeholder="Ej: Vigas, Marcos, Tornillería"></div>'
+    +'<div class="sfield"><label>Proveedor</label><input type="text" id="iv-prov" list="dl-prov" value="'+(it?esc(it.proveedor||''):'')+'" placeholder="Ej: TERRAMODA"><datalist id="dl-prov"><option>TERRAMODA</option><option>ORION</option><option>EL SOL</option><option>COLVEN</option><option>IMPORTADO</option><option>PROPIO</option></datalist></div></div>';
+  h+='<div style="font-size:11px;color:var(--muted);margin:-6px 0 12px">Marcar el proveedor como <b>TERRAMODA</b> hace que el producto aparezca en Finanzas → Terramoda.</div>';
   if(it)h+='<div class="sfield"><label>Foto del producto</label><div id="iv-foto-box" style="display:flex;gap:12px;align-items:center">'+invThumb(it,64)+'<div>'+invFotoBtn(it.id,it.foto?'Cambiar foto':'Tomar foto')+'</div></div></div>';
   else h+='<div style="font-size:11px;color:var(--muted);margin:-6px 0 12px">La foto se agrega después de guardar, o al contarlo en 📋 Conteo.</div>';
   h+='<div class="sfield-row"><div class="sfield"><label>Costo (USD)</label><input type="number" step="any" id="iv-costo" value="'+(it?esc(it.costo||''):'')+'"></div><div class="sfield"><label>Precio (USD)</label><input type="number" step="any" id="iv-precio" value="'+(it?esc(it.precio||''):'')+'"></div></div>';
@@ -3739,7 +3741,7 @@ function invItemAbrir(id){
 function invItemGuardar(){
   var id=document.getElementById('iv-id').value,nombre=(document.getElementById('iv-nombre').value||'').trim();
   if(!nombre){toast('El nombre es obligatorio','err');return;}
-  var o={nombre:nombre,sku:(document.getElementById('iv-sku').value||'').trim(),um:(document.getElementById('iv-um').value||'').trim()||'u',categoria:(document.getElementById('iv-cat').value||'').trim(),costo:invNum(document.getElementById('iv-costo').value),precio:invNum(document.getElementById('iv-precio').value),minimo:invNum(document.getElementById('iv-min').value),reorden:invNum(document.getElementById('iv-reorden').value)};
+  var o={nombre:nombre,sku:(document.getElementById('iv-sku').value||'').trim(),um:(document.getElementById('iv-um').value||'').trim()||'u',categoria:(document.getElementById('iv-cat').value||'').trim(),proveedor:(((document.getElementById('iv-prov')||{value:''}).value)||'').trim().toUpperCase(),costo:invNum(document.getElementById('iv-costo').value),precio:invNum(document.getElementById('iv-precio').value),minimo:invNum(document.getElementById('iv-min').value),reorden:invNum(document.getElementById('iv-reorden').value)};
   var inv=invDB();
   if(id){var it=invItem(id);if(it)Object.keys(o).forEach(function(k){it[k]=o[k];});}
   else{o.id=uid();o.creado=fecha();inv.items.push(o);
@@ -4244,7 +4246,7 @@ function finModal(html){var b=document.getElementById('modal-fin-body');if(b){b.
 function renderFinanzas(c){
   if(!SESSION||SESSION.rol!=='admin'){c.innerHTML='<div class="empty">Acceso denegado</div>';return;}
   finDB();
-  var modos=[['resumen','\uD83D\uDCCA Resumen'],['cobrar','\uD83D\uDCB5 Por cobrar'],['pagar','\uD83E\uDDFE Por pagar'],['gastos','\uD83D\uDCB8 Gastos'],['rentab','\uD83D\uDCC8 Rentabilidad']];
+  var modos=[['resumen','\uD83D\uDCCA Resumen'],['cobrar','\uD83D\uDCB5 Por cobrar'],['pagar','\uD83E\uDDFE Por pagar'],['gastos','\uD83D\uDCB8 Gastos'],['rentab','\uD83D\uDCC8 Rentabilidad'],['terra','\uD83E\uDD1D Terramoda']];
   var h='<div class="section-pad" style="padding-bottom:0"><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">'
     +modos.map(function(m){return '<button class="btn '+(FIN_MODO===m[0]?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:92px" onclick="finSetModo(\''+m[0]+'\')">'+m[1]+'</button>';}).join('')
     +'</div></div>';
@@ -4253,6 +4255,7 @@ function renderFinanzas(c){
   else if(FIN_MODO==='pagar')h+=finTabla('pagar');
   else if(FIN_MODO==='gastos')h+=finGastos();
   else if(FIN_MODO==='rentab')h+=finRentabilidad();
+  else if(FIN_MODO==='terra')h+=finTerramoda();
   h+='<div style="font-size:10px;color:#cbd5e1;text-align:center;padding:6px">'+APP_VERSION+'</div>';
   c.innerHTML=h;
 }
@@ -4273,6 +4276,8 @@ function finResumen(){
   h+=tarjeta(finCobradoMes(),'Cobrado este mes','#166534','abonos recibidos');
   h+=tarjeta(finPagadoMes(),'Pagado este mes','#b91c1c','abonos entregados');
   if(invVal)h+=tarjeta(invVal,'Valor del inventario','#0369a1','costo del stock');
+  var sT=(typeof terraSaldo==='function')?terraSaldo():0;
+  if(sT!==0)h+=tarjeta(sT,'Saldo Terramoda',sT>0?'#b91c1c':'#166534',sT>0?'se le debe':'a favor');
   h+='</div>';
 
   // Lo vencido primero: es lo que hay que atender hoy
@@ -4484,6 +4489,236 @@ function finCSV(){
   a.download='finanzas_'+fecha().replace(/\//g,'-')+'.csv';a.click();
 }
 // ═══════════════ FIN DE FINANZAS ═══════════════
+
+// ═══════════════════════════════════════════════════════════
+// RELACION TERRAMODA \u2014 VEOYOCA
+//
+// Terramoda es un proveedor con estado de cuenta propio, aparte de las
+// cuentas por pagar normales. Aqui se lleva:
+//   entregas : mueble que Terramoda suministro a VEOYOCA, con su costo
+//   abonos   : pagos de VEOYOCA a Terramoda
+//   saldo    : entregado - abonado (lo que VEOYOCA le debe)
+//
+// Los muebles pueden venir de dos formas:
+//   1. Marcados en el inventario con proveedor TERRAMODA (se traen de ahi)
+//   2. Directos a un pedido sin pasar por inventario (se cargan a mano)
+// ═══════════════════════════════════════════════════════════
+var TERRA_NOMBRE='TERRAMODA';
+
+function terraDB(){
+  var f=finDB();
+  if(!f.terramoda||typeof f.terramoda!=='object')f.terramoda={};
+  if(!Array.isArray(f.terramoda.entregas))f.terramoda.entregas=[];
+  if(!Array.isArray(f.terramoda.abonos))f.terramoda.abonos=[];
+  return f.terramoda;
+}
+function terraTotalEntregado(){return terraDB().entregas.reduce(function(s,e){return s+finNum(e.total);},0);}
+function terraTotalAbonado(){return terraDB().abonos.reduce(function(s,a){return s+finNum(a.monto);},0);}
+function terraSaldo(){return Math.round((terraTotalEntregado()-terraTotalAbonado())*100)/100;}
+function terraEsDeTerra(it){return ((it&&it.proveedor)||'').toString().trim().toUpperCase()===TERRA_NOMBRE;}
+function terraItemsInv(){return (typeof invDB==='function')?invDB().items.filter(terraEsDeTerra):[];}
+// Unidades de Terramoda que ya salieron del almacen (ventas/despachos)
+function terraSalidasInv(){
+  if(typeof invDB!=='function')return [];
+  var out=[];
+  invDB().movs.forEach(function(mv){
+    if(mv.tipo!=='SALIDA')return;
+    var it=invItem(mv.itemId);
+    if(it&&terraEsDeTerra(it))out.push({mv:mv,it:it});
+  });
+  return out.sort(function(a,b){return (b.mv.ts||0)-(a.mv.ts||0);});
+}
+
+function finTerramoda(){
+  var t=terraDB();
+  var entregado=terraTotalEntregado(), abonado=terraTotalAbonado(), saldo=terraSaldo();
+  var items=terraItemsInv(), salidas=terraSalidasInv();
+  var enStock=items.reduce(function(s,it){return s+((typeof invStockItem==='function')?invStockItem(it.id):0);},0);
+
+  var h='<div class="section-pad" style="padding-top:0">';
+  // Cabecera con el estado de cuenta
+  h+='<div style="background:linear-gradient(135deg,#0f172a,#334155);border-radius:12px;padding:16px;margin-bottom:12px;color:#fff">';
+  h+='<div style="font-size:15px;font-weight:700">\uD83E\uDD1D Terramoda \u2014 VeoYoca</div>';
+  h+='<div style="font-size:11px;opacity:.65;margin-top:2px">Estado de cuenta del proveedor</div>';
+  h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px">';
+  h+='<div><div style="font-size:10px;opacity:.6;text-transform:uppercase;letter-spacing:.05em">Suministrado</div><div style="font-size:18px;font-weight:800">$'+fmtMoney(entregado)+'</div></div>';
+  h+='<div><div style="font-size:10px;opacity:.6;text-transform:uppercase;letter-spacing:.05em">Abonado</div><div style="font-size:18px;font-weight:800;color:#86efac">$'+fmtMoney(abonado)+'</div></div>';
+  h+='<div><div style="font-size:10px;opacity:.6;text-transform:uppercase;letter-spacing:.05em">Saldo</div><div style="font-size:18px;font-weight:800;color:'+(saldo>0?'#fca5a5':'#86efac')+'">$'+fmtMoney(saldo)+'</div></div>';
+  h+='</div>';
+  h+='<div style="font-size:11px;opacity:.7;margin-top:10px">'+(saldo>0?('VeoYoca le debe $'+fmtMoney(saldo)+' a Terramoda'):(saldo<0?('Terramoda tiene $'+fmtMoney(-saldo)+' a favor de VeoYoca'):'Cuenta saldada \uD83D\uDC4F'))+'</div>';
+  h+='</div>';
+
+  h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'
+    +'<button class="btn btn-dark btn-sm" onclick="terraEntregaAbrir()">+ Mueble suministrado</button>'
+    +'<button class="btn btn-green btn-sm" onclick="terraAbonoAbrir()">\uD83D\uDCB0 Registrar abono</button>'
+    +'<button class="btn btn-ghost btn-sm" onclick="terraCSV()">\uD83D\uDCC4 CSV</button></div>';
+
+  // Lo que hay de Terramoda en inventario
+  if(items.length){
+    h+='<div class="card" style="padding:12px;margin-bottom:10px"><div style="font-size:13px;font-weight:700;margin-bottom:6px">\uD83D\uDCE6 En inventario, marcado Terramoda ('+items.length+' producto(s) \u00B7 '+invFmt(enStock)+' u en stock)</div>';
+    items.forEach(function(it){
+      var q=(typeof invStockItem==='function')?invStockItem(it.id):0;
+      h+='<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:4px 0;border-top:1px solid #f1f5f9"><span>'+esc(it.nombre)+(it.sku?' <span style="color:#94a3b8">'+esc(it.sku)+'</span>':'')+'</span>'
+        +'<span style="white-space:nowrap"><b>'+invFmt(q)+'</b> '+esc(it.um||'u')+(finNum(it.costo)?' \u00B7 $'+fmtMoney(it.costo)+' c/u':'')+'</span></div>';
+    });
+    h+='<div style="font-size:11px;color:var(--muted);margin-top:6px">Para marcar un producto como de Terramoda: pesta\u00F1a Inventario \u2192 abre el producto \u2192 campo <b>Proveedor</b>.</div></div>';
+  }else{
+    h+='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:10px 12px;font-size:12px;color:#92400e;margin-bottom:10px">A\u00FAn no hay productos marcados como Terramoda en el inventario. Ve a <b>Inventario \u2192 abre un producto \u2192 campo Proveedor</b> y escribe TERRAMODA.</div>';
+  }
+
+  // Salidas de inventario de productos Terramoda (para saber que se despacho)
+  if(salidas.length){
+    h+='<div class="card" style="padding:12px;margin-bottom:10px"><div style="font-size:13px;font-weight:700;margin-bottom:6px">\uD83D\uDE9A Salidas de productos Terramoda ('+salidas.length+')</div>';
+    salidas.slice(0,20).forEach(function(x){
+      h+='<div style="font-size:12px;padding:4px 0;border-top:1px solid #f1f5f9"><b>'+invFmt(x.mv.cant)+'</b> '+esc(x.it.nombre)+' \u00B7 '+esc(x.mv.fecha||'')+(x.mv.motivo?' \u2014 '+esc(x.mv.motivo):'')+'</div>';
+    });
+    if(salidas.length>20)h+='<div style="font-size:11px;color:var(--muted);margin-top:4px">\u2026y '+(salidas.length-20)+' m\u00E1s</div>';
+    h+='</div>';
+  }
+
+  // Muebles suministrados (el estado de cuenta propiamente)
+  h+='<div class="sec-label">Muebles suministrados ('+t.entregas.length+')</div>';
+  if(!t.entregas.length)h+='<div class="empty" style="padding:20px"><div class="empty-icon">\uD83E\uDE91</div>Nada registrado todav\u00EDa.</div>';
+  else{
+    t.entregas.slice().sort(function(a,b){return (b.ts||0)-(a.ts||0);}).forEach(function(e){
+      h+='<div class="card" style="margin-bottom:5px;padding:10px 12px"><div style="display:flex;justify-content:space-between;gap:8px"><div style="flex:1;min-width:0">'
+        +'<div style="font-size:13px;font-weight:700">'+esc(e.producto||'?')+'</div>'
+        +'<div style="font-size:11px;color:var(--muted)">'+invFmt(e.cant)+' \u00D7 $'+fmtMoney(e.costoUnit)+' \u00B7 '+esc(e.fecha||'')
+        +(e.pedidoNum?' \u00B7 pedido #'+esc(e.pedidoNum):'')+(e.desdeInv?' \u00B7 \uD83D\uDCE6 del inventario':'')+'</div>'
+        +(e.nota?'<div style="font-size:11px;color:var(--muted);margin-top:2px">\uD83D\uDCDD '+esc(e.nota)+'</div>':'')
+        +'</div><div style="font-size:16px;font-weight:800;flex-shrink:0">$'+fmtMoney(e.total)+'</div></div>'
+        +'<div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-ghost btn-sm" onclick="terraEntregaAbrir(\''+e.id+'\')">\u270F\uFE0F</button>'
+        +'<button class="btn btn-ghost btn-sm" style="color:#dc2626;margin-left:auto" onclick="terraBorrar(\'entregas\',\''+e.id+'\')">\uD83D\uDDD1</button></div></div>';
+    });
+  }
+
+  // Abonos de VeoYoca a Terramoda
+  h+='<div class="sec-label" style="margin-top:14px">Abonos de VeoYoca a Terramoda ('+t.abonos.length+')</div>';
+  if(!t.abonos.length)h+='<div class="empty" style="padding:20px"><div class="empty-icon">\uD83D\uDCB0</div>Sin abonos registrados.</div>';
+  else{
+    t.abonos.slice().sort(function(a,b){return (b.ts||0)-(a.ts||0);}).forEach(function(a){
+      h+='<div class="card" style="margin-bottom:5px;padding:10px 12px"><div style="display:flex;justify-content:space-between;gap:8px"><div style="flex:1;min-width:0">'
+        +'<div style="font-size:13px;font-weight:600">'+esc(a.fecha||'')+(a.metodo?' \u00B7 '+esc(a.metodo):'')+'</div>'
+        +(a.nota?'<div style="font-size:11px;color:var(--muted)">'+esc(a.nota)+'</div>':'')
+        +'</div><div style="font-size:16px;font-weight:800;color:#166534;flex-shrink:0">$'+fmtMoney(a.monto)+'</div></div>'
+        +'<div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-ghost btn-sm" onclick="terraAbonoAbrir(\''+a.id+'\')">\u270F\uFE0F</button>'
+        +'<button class="btn btn-ghost btn-sm" style="color:#dc2626;margin-left:auto" onclick="terraBorrar(\'abonos\',\''+a.id+'\')">\uD83D\uDDD1</button></div></div>';
+    });
+  }
+  return h+'</div>';
+}
+
+// ── Alta / edicion de mueble suministrado ───────────────────
+function terraEntregaAbrir(id){
+  var t=terraDB(), e=id?t.entregas.find(function(x){return x.id===id;}):null;
+  var items=terraItemsInv();
+  var h='<div class="sheet-head"><h2>'+(e?'Editar suministro':'Mueble suministrado por Terramoda')+'</h2><button class="sheet-close" onclick="cerrarModal(\'modal-fin\')">\u2715</button></div><div class="sheet-body">';
+  h+='<input type="hidden" id="te-id" value="'+(e?esc(e.id):'')+'">';
+  if(items.length&&!e){
+    h+='<div class="sfield"><label>Traer del inventario (opcional)</label><select id="te-inv" onchange="terraDesdeInv(this.value)"><option value="">\u2014 escribirlo a mano \u2014</option>'
+      +items.map(function(it){return '<option value="'+it.id+'">'+esc(it.nombre)+(finNum(it.costo)?' \u00B7 $'+fmtMoney(it.costo):'')+'</option>';}).join('')
+      +'</select><div style="font-size:11px;color:var(--muted);margin-top:3px">Rellena el nombre y el costo del producto marcado Terramoda.</div></div>';
+  }
+  h+='<div class="sfield"><label>Mueble / producto *</label><input type="text" id="te-prod" value="'+(e?esc(e.producto||''):'')+'" placeholder="Ej: Vitrina panor\u00E1mica 1.50"></div>';
+  h+='<div class="sfield-row"><div class="sfield"><label>Cantidad *</label><input type="number" step="any" id="te-cant" value="'+(e?esc(e.cant):'1')+'" oninput="terraCalc()"></div>'
+    +'<div class="sfield"><label>Costo unitario (USD) *</label><input type="number" step="0.01" id="te-costo" value="'+(e?esc(e.costoUnit):'')+'" oninput="terraCalc()" placeholder="0.00"></div></div>';
+  h+='<div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:12px"><span style="font-size:12px;color:var(--muted)">Total:</span> <span id="te-total" style="font-size:20px;font-weight:800">$0,00</span></div>';
+  h+='<div class="sfield-row"><div class="sfield"><label>Fecha</label><input type="date" id="te-fecha" value="'+(e?fechaInput(e.fecha):fechaInput(fecha()))+'"></div>'
+    +'<div class="sfield"><label>Pedido relacionado</label><select id="te-ped">'+finPedidoOpts(e?e.pedidoNum:'')+'</select></div></div>';
+  h+='<div class="sfield"><label>Nota</label><input type="text" id="te-nota" value="'+(e?esc(e.nota||''):'')+'" placeholder="Ej: sali\u00F3 directo a obra, no pas\u00F3 por almac\u00E9n"></div>';
+  h+='</div><div class="sheet-foot">'+(e?'<button class="btn btn-red" onclick="terraBorrar(\'entregas\',\''+e.id+'\')">Eliminar</button>':'')
+    +'<button class="btn btn-ghost" onclick="cerrarModal(\'modal-fin\')">Cancelar</button><button class="btn btn-blue" onclick="terraEntregaGuardar()">Guardar</button></div>';
+  finModal(h);
+  terraCalc();
+}
+function terraDesdeInv(itemId){
+  if(!itemId)return;
+  var it=invItem(itemId);if(!it)return;
+  var p=document.getElementById('te-prod'),c=document.getElementById('te-costo');
+  if(p)p.value=it.nombre||'';
+  if(c&&finNum(it.costo))c.value=finNum(it.costo);
+  terraCalc();
+}
+function terraCalc(){
+  var c=finNum((document.getElementById('te-cant')||{}).value);
+  var u=finNum((document.getElementById('te-costo')||{}).value);
+  var el=document.getElementById('te-total');
+  if(el)el.textContent='$'+fmtMoney(Math.round(c*u*100)/100);
+}
+function terraEntregaGuardar(){
+  var t=terraDB(), id=document.getElementById('te-id').value;
+  var producto=(document.getElementById('te-prod').value||'').trim();
+  var cant=finNum(document.getElementById('te-cant').value);
+  var costo=finNum(document.getElementById('te-costo').value);
+  if(!producto){toast('Indica el mueble','err');return;}
+  if(cant<=0){toast('La cantidad debe ser mayor a 0','err');return;}
+  if(costo<=0){toast('Indica el costo unitario','err');return;}
+  var invSel=(document.getElementById('te-inv')||{value:''}).value;
+  var o={producto:producto,cant:cant,costoUnit:costo,total:Math.round(cant*costo*100)/100,
+         fecha:inputFecha(document.getElementById('te-fecha').value)||fecha(),
+         pedidoNum:document.getElementById('te-ped').value||'',
+         nota:(document.getElementById('te-nota').value||'').trim(),
+         desdeInv:!!invSel};
+  if(id){var e=t.entregas.find(function(x){return x.id===id;});if(e)Object.keys(o).forEach(function(k){e[k]=o[k];});}
+  else{o.id=uid();o.ts=Date.now();o.creadoPor=SESSION.nombre;t.entregas.push(o);}
+  registrarBitacora('terra'+(id||o.id),'TERRAMODA suministro '+(id?'editado':'registrado')+': '+producto+' x'+cant+' = $'+o.total+' por '+SESSION.nombre);
+  guardarDB();cerrarModal('modal-fin');renderFinanzas(document.getElementById('content'));
+  toast('Registrado \u2014 saldo con Terramoda: $'+fmtMoney(terraSaldo()),'ok');
+}
+// ── Abonos a Terramoda ──────────────────────────────────────
+function terraAbonoAbrir(id){
+  var t=terraDB(), a=id?t.abonos.find(function(x){return x.id===id;}):null;
+  var saldo=terraSaldo();
+  var h='<div class="sheet-head"><h2>\uD83D\uDCB0 '+(a?'Editar abono':'Abono a Terramoda')+'</h2><button class="sheet-close" onclick="cerrarModal(\'modal-fin\')">\u2715</button></div><div class="sheet-body">';
+  if(!a)h+='<div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:12px"><div style="font-size:11px;color:var(--muted)">Saldo actual con Terramoda</div><div style="font-size:22px;font-weight:800;color:'+(saldo>0?'#b91c1c':'#166534')+'">$'+fmtMoney(saldo)+'</div></div>';
+  h+='<input type="hidden" id="ta-id" value="'+(a?esc(a.id):'')+'">';
+  h+='<div class="sfield-row"><div class="sfield"><label>Monto (USD) *</label><input type="number" step="0.01" id="ta-monto" value="'+(a?esc(a.monto):(saldo>0?saldo.toFixed(2):''))+'"></div>'
+    +'<div class="sfield"><label>Fecha</label><input type="date" id="ta-fecha" value="'+(a?fechaInput(a.fecha):fechaInput(fecha()))+'"></div></div>';
+  h+='<div class="sfield"><label>M\u00E9todo</label><input type="text" id="ta-metodo" value="'+(a?esc(a.metodo||''):'')+'" placeholder="Transferencia, efectivo, mueble en contraparte..."></div>';
+  h+='<div class="sfield"><label>Nota / referencia</label><input type="text" id="ta-nota" value="'+(a?esc(a.nota||''):'')+'" placeholder="Ej: transferencia Banesco ref 88213"></div>';
+  h+='</div><div class="sheet-foot">'+(a?'<button class="btn btn-red" onclick="terraBorrar(\'abonos\',\''+a.id+'\')">Eliminar</button>':'')
+    +'<button class="btn btn-ghost" onclick="cerrarModal(\'modal-fin\')">Cancelar</button><button class="btn btn-green" onclick="terraAbonoGuardar()">Registrar</button></div>';
+  finModal(h);
+}
+function terraAbonoGuardar(){
+  var t=terraDB(), id=document.getElementById('ta-id').value;
+  var m=finNum(document.getElementById('ta-monto').value);
+  if(m<=0){toast('El monto debe ser mayor a 0','err');return;}
+  var o={monto:m,fecha:inputFecha(document.getElementById('ta-fecha').value)||fecha(),
+         metodo:(document.getElementById('ta-metodo').value||'').trim(),
+         nota:(document.getElementById('ta-nota').value||'').trim()};
+  if(id){var a=t.abonos.find(function(x){return x.id===id;});if(a)Object.keys(o).forEach(function(k){a[k]=o[k];});}
+  else{o.id=uid();o.ts=Date.now();o.creadoPor=SESSION.nombre;t.abonos.push(o);}
+  registrarBitacora('terra'+(id||o.id),'TERRAMODA abono $'+m+' por '+SESSION.nombre);
+  guardarDB();cerrarModal('modal-fin');renderFinanzas(document.getElementById('content'));
+  toast('Abono registrado \u2014 saldo: $'+fmtMoney(terraSaldo()),'ok');
+}
+function terraBorrar(tipo,id){
+  var t=terraDB();
+  if(!confirm('\u00BFEliminar este registro de la cuenta con Terramoda?'))return;
+  t[tipo]=t[tipo].filter(function(x){return x.id!==id;});
+  registrarBitacora('terra'+id,'TERRAMODA registro eliminado ['+tipo+'] por '+SESSION.nombre);
+  guardarDB();cerrarModal('modal-fin');renderFinanzas(document.getElementById('content'));toast('Eliminado','warn');
+}
+function terraCSV(){
+  var t=terraDB();
+  var rows=[['Tipo','Detalle','Cantidad','Costo unit','Total','Fecha','Pedido','Nota']];
+  t.entregas.slice().sort(function(a,b){return (a.ts||0)-(b.ts||0);}).forEach(function(e){
+    rows.push(['SUMINISTRO',e.producto||'',e.cant,e.costoUnit,e.total,e.fecha||'',e.pedidoNum||'',e.nota||'']);
+  });
+  t.abonos.slice().sort(function(a,b){return (a.ts||0)-(b.ts||0);}).forEach(function(a){
+    rows.push(['ABONO',a.metodo||'','','',-finNum(a.monto),a.fecha||'','',a.nota||'']);
+  });
+  rows.push([]);
+  rows.push(['','','','TOTAL SUMINISTRADO',terraTotalEntregado(),'','','']);
+  rows.push(['','','','TOTAL ABONADO',terraTotalAbonado(),'','','']);
+  rows.push(['','','','SALDO',terraSaldo(),'','','']);
+  var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c==null?'':c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
+  var a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
+  a.download='terramoda_veoyoca_'+fecha().replace(/\//g,'-')+'.csv';a.click();
+}
+// ═══════════════ FIN DE TERRAMODA ═══════════════
 
 function renderPlanIA(c){var pends=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO';});var apikey=localStorage.getItem('veo_apikey')||'';c.innerHTML='<div class="stats-bar"><div class="stat"><div class="stat-v">'+pends.length+'</div><div class="stat-l">pendientes</div></div><div class="stat"><div class="stat-v" style="color:#fca5a5">'+pends.filter(function(p){return clasif(p)==='vencido';}).length+'</div><div class="stat-l">vencidos</div></div><div class="stat"><div class="stat-v" style="color:#fcd34d">'+pends.filter(function(p){return clasif(p)==='urgente';}).length+'</div><div class="stat-l">urgentes</div></div><div class="stat"><div class="stat-v">'+ [...new Set(pends.map(function(p){return p.ciudad||'?';}))].length+'</div><div class="stat-l">ciudades</div></div></div><div style="padding:14px">'+(!apikey?'<div style="background:#fff;border:2px solid #f59e0b;border-radius:12px;padding:16px;margin-bottom:14px"><div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px">CONFIGURAR API KEY</div><input type="password" id="ia-keyinput" placeholder="sk-ant-api03-..." style="width:100%;padding:10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;margin-bottom:8px"><button class="btn btn-dark" style="width:100%" onclick="guardarAPIKey()">Guardar clave</button></div>':'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:12px;color:#16a34a;font-weight:600">API Key configurada</div><button onclick="cambiarAPIKey()" style="background:none;border:none;font-size:11px;color:#6b7280;cursor:pointer;text-decoration:underline">Cambiar</button></div>')+'<div style="background:linear-gradient(135deg,#1a1a2e,#2d2d5e);border-radius:14px;padding:20px;margin-bottom:14px;text-align:center"><div style="font-size:28px;margin-bottom:8px">IA</div><div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:4px">Plan de Entregas con IA</div><div style="color:rgba(255,255,255,.6);font-size:12px;margin-bottom:16px">Claude analiza tus '+pends.length+' pedidos y arma el plan optimo</div><button class="btn btn-green" style="width:100%;padding:13px;font-size:15px;font-weight:700" onclick="generarPlanIA()" id="btn-ia"'+(!apikey?' disabled':'')+'>'+(apikey?'Generar plan inteligente':'Configura tu API Key primero')+'</button></div><div id="ia-resultado"></div></div>';}
 function guardarAPIKey(){var k=(document.getElementById('ia-keyinput')||{}).value||'';if(!k||!k.startsWith('sk-ant')){toast('Clave invalida','err');return;}localStorage.setItem('veo_apikey',k);toast('Clave guardada','ok');renderPlanIA(document.getElementById('content'));}
