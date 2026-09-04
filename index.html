@@ -1091,7 +1091,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v71 · Finanzas + cuenta Terramoda';
+var APP_VERSION='v72 · gastos fijos con alerta antes del vencimiento';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -4288,6 +4288,14 @@ function finResumen(){
     vencP.forEach(function(r){h+='<div style="font-size:12px;color:#7f1d1d;margin-top:3px">\uD83E\uDDFE <b>'+esc(r.proveedor||'?')+'</b>'+(r.pedidoNum?' \u00B7 #'+esc(r.pedidoNum):'')+' \u2014 le debemos $'+fmtMoney(finSaldo(r))+' (venci\u00F3 '+esc(r.vence)+')</div>';});
     h+='</div>';
   }
+  var fjP=(typeof finFijosPendientes==='function')?finFijosPendientes().filter(function(f){var d=diasRestantes(finFijoVence(f));return d!==null&&d<=(parseInt(f.avisoDias,10)||3);}):[];
+  if(fjP.length){
+    h+='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px;margin-bottom:12px">';
+    h+='<div style="font-size:13px;font-weight:700;color:#92400e;margin-bottom:6px">\uD83D\uDCC6 Gastos fijos por pagar ('+fjP.length+')</div>';
+    fjP.forEach(function(f){var d=diasRestantes(finFijoVence(f));
+      h+='<div style="font-size:12px;color:#78350f;margin-top:3px"><b>'+esc(f.desc)+'</b> \u2014 $'+fmtMoney(f.monto)+' \u00B7 '+(d<0?('vencido '+Math.abs(d)+'d'):d===0?'vence HOY':('en '+d+' d\u00EDa(s)'))+'</div>';});
+    h+='<button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="finSetModo(\'gastos\')">Ver gastos fijos</button></div>';
+  }
   h+='<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-green btn-sm" onclick="finAbrir(\'cobrar\')">+ Por cobrar</button><button class="btn btn-dark btn-sm" onclick="finAbrir(\'pagar\')">+ Por pagar</button><button class="btn btn-ghost btn-sm" onclick="finAbrir(\'gastos\')">+ Gasto</button><button class="btn btn-ghost btn-sm" onclick="finCSV()">\uD83D\uDCC4 CSV</button></div>';
   return h+'</div>';
 }
@@ -4343,6 +4351,7 @@ function finGastos(){
     cats.forEach(function(k){h+='<div class="bar-row"><div class="bar-label">'+esc(k)+'</div><div class="bar-track"><div class="bar-fill" style="width:'+Math.round(porCat[k]/max*100)+'%;background:#7c3aed"></div></div><div class="bar-val">$'+fmtMoney(porCat[k])+'</div></div>';});
     h+='</div>';
   }
+  h+=finFijosHTML();
   h+='<div style="display:flex;gap:6px;margin-bottom:8px"><button class="btn btn-dark btn-sm" onclick="finAbrir(\'gastos\')">+ Registrar gasto</button></div>';
   h+='<input type="text" placeholder="Buscar gasto..." value="'+esc(FIN_BUSCA)+'" oninput="FIN_BUSCA=this.value;renderFinanzas(document.getElementById(\'content\'))" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;margin-bottom:8px">';
   if(!arr.length){h+='<div class="empty"><div class="empty-icon">\uD83D\uDCB8</div>Sin gastos registrados.</div></div>';return h;}
@@ -4719,6 +4728,136 @@ function terraCSV(){
   a.download='terramoda_veoyoca_'+fecha().replace(/\//g,'-')+'.csv';a.click();
 }
 // ═══════════════ FIN DE TERRAMODA ═══════════════
+
+// ═══════════════════════════════════════════════════════════
+// GASTOS FIJOS (compromisos recurrentes)
+//
+// Alquiler, nomina, servicios, cuotas: cosas que se pagan todos los
+// meses el mismo dia. Se registran una vez y el servidor avisa cuando
+// se acerca la fecha, para que no se pase por olvido.
+//
+//   {id, desc, categoria, monto, dia, avisoDias, activo,
+//    ultimoPago:'MM/YYYY', nota}
+//
+// 'ultimoPago' guarda el mes que ya se pago. Mientras coincida con el
+// mes en curso, el compromiso esta cubierto y no se avisa.
+// ═══════════════════════════════════════════════════════════
+function finFijos(){
+  var f=finDB();
+  if(!Array.isArray(f.fijos))f.fijos=[];
+  return f.fijos;
+}
+function finFijo(id){return finFijos().find(function(x){return x.id===id;});}
+function finMesClave(d){d=d||new Date();return ('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear();}
+// Fecha de vencimiento de este mes, ajustando si el dia no existe (31 en febrero)
+function finFijoVence(fj){
+  var hoy=new Date(), ult=new Date(hoy.getFullYear(),hoy.getMonth()+1,0).getDate();
+  var dia=Math.min(Math.max(parseInt(fj.dia,10)||1,1),ult);
+  return ('0'+dia).slice(-2)+'/'+('0'+(hoy.getMonth()+1)).slice(-2)+'/'+hoy.getFullYear();
+}
+function finFijoPagado(fj){return (fj.ultimoPago||'')===finMesClave();}
+function finFijoEstado(fj){
+  if(!fj.activo)return {t:'PAUSADO',c:'#64748b',b:'#f1f5f9'};
+  if(finFijoPagado(fj))return {t:'PAGADO ESTE MES',c:'#166534',b:'#dcfce7'};
+  var d=diasRestantes(finFijoVence(fj));
+  if(d===null)return {t:'sin fecha',c:'#64748b',b:'#f1f5f9'};
+  if(d<0)return {t:'VENCIDO '+Math.abs(d)+'d',c:'#b91c1c',b:'#fee2e2'};
+  if(d===0)return {t:'VENCE HOY',c:'#b91c1c',b:'#fee2e2'};
+  if(d<=(parseInt(fj.avisoDias,10)||3))return {t:'en '+d+'d',c:'#d97706',b:'#fef3c7'};
+  return {t:'en '+d+'d',c:'#64748b',b:'#f1f5f9'};
+}
+function finFijosTotal(){return finFijos().reduce(function(s,f){return f.activo?s+finNum(f.monto):s;},0);}
+function finFijosPendientes(){return finFijos().filter(function(f){return f.activo&&!finFijoPagado(f);});}
+
+function finFijosHTML(){
+  var arr=finFijos().slice().sort(function(a,b){
+    var pa=finFijoPagado(a)?1:0, pb=finFijoPagado(b)?1:0;
+    if(pa!==pb)return pa-pb;
+    var da=diasRestantes(finFijoVence(a)), db=diasRestantes(finFijoVence(b));
+    return (da===null?99:da)-(db===null?99:db);
+  });
+  var pend=finFijosPendientes(), pendMonto=pend.reduce(function(s,f){return s+finNum(f.monto);},0);
+  var h='<div class="card" style="padding:12px;margin-bottom:10px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px">'
+    +'<div><div style="font-size:13px;font-weight:700">\uD83D\uDCC6 Gastos fijos del mes</div>'
+    +'<div style="font-size:11px;color:var(--muted)">Compromiso mensual: $'+fmtMoney(finFijosTotal())+(pend.length?(' \u00B7 <b style="color:#b91c1c">falta pagar $'+fmtMoney(pendMonto)+'</b>'):' \u00B7 todo pagado \uD83D\uDC4F')+'</div></div>'
+    +'<button class="btn btn-dark btn-sm" style="flex-shrink:0" onclick="finFijoAbrir()">+ Fijo</button></div>';
+  if(!arr.length){
+    h+='<div style="font-size:12px;color:var(--muted);padding:6px 0">Sin gastos fijos. Agrega alquiler, n\u00F3mina, servicios o cuotas y el sistema te avisa antes de que venzan.</div>';
+    return h+'</div>';
+  }
+  arr.forEach(function(fj){
+    var e=finFijoEstado(fj), pagado=finFijoPagado(fj);
+    h+='<div style="border-top:1px solid #f1f5f9;padding:8px 0'+(fj.activo?'':';opacity:.5')+'">';
+    h+='<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">'
+      +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+esc(fj.desc||'?')+'</div>'
+      +'<div style="font-size:11px;color:var(--muted)">'+esc(fj.categoria||'Otros')+' \u00B7 cada d\u00EDa '+esc(fj.dia)+' \u00B7 avisa '+esc(fj.avisoDias||3)+'d antes'+(fj.nota?' \u00B7 '+esc(fj.nota):'')+'</div></div>'
+      +'<div style="text-align:right;flex-shrink:0"><div style="font-size:15px;font-weight:800">$'+fmtMoney(fj.monto)+'</div>'
+      +'<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:999px;background:'+e.b+';color:'+e.c+'">'+e.t+'</span></div></div>';
+    h+='<div style="display:flex;gap:6px;margin-top:6px">'
+      +(pagado||!fj.activo?'':'<button class="btn btn-green btn-sm" onclick="finFijoPagar(\''+fj.id+'\')">\u2713 Marcar pagado</button>')
+      +'<button class="btn btn-ghost btn-sm" onclick="finFijoAbrir(\''+fj.id+'\')">\u270F\uFE0F</button>'
+      +'<button class="btn btn-ghost btn-sm" onclick="finFijoPausar(\''+fj.id+'\')">'+(fj.activo?'\u23F8 Pausar':'\u25B6 Activar')+'</button>'
+      +'<button class="btn btn-ghost btn-sm" style="color:#dc2626;margin-left:auto" onclick="finFijoBorrar(\''+fj.id+'\')">\uD83D\uDDD1</button></div>';
+    h+='</div>';
+  });
+  return h+'</div>';
+}
+function finFijoAbrir(id){
+  var fj=id?finFijo(id):null;
+  var h='<div class="sheet-head"><h2>'+(fj?'Editar gasto fijo':'Nuevo gasto fijo')+'</h2><button class="sheet-close" onclick="cerrarModal(\'modal-fin\')">\u2715</button></div><div class="sheet-body">';
+  h+='<input type="hidden" id="ff-id" value="'+(fj?esc(fj.id):'')+'">';
+  h+='<div class="sfield"><label>Concepto *</label><input type="text" id="ff-desc" value="'+(fj?esc(fj.desc||''):'')+'" placeholder="Ej: Alquiler del galp\u00F3n, n\u00F3mina quincena"></div>';
+  h+='<div class="sfield-row"><div class="sfield"><label>Monto (USD) *</label><input type="number" step="0.01" id="ff-monto" value="'+(fj?esc(fj.monto||''):'')+'"></div>'
+    +'<div class="sfield"><label>Categor\u00EDa</label><select id="ff-cat">'+GASTO_CATS.map(function(k){return '<option'+(fj&&fj.categoria===k?' selected':'')+'>'+k+'</option>';}).join('')+'</select></div></div>';
+  h+='<div class="sfield-row"><div class="sfield"><label>D\u00EDa del mes *</label><input type="number" min="1" max="31" id="ff-dia" value="'+(fj?esc(fj.dia):'1')+'"></div>'
+    +'<div class="sfield"><label>Avisar con</label><select id="ff-aviso">'+[1,2,3,5,7,10].map(function(d){return '<option value="'+d+'"'+((fj?fj.avisoDias:3)==d?' selected':'')+'>'+d+' d\u00EDa(s) antes</option>';}).join('')+'</select></div></div>';
+  h+='<div class="sfield"><label>Nota</label><input type="text" id="ff-nota" value="'+(fj?esc(fj.nota||''):'')+'" placeholder="Ej: transferencia a cuenta del due\u00F1o"></div>';
+  h+='<div style="background:var(--ibg);border:1px solid #bfdbfe;border-radius:8px;padding:9px 11px;font-size:11px;color:var(--info)">Cuando falten los d\u00EDas indicados, el servidor avisa por WhatsApp a los administradores y al grupo. Al marcarlo pagado, deja de avisar hasta el mes siguiente.</div>';
+  h+='</div><div class="sheet-foot">'+(fj?'<button class="btn btn-red" onclick="finFijoBorrar(\''+fj.id+'\')">Eliminar</button>':'')
+    +'<button class="btn btn-ghost" onclick="cerrarModal(\'modal-fin\')">Cancelar</button><button class="btn btn-blue" onclick="finFijoGuardar()">Guardar</button></div>';
+  finModal(h);
+}
+function finFijoGuardar(){
+  var id=document.getElementById('ff-id').value;
+  var desc=(document.getElementById('ff-desc').value||'').trim();
+  var monto=finNum(document.getElementById('ff-monto').value);
+  var dia=parseInt(document.getElementById('ff-dia').value,10)||1;
+  if(!desc){toast('Escribe el concepto','err');return;}
+  if(monto<=0){toast('El monto debe ser mayor a 0','err');return;}
+  if(dia<1||dia>31){toast('El d\u00EDa debe estar entre 1 y 31','err');return;}
+  var o={desc:desc,monto:monto,dia:dia,categoria:document.getElementById('ff-cat').value,
+         avisoDias:parseInt(document.getElementById('ff-aviso').value,10)||3,
+         nota:(document.getElementById('ff-nota').value||'').trim()};
+  if(id){var fj=finFijo(id);if(fj)Object.keys(o).forEach(function(k){fj[k]=o[k];});}
+  else{o.id=uid();o.ts=Date.now();o.activo=true;o.ultimoPago='';o.creadoPor=SESSION.nombre;finFijos().push(o);}
+  registrarBitacora('fijo'+(id||o.id),'GASTO FIJO '+(id?'editado':'creado')+': '+desc+' $'+monto+' por '+SESSION.nombre);
+  guardarDB();cerrarModal('modal-fin');renderFinanzas(document.getElementById('content'));toast('Guardado \u2713','ok');
+}
+// Marcar pagado: crea el gasto real del mes y bloquea el aviso hasta el mes que viene
+function finFijoPagar(id){
+  var fj=finFijo(id);if(!fj)return;
+  if(!confirm('\u00BFMarcar "'+fj.desc+'" como pagado este mes?\n\nSe registra un gasto de $'+fmtMoney(fj.monto)+' y deja de avisar hasta el mes que viene.'))return;
+  finLista('gastos').push({id:uid(),ts:Date.now(),desc:fj.desc+' (fijo)',categoria:fj.categoria||'Otros',
+    monto:finNum(fj.monto),fecha:fecha(),pedidoNum:'',metodo:fj.nota||'',fijoId:fj.id,creadoPor:SESSION.nombre});
+  fj.ultimoPago=finMesClave();
+  fj.pagos=(fj.pagos||[]).concat([{mes:finMesClave(),fecha:fecha(),monto:finNum(fj.monto),por:SESSION.nombre}]);
+  registrarBitacora('fijo'+id,'GASTO FIJO pagado: '+fj.desc+' $'+fj.monto+' por '+SESSION.nombre);
+  guardarDB();renderFinanzas(document.getElementById('content'));toast('Pagado y registrado en gastos \u2713','ok');
+}
+function finFijoPausar(id){
+  var fj=finFijo(id);if(!fj)return;
+  fj.activo=!fj.activo;
+  guardarDB();renderFinanzas(document.getElementById('content'));
+  toast(fj.activo?'Reactivado':'Pausado \u2014 deja de avisar','ok');
+}
+function finFijoBorrar(id){
+  var fj=finFijo(id);if(!fj)return;
+  if(!confirm('\u00BFEliminar el gasto fijo "'+fj.desc+'"?\n\nLos gastos ya registrados se conservan.'))return;
+  DB.fin.fijos=finFijos().filter(function(x){return x.id!==id;});
+  registrarBitacora('fijo'+id,'GASTO FIJO eliminado: '+fj.desc+' por '+SESSION.nombre);
+  guardarDB();cerrarModal('modal-fin');renderFinanzas(document.getElementById('content'));toast('Eliminado','warn');
+}
 
 function renderPlanIA(c){var pends=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO';});var apikey=localStorage.getItem('veo_apikey')||'';c.innerHTML='<div class="stats-bar"><div class="stat"><div class="stat-v">'+pends.length+'</div><div class="stat-l">pendientes</div></div><div class="stat"><div class="stat-v" style="color:#fca5a5">'+pends.filter(function(p){return clasif(p)==='vencido';}).length+'</div><div class="stat-l">vencidos</div></div><div class="stat"><div class="stat-v" style="color:#fcd34d">'+pends.filter(function(p){return clasif(p)==='urgente';}).length+'</div><div class="stat-l">urgentes</div></div><div class="stat"><div class="stat-v">'+ [...new Set(pends.map(function(p){return p.ciudad||'?';}))].length+'</div><div class="stat-l">ciudades</div></div></div><div style="padding:14px">'+(!apikey?'<div style="background:#fff;border:2px solid #f59e0b;border-radius:12px;padding:16px;margin-bottom:14px"><div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px">CONFIGURAR API KEY</div><input type="password" id="ia-keyinput" placeholder="sk-ant-api03-..." style="width:100%;padding:10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;margin-bottom:8px"><button class="btn btn-dark" style="width:100%" onclick="guardarAPIKey()">Guardar clave</button></div>':'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:12px;color:#16a34a;font-weight:600">API Key configurada</div><button onclick="cambiarAPIKey()" style="background:none;border:none;font-size:11px;color:#6b7280;cursor:pointer;text-decoration:underline">Cambiar</button></div>')+'<div style="background:linear-gradient(135deg,#1a1a2e,#2d2d5e);border-radius:14px;padding:20px;margin-bottom:14px;text-align:center"><div style="font-size:28px;margin-bottom:8px">IA</div><div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:4px">Plan de Entregas con IA</div><div style="color:rgba(255,255,255,.6);font-size:12px;margin-bottom:16px">Claude analiza tus '+pends.length+' pedidos y arma el plan optimo</div><button class="btn btn-green" style="width:100%;padding:13px;font-size:15px;font-weight:700" onclick="generarPlanIA()" id="btn-ia"'+(!apikey?' disabled':'')+'>'+(apikey?'Generar plan inteligente':'Configura tu API Key primero')+'</button></div><div id="ia-resultado"></div></div>';}
 function guardarAPIKey(){var k=(document.getElementById('ia-keyinput')||{}).value||'';if(!k||!k.startsWith('sk-ant')){toast('Clave invalida','err');return;}localStorage.setItem('veo_apikey',k);toast('Clave guardada','ok');renderPlanIA(document.getElementById('content'));}
