@@ -190,7 +190,6 @@ table.crm{border-collapse:collapse;font-size:12px;min-width:1780px}
 <div class="content" id="content"></div>
 <div class="navbar">
 <button class="nav-btn on" onclick="goTab('home',this)" id="nb-home"><div class="nav-icon">&#x1F4CB;</div><div>Pedidos</div></button>
-<button class="nav-btn" onclick="goTab('entregar',this)" id="nb-entregar"><div class="nav-icon">&#x1F69A;</div><div>Despacho</div></button>
 <button class="nav-btn" onclick="goTab('nuevo',this)" id="nb-nuevo"><div class="nav-icon">&#x2795;</div><div>Nuevo</div></button>
 <button class="nav-btn" onclick="goTab('reportes',this)" id="nb-reportes"><div class="nav-icon">&#x1F4CA;</div><div>Reportes</div></button>
 <button class="nav-btn" onclick="goTab('ia',this)" id="nb-ia"><div class="nav-icon">&#x1F916;</div><div>IA</div></button>
@@ -1089,7 +1088,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v68 · fix: inventario ya no se borra por base vacia al arrancar';
+var APP_VERSION='v69 · sin pestana Despacho';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1515,11 +1514,11 @@ function cotUIstats(){
 
 function goTab(tab,btn){
   TAB=tab;document.querySelectorAll('.nav-btn').forEach(function(b){b.classList.remove('on');});if(btn)btn.classList.add('on');
-  var titulos={home:'Pedidos',entregar:'Despacho',nuevo:'Nuevo pedido',reportes:'Reportes',admin:'Administracion',plan:'Planificación',ia:'Plan IA',notif:'Alertas y Notificaciones',ventas:'Ventas / CRM',cotizar:'Cotizador de Racks',inventario:'Inventario'};
+  var titulos={home:'Pedidos',nuevo:'Nuevo pedido',reportes:'Reportes',admin:'Administracion',plan:'Planificación',ia:'Plan IA',notif:'Alertas y Notificaciones',ventas:'Ventas / CRM',cotizar:'Cotizador de Racks',inventario:'Inventario'};
   document.getElementById('topbar-sub').textContent=titulos[tab]||SESSION.nombre;
   var c=document.getElementById('content');
   c.onclick=function(e){var ed=e.target.getAttribute('data-edit');var en=e.target.getAttribute('data-entregar');var or=e.target.getAttribute('data-ordenes');var ins=e.target.getAttribute('data-instalacion');var tr=e.target.getAttribute('data-transporte');var me=e.target.getAttribute('data-marcar-entregado');var hi=e.target.getAttribute('data-historial');if(ed)abrirEditar(ed);if(en)marcarEntregado(en);if(or)abrirOrdenes(or);if(ins)abrirInstalacion(ins);if(tr)transporteToggle(tr);if(me)entregarDesdeTarjeta(me);if(hi)abrirHistorial(hi);if(!ed&&!en&&!or&&!ins&&!tr&&!me&&!hi&&e.target.closest){var pv=e.target.closest('[data-prov-toggle]');if(pv)toggleProv(pv.getAttribute('data-prov-toggle'));}};
-  if(tab==='home')renderHome(c);else if(tab==='entregar')renderEntregar(c);else if(tab==='nuevo')renderNuevo(c);
+  if(tab==='home')renderHome(c);else if(tab==='nuevo')renderNuevo(c);
   else if(tab==='reportes')renderReportes(c);else if(tab==='admin')renderAdmin(c);
   else if(tab==='plan')renderPlanificacion(c);else if(tab==='ia')renderPlanIA(c);else if(tab==='notif')renderNotificaciones(c);else if(tab==='ventas')renderVentas(c);
   else if(tab==='cotizar')renderCotizar(c);
@@ -1717,17 +1716,8 @@ function cardHTML(p,conEntregar){
   h+='</div></div>';return h;
 }
 
-function renderEntregar(c){
-  var listos=DB.pedidos.filter(function(p){return p.estatus==='LISTO';});
-  var urgentes=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO'&&clasif(p)==='urgente';});
-  var vencidos=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO'&&clasif(p)==='vencido';});
-  var html='<div class="section-pad">';
-  if(!listos.length&&!urgentes.length&&!vencidos.length){html+='<div class="empty"><div class="empty-icon">OK</div>No hay pedidos urgentes ni listos</div>';}
-  else{if(listos.length){html+='<div class="sec-label">Listos ('+listos.length+')</div>';listos.forEach(function(p){html+=cardHTML(p,true);});}
-  var un=urgentes.filter(function(p){return p.estatus!=='LISTO';});if(un.length){html+='<div class="sec-label">Urgentes</div>';un.forEach(function(p){html+=cardHTML(p,true);});}
-  var vn=vencidos.filter(function(p){return p.estatus!=='LISTO'&&clasif(p)!=='urgente';});if(vn.length){html+='<div class="sec-label">Vencidos</div>';vn.forEach(function(p){html+=cardHTML(p,true);});}}
-  c.innerHTML=html+'</div>';
-}
+// La pestana Despacho se retiro: no se usaba y su boton de entrega no
+// respetaba el permiso. Entregar ahora se hace desde la tarjeta en Pedidos.
 // Entrega desde el boton de la tarjeta (pestana Pedidos).
 async function entregarDesdeTarjeta(id){
   if(!puedeEntregar()){toast('Solo un administrador o majul pueden marcar un pedido como entregado','err');return;}
@@ -4673,7 +4663,14 @@ function verificarClienteURL(){
   }catch(e){console.log('verificarClienteURL',e);}
 }
 
-function verificarGoto(){var goto=localStorage.getItem('veo_goto');if(goto&&SESSION){localStorage.removeItem('veo_goto');setTimeout(function(){goTab(goto,document.getElementById('nb-'+goto));},300);}}
+function verificarGoto(){
+  var goto=localStorage.getItem('veo_goto');
+  if(goto&&SESSION){
+    localStorage.removeItem('veo_goto');
+    if(goto==='entregar')goto='home';   // la pestana Despacho ya no existe
+    setTimeout(function(){var nb=document.getElementById('nb-'+goto);if(nb)goTab(goto,nb);},300);
+  }
+}
 
 // Tocar el fondo oscuro cierra el panel abierto
 document.querySelectorAll('.overlay').forEach(function(ov){
