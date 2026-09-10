@@ -1091,7 +1091,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v74 · cobro con IVA, margen sobre base imponible';
+var APP_VERSION='v75 · nota de entrega por pedido + ENTREGADA';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1893,7 +1893,7 @@ function renderOrdenesBody(){
     if(Array.isArray(o.notasEntrega)&&o.notasEntrega.length){
       var nl=o.notasEntrega.map(function(nx){var t='#'+esc(nx.numeroControl||'?')+(nx.veoEntregada?' \u2705':'')+(nx.fecha?' ('+esc(nx.fecha)+')':'');return nx.pdfUrl?'<a href="'+esc(nx.pdfUrl)+'" target="_blank" style="color:var(--info)">'+t+'</a>':t;}).join(' \u00b7 ');
       var algunaVeo=o.notasEntrega.some(function(nx){return nx.veoEntregada;});
-      h+='<div style="margin-top:6px;font-size:12px;font-weight:600;color:'+(algunaVeo?'var(--success)':'var(--muted)')+'">\ud83d\udcc4 Notas de entrega ('+o.notasEntrega.length+'): '+nl+(algunaVeo?' \u00b7 VEO ENTREGADA \u2714':' \u00b7 falta "VEO ENTREGADA"')+'</div>';
+      h+='<div style="margin-top:6px;font-size:12px;font-weight:600;color:'+(algunaVeo?'var(--success)':'var(--muted)')+'">\ud83d\udcc4 Notas de entrega ('+o.notasEntrega.length+'): '+nl+(algunaVeo?' \u00b7 ENTREGADA \u2714':' \u00b7 falta "ENTREGADA"')+'</div>';
     }
     h+='<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">';
     if(!recib&&o.estado!=='ENTREGADA')h+='<button class="btn btn-green btn-sm" onclick="ordRecibida('+i+')">\u2713 Recibida en almac\u00e9n</button>';
