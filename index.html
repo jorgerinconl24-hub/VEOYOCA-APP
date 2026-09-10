@@ -262,6 +262,10 @@ table.crm{border-collapse:collapse;font-size:12px;min-width:1780px}
 <div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal('modal-entrega-ped')">Cancelar</button><button class="btn btn-blue" onclick="entregaPedManualGuardar()">Agregar a entrega</button></div></div></div>
 <div class="overlay" id="modal-fin"><div class="sheet"><div class="sheet-handle"></div><div id="modal-fin-body"></div></div></div>
 <div class="overlay" id="modal-inv"><div class="sheet"><div class="sheet-handle"></div><div id="modal-inv-body"></div></div></div>
+<div class="overlay" id="modal-pend"><div class="sheet"><div class="sheet-handle"></div>
+<div class="sheet-head"><h2>&#x23F3; &#xD3;rdenes a la espera de pedido</h2><button class="sheet-close" onclick="cerrarModal('modal-pend')">&#x2715;</button></div>
+<div class="sheet-body" id="pend-body"></div>
+<div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal('modal-pend')">Cerrar</button></div></div></div>
 <div class="overlay" id="modal-ordenes"><div class="sheet"><div class="sheet-handle"></div>
 <div class="sheet-head"><h2 id="ord-titulo">&#xD3;rdenes del pedido</h2><button class="sheet-close" onclick="cerrarModal('modal-ordenes')">&#x2715;</button></div>
 <div class="sheet-body" id="ordenes-body"></div>
@@ -339,7 +343,7 @@ function enviarPushOneSignal(titulo, cuerpo) {
 // ═══════════════════════════════════════════════════════════
 // VARIABLES GLOBALES
 // ═══════════════════════════════════════════════════════════
-var DB={usuarios:[],pedidos:[],bitacora:[],clientes:[],desgloses:[],inv:{items:[],ubicaciones:[],movs:[],stock:{}},fin:{cobrar:[],pagar:[],gastos:[]}};
+var DB={usuarios:[],pedidos:[],bitacora:[],clientes:[],desgloses:[],ordenesPendientes:[],inv:{items:[],ubicaciones:[],movs:[],stock:{}},fin:{cobrar:[],pagar:[],gastos:[]}};
 var SESSION=null,TAB='home',PEDIDO_EDIT_ID=null,PEDIDO_ORD_ID=null,SAVING=false,_db=null;
 var _lastAppliedUpdatedAt=0,_rerenderTimer=null;
 // ¿El usuario está escribiendo/eligiendo algo ahora? (no interrumpirlo con un re-dibujo)
@@ -1091,7 +1095,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v75 · nota de entrega por pedido + ENTREGADA';
+var APP_VERSION='v76 · órdenes a la espera de pedido';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1543,12 +1547,77 @@ function renderHome(c){
     +'</div>';
   var sf=ordenesSinFecha();
   var bannerSF=sf.length?'<div onclick="aplicarFiltro(\'SINFECHA\')" style="background:var(--warning);color:#fff;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px"><span>\u26A0\uFE0F '+sf.length+' orden'+(sf.length>1?'es':'')+' sin fecha estimada de entrega</span><span style="font-size:11px;opacity:.85;white-space:nowrap">Toca para ver \u2192</span></div>':'';
-  c.innerHTML=statsBar+bannerSF+'<div class="prog-wrap"><div class="prog-bar"><div class="prog-fill" style="width:'+pct+'%"></div></div><div class="prog-label">'+ent+' de '+total+' entregados ('+pct+'%)</div></div><div class="toolbar"><input type="text" id="h-buscar" placeholder="Buscar cliente o numero..." oninput="filtrarHome()"><select id="h-est" onchange="filtrarHome()"><option value="">Todos</option><option value="vencido">Vencidos</option><option value="urgente">Urgentes</option><option value="sf">Sin fecha</option><option value="ok">Con tiempo</option><option value="LISTO">Listos</option><option value="ORDENES">Con \u00F3rdenes pendientes</option><option value="SINFECHA">\u00D3rdenes sin fecha estimada</option><option value="ENTREGADOS">\u2705 Historial de entregados</option></select><button class="btn btn-dark btn-sm" onclick="generarReporte()" style="align-self:center">\uD83D\uDCC4 Generar Reporte</button></div><div class="section-pad" id="home-lista"></div>';
+  var op=(DB.ordenesPendientes||[]);
+  var opSinPed=op.filter(function(x){return !((x.numeroPedido||'').toString().trim());}).length;
+  var bannerOP=op.length?'<div onclick="abrirOrdenesPendientes()" style="background:#7c3aed;color:#fff;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px"><span>\u23F3 '+op.length+' orden'+(op.length>1?'es':'')+' a la espera de pedido'+(opSinPed?' \u00B7 '+opSinPed+' sin # de pedido':'')+'</span><span style="font-size:11px;opacity:.85;white-space:nowrap">Toca para ver \u2192</span></div>':'';
+  c.innerHTML=statsBar+bannerOP+bannerSF+'<div class="prog-wrap"><div class="prog-bar"><div class="prog-fill" style="width:'+pct+'%"></div></div><div class="prog-label">'+ent+' de '+total+' entregados ('+pct+'%)</div></div><div class="toolbar"><input type="text" id="h-buscar" placeholder="Buscar cliente o numero..." oninput="filtrarHome()"><select id="h-est" onchange="filtrarHome()"><option value="">Todos</option><option value="vencido">Vencidos</option><option value="urgente">Urgentes</option><option value="sf">Sin fecha</option><option value="ok">Con tiempo</option><option value="LISTO">Listos</option><option value="ORDENES">Con \u00F3rdenes pendientes</option><option value="SINFECHA">\u00D3rdenes sin fecha estimada</option><option value="ENTREGADOS">\u2705 Historial de entregados</option></select><button class="btn btn-dark btn-sm" onclick="generarReporte()" style="align-self:center">\uD83D\uDCC4 Generar Reporte</button></div><div class="section-pad" id="home-lista"></div>';
   filtrarHome();
 }
 function aplicarFiltro(valor){
   var sel=document.getElementById('h-est');
   if(sel){sel.value=valor;filtrarHome();}
+}
+// ═══════════════════════════════════════════════════════════
+// ÓRDENES A LA ESPERA DE PEDIDO
+// Órdenes de compra que llegaron por WhatsApp ANTES que su pedido
+// (compras de stock para inventario, o una orden de cliente sin pedido
+// aún). El bot las adjunta solo cuando el pedido llega; aquí se pueden
+// ver, enlazar a mano a un pedido existente, o eliminar.
+// ═══════════════════════════════════════════════════════════
+function tipoOrdLabel(t){return t==='OF'?'Orden de fabricación':t==='INVENTARIO'?'Orden de inventario':'Orden de compra';}
+function abrirOrdenesPendientes(){document.getElementById('pend-body').innerHTML=pendBodyHTML();abrirModal('modal-pend');}
+function pendBodyHTML(){
+  var op=(DB.ordenesPendientes||[]);
+  if(!op.length)return '<div class="empty"><div class="empty-icon">✅</div>No hay órdenes en espera de pedido.</div>';
+  var h='<div class="sec-label">En espera ('+op.length+')</div>';
+  op.forEach(function(o){
+    var tieneNP=(o.numeroPedido||'').toString().trim();
+    h+='<div class="card" style="margin-bottom:8px"><div style="padding:10px 12px">';
+    h+='<div style="font-weight:700;font-size:14px">'+esc(tipoOrdLabel(o.tipo))+' #'+esc(o.numeroOC||'?')+'</div>';
+    if(o.proveedor)h+='<div style="font-size:12px;color:var(--muted);margin-top:2px">'+esc(o.proveedor)+'</div>';
+    h+='<div style="font-size:12px;margin-top:4px">'+(tieneNP?'📌 Espera el <b>pedido #'+esc(o.numeroPedido)+'</b>':'<span style="color:var(--danger);font-weight:600">⚠️ Sin número de pedido — enlázala a mano</span>')+'</div>';
+    h+='<div style="font-size:11px;color:var(--muted);margin-top:3px">'+(o.items&&o.items.length?('🧾 '+o.items.length+' items · '):'')+esc(o.fecha||'')+(o.hora?' '+esc(o.hora):'')+'</div>';
+    h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">';
+    if(o.pdfUrl)h+='<a href="'+esc(o.pdfUrl)+'" target="_blank" class="btn btn-blue btn-sm" style="text-decoration:none">📄 Ver archivo</a>';
+    h+='<button class="btn btn-green btn-sm" onclick="asignarOrdenPendiente(\''+o.id+'\')">🔗 Enlazar a un pedido</button>';
+    h+='<button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="eliminarOrdenPendiente(\''+o.id+'\')">🗑️ Eliminar</button>';
+    h+='</div></div></div>';
+  });
+  return h;
+}
+async function asignarOrdenPendiente(id){
+  var o=(DB.ordenesPendientes||[]).find(function(x){return x.id===id;});if(!o)return;
+  var sug=(o.numeroPedido||'').toString().trim();
+  var num=prompt('¿A qué número de PEDIDO pertenece esta '+tipoOrdLabel(o.tipo)+' #'+(o.numeroOC||'?')+'?\nEscribe el número del pedido:',sug);
+  if(num===null)return;
+  num=(num||'').toString().replace(/^0+/,'').trim();
+  if(!num){toast('Escribe un número de pedido válido','err');return;}
+  var p=DB.pedidos.find(function(x){return (x.numero||'').toString().replace(/^0+/,'').trim()===num;});
+  if(!p){toast('No existe el pedido #'+num+' en la app','err');return;}
+  materializarOrdenes(p);
+  // Upsert por tipo+numeroOC: si ya existía esa orden en el pedido, se reemplaza.
+  var nOC=(o.numeroOC||'').toString().replace(/^0+/,'').trim();
+  var ex=nOC?p.ordenes.find(function(x){return x.tipo===o.tipo&&(x.numeroOC||'').toString().replace(/^0+/,'').trim()===nOC;}):null;
+  var orden=ex||{id:uid(),estado:'PENDIENTE',fechaEmision:fecha(),fechaRecepcion:null};
+  orden.tipo=o.tipo;orden.proveedor=o.proveedor||(o.tipo==='INVENTARIO'?'Inventario':'');orden.numeroOC=o.numeroOC||'';
+  orden.pdfUrl=o.pdfUrl||orden.pdfUrl||'';orden.fechaEstimadaEntrega=o.fechaEstimadaEntrega||orden.fechaEstimadaEntrega||'';
+  if(o.items&&o.items.length)orden.items=o.items;
+  if(!ex)p.ordenes.push(orden);
+  DB.ordenesPendientes=(DB.ordenesPendientes||[]).filter(function(x){return x.id!==id;});
+  if(!Array.isArray(DB.bitacora))DB.bitacora=[];
+  DB.bitacora.push({pedidoId:p.id,accion:tipoOrdLabel(o.tipo)+' #'+(orden.numeroOC||'?')+' enlazada manualmente desde el apartado de espera',usuario:(SESSION&&SESSION.nombre)||'App',fecha:fecha(),hora:hora()});
+  await guardarDB();
+  document.getElementById('pend-body').innerHTML=pendBodyHTML();
+  toast('Orden enlazada al pedido #'+num,'ok');
+  if(TAB)goTab(TAB,document.getElementById('nb-'+TAB));
+}
+async function eliminarOrdenPendiente(id){
+  if(!confirm('¿Eliminar esta orden en espera? No se podrá recuperar.'))return;
+  DB.ordenesPendientes=(DB.ordenesPendientes||[]).filter(function(x){return x.id!==id;});
+  await guardarDB();
+  document.getElementById('pend-body').innerHTML=pendBodyHTML();
+  toast('Orden en espera eliminada','warn');
+  if(TAB)goTab(TAB,document.getElementById('nb-'+TAB));
 }
 // ═══════════════════════════════════════════════════════════
 // HISTORIAL DE ENTREGADOS
