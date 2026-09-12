@@ -1095,7 +1095,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v76 · órdenes a la espera de pedido';
+var APP_VERSION='v77 · cargar prellenado con lo contado';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -3859,14 +3859,36 @@ function invMovAbrir(tipo,itemId,ubicId){
   var titulos={ENTRADA:'➕ Entrada (cargar)',SALIDA:'➖ Salida (descontar)',TRASLADO:'🔀 Traslado',AJUSTE:'⚖️ Ajuste'};
   var h='<div class="sheet-head"><h2>'+(titulos[tipo]||'Movimiento')+'</h2><button class="sheet-close" onclick="cerrarModal(\'modal-inv\')">✕</button></div><div class="sheet-body">';
   h+='<input type="hidden" id="im-tipo" value="'+tipo+'">';
-  h+='<div class="sfield"><label>Producto *</label><select id="im-item">'+inv.items.slice().sort(function(a,b){return (a.nombre||'').localeCompare(b.nombre||'');}).map(function(it){return '<option value="'+it.id+'"'+(itemId===it.id?' selected':'')+'>'+esc(it.nombre)+(it.sku?' ('+esc(it.sku)+')':'')+'</option>';}).join('')+'</select></div>';
+  var _sorted=inv.items.slice().sort(function(a,b){return (a.nombre||'').localeCompare(b.nombre||'');});
+  var _selId=itemId||(_sorted[0]&&_sorted[0].id)||'';
+  // Al CARGAR (Entrada), prellenamos la cantidad con lo que se contó en el conteo
+  // activo, para no retipearla. Queda editable: si al cargar hay más o menos, se corrige.
+  var _pref=(tipo==='ENTRADA')?invCantContada(_selId):null;
+  h+='<div class="sfield"><label>Producto *</label><select id="im-item" onchange="invMovPrefillCant()">'+_sorted.map(function(it){return '<option value="'+it.id+'"'+(_selId===it.id?' selected':'')+'>'+esc(it.nombre)+(it.sku?' ('+esc(it.sku)+')':'')+'</option>';}).join('')+'</select></div>';
   var ubOpts=inv.ubicaciones.map(function(u){return '<option value="'+u.id+'"'+(ubicId===u.id?' selected':'')+'>'+(u.tipo==='exhibicion'?'🛍️ ':'🏬 ')+esc(u.nombre)+'</option>';}).join('');
   h+='<div class="sfield"><label>'+(tipo==='TRASLADO'?'Desde (origen) *':'Ubicación *')+'</label><select id="im-ubic">'+ubOpts+'</select></div>';
   if(tipo==='TRASLADO')h+='<div class="sfield"><label>Hacia (destino) *</label><select id="im-ubicdest">'+ubOpts+'</select></div>';
-  h+='<div class="sfield"><label>Cantidad *'+(tipo==='AJUSTE'?' (usa negativo para restar)':'')+'</label><input type="number" step="any" id="im-cant" placeholder="0"></div>';
+  h+='<div class="sfield"><label>Cantidad *'+(tipo==='AJUSTE'?' (usa negativo para restar)':'')+'</label><input type="number" step="any" id="im-cant" placeholder="0"'+(_pref!=null?' value="'+_pref+'"':'')+'>';
+  h+='<div id="im-cant-hint" style="font-size:11px;color:#166534;margin-top:4px'+(_pref!=null?'':';display:none')+'">✅ Cantidad tomada del conteo. Si al cargar tienes más o menos, corrígela.</div></div>';
   h+='<div class="sfield"><label>Motivo / nota</label><input type="text" id="im-motivo" placeholder="opcional (ej: venta pedido #512, conteo físico...)"></div>';
   h+='</div><div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal(\'modal-inv\')">Cancelar</button><button class="btn btn-blue" onclick="invMovGuardar()">Registrar</button></div>';
   invModal(h);
+}
+// Cantidad física contada de un producto en el conteo ACTIVO (para prellenar la carga). null si no se ha contado.
+function invCantContada(itemId){
+  var a=invCtAct();if(!a||!a.lineas||!a.lineas[itemId])return null;
+  var f=invCtFisico(a.lineas[itemId]);
+  return (f==null)?null:f;
+}
+// Al cambiar el producto en el modal de Entrada (Cargar), recarga la cantidad contada.
+function invMovPrefillCant(){
+  var tp=(document.getElementById('im-tipo')||{}).value;
+  if(tp!=='ENTRADA')return;
+  var sel=document.getElementById('im-item'),inp=document.getElementById('im-cant'),hint=document.getElementById('im-cant-hint');
+  if(!sel||!inp)return;
+  var q=invCantContada(sel.value);
+  if(q!=null){inp.value=q;if(hint)hint.style.display='';}
+  else{inp.value='';if(hint)hint.style.display='none';}
 }
 function invMovGuardar(){
   var tipo=document.getElementById('im-tipo').value,itemId=document.getElementById('im-item').value,ubic=document.getElementById('im-ubic').value;
