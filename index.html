@@ -1112,7 +1112,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v82 · clientes/día + ⏱ atención';
+var APP_VERSION='v83 · ciudades por semana en Estadísticas';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1523,6 +1523,37 @@ function cotUIstats(){
     });
     h+='</tbody></table>';
     if(diasArr.length>45)h+='<div style="font-size:11px;color:var(--muted);margin-top:6px">Mostrando los 45 días más recientes con altas. Usa el CSV del CRM para el detalle completo.</div>';
+  }
+  h+='</div>';
+
+  // Tabla: CIUDADES MÁS PREGUNTADAS POR SEMANA (misma lógica del resumen semanal
+  // que llega a los admins los sábados: "esta semana" = clientes con fechaCreacion
+  // en los últimos 7 días; "total" = acumulado histórico). Se ordena por la semana.
+  var last7set={};
+  for(var _i7=0;_i7<7;_i7++){var _d7=new Date(Date.now()-_i7*86400000);last7set[('0'+_d7.getDate()).slice(-2)+'/'+('0'+(_d7.getMonth()+1)).slice(-2)+'/'+_d7.getFullYear()]=true;}
+  var ciuTotal={},ciuSem={};
+  clientes.forEach(function(cl){
+    var val=(cl.ciudad||'').toString().trim().toUpperCase();
+    if(!val)return;
+    ciuTotal[val]=(ciuTotal[val]||0)+1;
+    if(last7set[cl.fechaCreacion||''])ciuSem[val]=(ciuSem[val]||0)+1;
+  });
+  var ciuArr=Object.keys(ciuTotal).map(function(k){return {k:k,n:ciuTotal[k],sem:ciuSem[k]||0};}).sort(function(a,b){return b.sem-a.sem||b.n-a.n;});
+  var semTot=ciuArr.reduce(function(s,x){return s+x.sem;},0);
+  var maxCiu=ciuArr.reduce(function(m,x){return Math.max(m,x.sem||0);},0)||1;
+  h+=tablaAbrir('🏙️ Ciudades más preguntadas — esta semana: '+semTot+' clientes nuevos · igual al reporte de los sábados');
+  if(!ciuArr.length)h+='<div style="font-size:12px;color:var(--muted)">Aún no hay clientes con ciudad registrada.</div>';
+  else{
+    h+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:340px"><thead><tr style="text-align:left;border-bottom:2px solid #111"><th style="padding:6px 4px">Ciudad</th><th style="padding:6px 4px;text-align:right">Esta semana</th><th style="padding:6px 4px;text-align:right">Total</th><th style="padding:6px 4px;width:35%"></th></tr></thead><tbody>';
+    ciuArr.slice(0,25).forEach(function(x){
+      var destaca=x.sem>0;
+      h+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px'+(destaca?';font-weight:700':'')+'">'+esc(x.k)+'</td>'
+        +'<td style="padding:6px 4px;text-align:right;font-weight:700;color:'+(destaca?'#1d4ed8':'var(--muted)')+'">'+x.sem+'</td>'
+        +'<td style="padding:6px 4px;text-align:right;font-weight:600">'+x.n+'</td>'
+        +'<td style="padding:6px 4px"><div style="height:12px;border-radius:6px;background:#1d4ed8;width:'+Math.round((x.sem/maxCiu)*100)+'%;min-width:'+(x.sem>0?'6px':'0')+'"></div></td></tr>';
+    });
+    h+='</tbody></table>';
+    if(ciuArr.length>25)h+='<div style="font-size:11px;color:var(--muted);margin-top:6px">Mostrando las 25 ciudades con más clientes.</div>';
   }
   h+='</div>';
 
