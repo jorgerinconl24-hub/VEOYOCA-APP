@@ -1112,7 +1112,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v78 · inventario a prueba de pisado entre almacenistas';
+var APP_VERSION='v79 · clientes nuevos por día en Estadísticas';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1495,6 +1495,35 @@ function cotUIstats(){
     +tarjeta(fmtMoney(montoCot),'$ cotizado','#0369a1')
     +tarjeta(fmtMoney(montoCer),'$ cerrado','#166534')
     +'</div>';
+
+  // Tabla: CLIENTES NUEVOS POR DÍA (cuántos leads entraron al CRM cada día)
+  var porDia={};
+  clientes.forEach(function(cl){
+    var f=(cl.fechaCreacion||'').trim();
+    if(!f){var ts=_creacionTS(cl);if(ts)f=new Date(ts).toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'});}
+    if(!f)return;
+    porDia[f]=(porDia[f]||0)+1;
+  });
+  var diasArr=Object.keys(porDia).map(function(f){return {f:f,n:porDia[f],d:parseFechaDMY(f)};});
+  diasArr.sort(function(a,b){return (b.d?b.d.getTime():0)-(a.d?a.d.getTime():0);});
+  var hoyStrCRM=fecha();
+  var nHoy=porDia[hoyStrCRM]||0;
+  var n7=0;diasArr.forEach(function(x){if(x.d){var dd=Math.round((Date.now()-x.d.getTime())/86400000);if(dd>=0&&dd<7)n7+=x.n;}});
+  var maxDia=diasArr.reduce(function(m,x){return Math.max(m,x.n);},1);
+  h+=tablaAbrir('🗓️ Clientes nuevos por día — hoy: '+nHoy+' · últimos 7 días: '+n7+' · total: '+clientes.length);
+  if(!diasArr.length)h+='<div style="font-size:12px;color:var(--muted)">Aún no hay clientes con fecha de creación registrada.</div>';
+  else{
+    h+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:320px"><thead><tr style="text-align:left;border-bottom:2px solid #111"><th style="padding:6px 4px">Día</th><th style="padding:6px 4px;text-align:right">Clientes</th><th style="padding:6px 4px;width:45%"></th></tr></thead><tbody>';
+    diasArr.slice(0,45).forEach(function(x){
+      var esHoy=x.f===hoyStrCRM;
+      h+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px'+(esHoy?';font-weight:700;color:#166534':'')+'">'+esc(x.f)+(esHoy?' · HOY':'')+'</td>'
+        +'<td style="padding:6px 4px;text-align:right;font-weight:700">'+x.n+'</td>'
+        +'<td style="padding:6px 4px"><div style="height:12px;border-radius:6px;background:'+(esHoy?'#16a34a':'#1a1a2e')+';width:'+Math.round(x.n/maxDia*100)+'%;min-width:6px"></div></td></tr>';
+    });
+    h+='</tbody></table>';
+    if(diasArr.length>45)h+='<div style="font-size:11px;color:var(--muted);margin-top:6px">Mostrando los 45 días más recientes con altas. Usa el CSV del CRM para el detalle completo.</div>';
+  }
+  h+='</div>';
 
   // Tabla: productos mas PREGUNTADOS (columna Producto/Servicio)
   var masPreg=Object.keys(preg).map(function(k){return preg[k];}).sort(function(a,b){return b.veces-a.veces;});
