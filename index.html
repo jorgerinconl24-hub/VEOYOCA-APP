@@ -1112,7 +1112,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v79 · clientes nuevos por día en Estadísticas';
+var APP_VERSION='v81 · ⏱ atención solo usuario admin';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -2629,20 +2629,62 @@ function _creacionTS(cl){
   if(m){var d=new Date(+m[3],+m[2]-1,+m[1]);if(!isNaN(d.getTime()))return d.getTime();}
   return 0;
 }
-// Texto del tiempo entre que se agregó el cliente y su primera atención (solo admins lo ven).
+// Solo el DUEÑO (Jorge, usuario "admin") ve la columna de tiempo de atención.
+// Ni siquiera otros administradores la ven. Si el usuario cambiara, basta con
+// ajustar esta única función.
+function esDuenoJorge(){var s=SESSION||{};var u=(s.username||'').toLowerCase().trim();return u==='admin';}
+// Momento (timestamp) de un seguimiento a partir de su fecha (DD/MM/YYYY) y hora (HH:MM).
+function _segTS(sg){
+  if(!sg)return 0;
+  var d=parseFechaDMY(sg.fecha);if(!d)return 0;
+  var hm=(sg.hora||'').toString().match(/(\d{1,2}):(\d{2})/);
+  if(hm)d.setHours(parseInt(hm[1],10),parseInt(hm[2],10),0,0);
+  return d.getTime();
+}
+// Momento en que el cliente pasó a CONTACTADO (dejó de estar SIN CONTACTAR).
+// Sirve para clientes viejos y nuevos: se saca de los seguimientos, sin depender
+// de un sello previo. Orden de preferencia:
+//   1) sello directo contactadoTS (lo ponemos al marcar contactado de ahora en más)
+//   2) primer seguimiento con resultado CONTACTADO
+//   3) si ya no está SIN CONTACTAR, el primer seguimiento que tenga
+function _contactoTS(cl){
+  if(!cl)return 0;
+  if(cl.contactadoTS)return cl.contactadoTS;
+  var segs=Array.isArray(cl.seguimientos)?cl.seguimientos:[];
+  var mejor=0;
+  segs.forEach(function(sg){if((sg.resultado||'')==='CONTACTADO'){var t=_segTS(sg);if(t&&(!mejor||t<mejor))mejor=t;}});
+  if(mejor)return mejor;
+  if(est1De(cl)!=='SIN CONTACTAR'){
+    segs.forEach(function(sg){var t=_segTS(sg);if(t&&(!mejor||t<mejor))mejor=t;});
+    if(mejor)return mejor;
+  }
+  return 0;
+}
+function _durTxt(ms){
+  if(ms<0)ms=0;var min=Math.round(ms/60000);
+  if(min<1)return 'al instante';
+  if(min<60)return min+' min';
+  var h=Math.floor(min/60),m=min%60;
+  if(h<24)return h+'h'+(m?' '+m+'m':'');
+  var dd=Math.floor(h/24),hr=h%24;
+  return dd+'d'+(hr?' '+hr+'h':'');
+}
+// Texto del tiempo entre que se AGREGÓ el cliente y que lo marcaron CONTACTADO
+// en Estado 1 (solo Jorge lo ve).
 function tiempoAtencionTxt(cl){
   if(!cl) return '';
   var cts=_creacionTS(cl);
-  if(!cts) return '';                            // clientes muy viejos sin fecha
-  if(!cl.atendidoTS) return 'sin atender aún';
-  var ms=cl.atendidoTS-cts; if(ms<0)ms=0;
-  var min=Math.round(ms/60000);
-  if(min<1) return 'atendido al instante';
-  if(min<60) return 'atendido en '+min+' min';
-  var h=Math.floor(min/60), m=min%60;
-  if(h<24) return 'atendido en '+h+'h'+(m?' '+m+'m':'');
-  var dd=Math.floor(h/24), hr=h%24;
-  return 'atendido en '+dd+'d'+(hr?' '+hr+'h':'');
+  if(!cts) return '';                            // clientes muy viejos sin fecha de creación
+  var ctc=_contactoTS(cl);
+  if(!ctc){
+    // Todavía no lo contactan: si ya pasó tiempo, lo mostramos como espera acumulada.
+    if(est1De(cl)==='SIN CONTACTAR'){
+      var espera=Date.now()-cts;
+      return espera>60000?('sin contactar · '+_durTxt(espera)):'sin contactar aún';
+    }
+    return 'contactado (sin hora registrada)';
+  }
+  return 'contactado en '+_durTxt(ctc-cts);
 }
 // Registra un resultado como seguimiento y marca al cliente como atendido hoy
 function _logRes(cl,res){
@@ -2651,6 +2693,8 @@ function _logRes(cl,res){
   cl.ultimaEdicion=fecha()+' '+hora();cl.editadoPor=SESSION?SESSION.nombre:'';
   if(!Array.isArray(cl.seguimientos))cl.seguimientos=[];
   cl.seguimientos.push({texto:'Resultado: '+res,fecha:fecha(),hora:hora(),usuario:SESSION?SESSION.nombre:'',resultado:res});
+  // Sello del primer momento en que deja de estar SIN CONTACTAR (precisión hacia adelante).
+  if(!cl.contactadoTS&&est1De(cl)!=='SIN CONTACTAR')cl.contactadoTS=Date.now();
 }
 function marcarResultado(id,res){
   if(!res)return;
@@ -2693,7 +2737,7 @@ function clienteCardHTML(cl){
   var _pedC=pedidoListaCliente(cl);_pedC.forEach(function(p,i){h+='<a href="'+esc(p.url)+'" target="_blank" class="card-vend" style="background:#dcfce7;color:#166534;margin-right:4px;text-decoration:none">🛒 '+(p.numero?('Pedido Nº'+esc(p.numero)):('Pedido '+(i+1)))+'</a>';});
   h+='</div>';
   h+=proxContactoHTML(cl);
-  if(SESSION&&SESSION.rol==='admin'){var _ta=tiempoAtencionTxt(cl);if(_ta)h+='<div style="font-size:11px;color:#7c3aed;font-weight:600;margin-top:3px">⏱ '+_ta+'</div>';}
+  if(esDuenoJorge()){var _ta=tiempoAtencionTxt(cl);if(_ta)h+='<div style="font-size:11px;color:#7c3aed;font-weight:600;margin-top:3px">⏱ '+_ta+'</div>';}
   var extra=cl.estatusObjecion||cl.planAccion||cl.notas||'';
   if(extra)h+='<div class="card-desc">'+esc(extra)+'</div>';
   h+='</div>'+badgeEst1(cl)+'</div>';
@@ -2815,13 +2859,13 @@ function renderTablaCRM(el,lista){
   var EST2=['POTENCIAL','INTERESADO','PRESUPUESTO ENVIADO','EN NEGOCIACION','COMPRO','NO COMPRO'];
   var h='<div class="crm-wrap"><table class="crm" id="tabla-crm"><thead><tr>';
   var _cols=['Nombre','Tel\u00E9fono','Vendedor','Estado 1','Estado 2','Seguimientos','Producto/Servicio','Ciudad','Red social','Tipo de negocio','Estatus/Objeci\u00F3n','Plan de acci\u00F3n','Cant.','Porqu\u00E9 compr\u00F3','Porqu\u00E9 NO compr\u00F3','\u00DAlt. contacto','Pr\u00F3x. contacto','Notas','Visit\u00F3 oficina','Presupuesto','Pedido'];
-  if(SESSION.rol==='admin')_cols.push('\u23F1 Atenci\u00F3n');
+  if(esDuenoJorge())_cols.push('\u23F1 Atenci\u00F3n');
   _cols.forEach(function(t,i){
     h+='<th'+(i===0?' class="colfija"':'')+'>'+t+'</th>';
   });
   h+='</tr></thead><tbody>';
   // Fila de alta rapida, como la fila "Nuevo" de Notion
-  h+='<tr><td class="colfija" style="background:var(--ibg)"><input id="crm-nuevo" placeholder="+ Nuevo cliente (Enter)" onkeydown="if(event.key===\'Enter\')crmQuickAdd(this)"></td><td colspan="'+(SESSION.rol==='admin'?21:20)+'" style="padding:8px 10px;font-size:11px;color:var(--muted);background:var(--ibg)">Escribe el nombre, presiona Enter y llena las casillas directamente \u2014 los cambios se guardan solos. Toca \uD83D\uDCC2 para abrir la ficha y los seguimientos.</td></tr>';
+  h+='<tr><td class="colfija" style="background:var(--ibg)"><input id="crm-nuevo" placeholder="+ Nuevo cliente (Enter)" onkeydown="if(event.key===\'Enter\')crmQuickAdd(this)"></td><td colspan="'+(esDuenoJorge()?21:20)+'" style="padding:8px 10px;font-size:11px;color:var(--muted);background:var(--ibg)">Escribe el nombre, presiona Enter y llena las casillas directamente \u2014 los cambios se guardan solos. Toca \uD83D\uDCC2 para abrir la ficha y los seguimientos.</td></tr>';
   lista.forEach(function(cl){
     var id=cl.id;
     h+='<tr>';
@@ -2846,7 +2890,7 @@ function renderTablaCRM(el,lista){
     h+='<td style="min-width:130px">'+celdaSelect(id,'visitoOficina',cl.visitoOficina||'',['S\u00cd'],'\u2014')+(cl.fechaVisita?'<div style="font-size:10px;color:var(--muted)">'+esc(cl.fechaVisita)+'</div>':'')+'</td>';
     var _plT=presuListaCliente(cl);h+='<td style="min-width:120px">'+(_plT.length?_plT.map(function(p){return '<a href="'+esc(p.url)+'" target="_blank" style="color:var(--info)">\ud83d\udcc4 '+(p.numero?('N\u00ba'+esc(p.numero)):'Ver')+'</a>'+(p.fecha?' <span style="font-size:10px;color:var(--muted)">'+esc(p.fecha)+'</span>':'');}).join('<br>'):'\u2014')+'</td>';
     var _pedT=pedidoListaCliente(cl);h+='<td style="min-width:120px">'+(_pedT.length?_pedT.map(function(p){return '<a href="'+esc(p.url)+'" target="_blank" style="color:#166534;font-weight:600">\ud83d\uded2 '+(p.numero?('N\u00ba'+esc(p.numero)):'Ver')+'</a>'+(p.fecha?' <span style="font-size:10px;color:var(--muted)">'+esc(p.fecha)+'</span>':'');}).join('<br>'):'\u2014')+'</td>';
-    if(SESSION.rol==='admin'){var _ta=tiempoAtencionTxt(cl);h+='<td style="min-width:130px;font-size:11px;color:#7c3aed;font-weight:600">'+(_ta?esc(_ta):'\u2014')+'</td>';}
+    if(esDuenoJorge()){var _ta=tiempoAtencionTxt(cl);h+='<td style="min-width:130px;font-size:11px;color:#7c3aed;font-weight:600">'+(_ta?esc(_ta):'\u2014')+'</td>';}
     h+='</tr>';
   });
   h+='</tbody></table></div>';
@@ -2895,6 +2939,7 @@ async function crmSegAgregar(id){
   cl.ultimoContacto=fecha();
   cl.ultimaEdicion=fecha()+' '+hora();cl.editadoPor=SESSION.nombre;
   if(est1De(cl)==='SIN CONTACTAR')cl.estado1='CONTACTADO';
+  if(!cl.contactadoTS&&est1De(cl)!=='SIN CONTACTAR')cl.contactadoTS=Date.now();
   inp.value='';
   // Se actualiza solo la celda: re-dibujar la tabla entera perderia el
   // desplazamiento y el foco, y la tabla es muy ancha.
