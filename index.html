@@ -1112,7 +1112,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v83 · ciudades por semana en Estadísticas';
+var APP_VERSION='v84 · Estadísticas con selector + embudo/KPIs';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1484,11 +1484,69 @@ function cotUIstats(){
 
   function tarjeta(v,l,col){return '<div class="stat" style="min-width:0"><div class="stat-v" style="color:'+col+'">'+v+'</div><div class="stat-l">'+l+'</div></div>';}
   function tablaAbrir(t){return '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin-bottom:14px;overflow:auto"><div style="font-size:14px;font-weight:700;margin-bottom:8px">'+t+'</div>';}
-  var h='<div class="section-pad" style="max-width:760px;margin:0 auto">';
-  h+='<div style="font-size:11px;color:#7c3aed;font-weight:700;text-align:right;margin-bottom:2px">'+APP_VERSION+'</div>';
-  h+='<div style="font-size:12px;color:var(--muted);margin-bottom:10px">Analiza los presupuestos (app, WhatsApp y PDFs que mandan los vendedores) y las ventas cerradas por pedido. "Cerrado" = el cliente quedó en estado <b>CERRADO</b> en el CRM.</div>';
-  // Resumen
-  h+='<div class="stats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">'
+
+  // ── CÁLCULOS EXTRA (KPIs nuevos) ─────────────────────────────
+  var last7set={};
+  for(var _i7=0;_i7<7;_i7++){var _d7=new Date(Date.now()-_i7*86400000);last7set[('0'+_d7.getDate()).slice(-2)+'/'+('0'+(_d7.getMonth()+1)).slice(-2)+'/'+_d7.getFullYear()]=true;}
+
+  // Embudo de conversión (monótono decreciente)
+  function _presuEnviado(cl){var e2=(cl.estado2||'').toString().toUpperCase();if(['PRESUPUESTO ENVIADO','EN NEGOCIACION','COMPRO'].indexOf(e2)>=0)return true;return Array.isArray(cl.presupuestos)&&cl.presupuestos.some(function(x){return x&&Array.isArray(x.items)&&x.items.length;});}
+  var fTotal=clientes.length,fContact=0,fPresu=0,fCerr=0;
+  clientes.forEach(function(cl){var cerr=_statCerrado(cl);var presu=_presuEnviado(cl)||cerr;var cont=(est1De(cl)!=='SIN CONTACTAR')||presu;if(cont)fContact++;if(presu)fPresu++;if(cerr)fCerr++;});
+
+  // Leads SIN ATENDER (aún en SIN CONTACTAR) con antigüedad
+  var sinAtList=clientes.filter(function(cl){return est1De(cl)==='SIN CONTACTAR';}).map(function(cl){var ts=_creacionTS(cl);return {cl:cl,ts:ts,ms:ts?Date.now()-ts:0};}).sort(function(a,b){return b.ms-a.ms;});
+  var sb24=0,sb48=0,sb7=0,sbmas=0;
+  sinAtList.forEach(function(x){if(!x.ts){sb24++;return;}var hh=x.ms/3600000;if(hh>168)sbmas++;else if(hh>48)sb7++;else if(hh>24)sb48++;else sb24++;});
+
+  // Tiempo de atención (solo Jorge): creación → contactado
+  var atDur=[],at1h=0,at24h=0;
+  clientes.forEach(function(cl){var cts=_creacionTS(cl),ctc=_contactoTS(cl);if(cts&&ctc&&ctc>=cts){var dd=ctc-cts;atDur.push(dd);if(dd<=3600000)at1h++;if(dd<=86400000)at24h++;}});
+  atDur.sort(function(a,b){return a-b;});
+  var atProm=atDur.length?atDur.reduce(function(s,x){return s+x;},0)/atDur.length:0;
+  var atMed=atDur.length?atDur[Math.floor(atDur.length/2)]:0;
+
+  // Objeciones (por qué NO compró)
+  var objMap={};
+  clientes.forEach(function(cl){var v=(cl.porqueNoCompro||'').toString().trim();if(!v)return;var k=v.toUpperCase().replace(/\s+/g,' ');if(!objMap[k])objMap[k]={t:v,n:0};objMap[k].n++;});
+  var objArr=Object.keys(objMap).map(function(k){return objMap[k];}).sort(function(a,b){return b.n-a.n;});
+  var objTot=objArr.reduce(function(s,x){return s+x.n;},0);
+
+  // Fuentes (dónde nos encontró) + conversión por fuente
+  var fuMap={};
+  clientes.forEach(function(cl){var v=(cl.redSocial||'').toString().trim().toUpperCase();if(!v)return;if(!fuMap[v])fuMap[v]={t:v,n:0,c:0};fuMap[v].n++;if(_statCerrado(cl))fuMap[v].c++;});
+  var fuArr=Object.keys(fuMap).map(function(k){return fuMap[k];}).sort(function(a,b){return b.n-a.n;});
+
+  // Ticket promedio y ciclo de venta
+  var ticket=nCer?montoCer/nCer:0;
+  var ciclos=[];
+  clientes.forEach(function(cl){if(!_statCerrado(cl))return;var cts=_creacionTS(cl);if(!cts)return;var cierre=0;(cl.seguimientos||[]).forEach(function(sg){if(/VENTA|CERRAD|COMPRO/.test((sg.resultado||'').toUpperCase())){var t=_segTS(sg);if(t&&(!cierre||t<cierre))cierre=t;}});if(cierre&&cierre>=cts)ciclos.push(cierre-cts);});
+  var cicloProm=ciclos.length?ciclos.reduce(function(s,x){return s+x;},0)/ciclos.length:0;
+
+  // Cumplimiento de pedidos
+  var peds=DB.pedidos||[];
+  var pedEnt=peds.filter(function(p){return p.estatus==='ENTREGADO';});
+  var pedConLim=0,pedTiempo=0,pedTarde=0,pedTiempos=[];
+  pedEnt.forEach(function(p){
+    var ini=p.creadoTS||(p.fechaCreacion&&parseFechaDMY(p.fechaCreacion)?parseFechaDMY(p.fechaCreacion).getTime():0);
+    var fin=p.entregadoTS||(p.fechaEntrega&&parseFechaDMY(p.fechaEntrega)?parseFechaDMY(p.fechaEntrega).getTime():0);
+    if(ini&&fin&&fin>=ini)pedTiempos.push(fin-ini);
+    var lim=p.fechaLimite&&parseFechaDMY(p.fechaLimite)?parseFechaDMY(p.fechaLimite):null;
+    var ent=p.fechaEntrega&&parseFechaDMY(p.fechaEntrega)?parseFechaDMY(p.fechaEntrega):null;
+    if(lim&&ent){pedConLim++;if(ent.getTime()<=lim.getTime())pedTiempo++;else pedTarde++;}
+  });
+  var pedPromEnt=pedTiempos.length?pedTiempos.reduce(function(s,x){return s+x;},0)/pedTiempos.length:0;
+  var pedPend=peds.filter(function(p){return p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO';});
+  var pedVenc=pedPend.map(function(p){return {p:p,d:diasRestantes(p.fechaLimite)};}).filter(function(x){return x.d!==null&&x.d<0;}).sort(function(a,b){return a.d-b.d;});
+
+  // ── ARMADO DE PANELES ────────────────────────────────────────
+  var PN={}; // key -> html del cuerpo del panel
+  var b;
+
+  // 1) RESUMEN
+  b=tablaAbrir('📊 Resumen general');
+  b+='<div style="font-size:12px;color:var(--muted);margin-bottom:10px">Presupuestos (app, WhatsApp y PDFs de los vendedores) y ventas cerradas. "Cerrado" = el cliente quedó en estado <b>CERRADO</b> en el CRM.</div>';
+  b+='<div class="stats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">'
     +tarjeta(totPresu,'presupuestos','#1a1a2e')
     +tarjeta(nCot,'clientes cotizados','#1d4ed8')
     +tarjeta(nCer,'clientes cerrados','#16a34a')
@@ -1496,105 +1554,239 @@ function cotUIstats(){
     +tarjeta(fmtMoney(montoCot),'$ cotizado','#0369a1')
     +tarjeta(fmtMoney(montoCer),'$ cerrado','#166534')
     +'</div>';
+  b+='<div class="stats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">'
+    +tarjeta(fmtMoney(ticket),'ticket promedio ($)','#166534')
+    +tarjeta(cicloProm?_durTxt(cicloProm):'—','ciclo de venta prom.','#b45309')
+    +tarjeta(fTotal,'clientes en CRM','#1a1a2e')
+    +'</div>';
+  b+='<div style="font-size:11px;color:#94a3b8;margin-top:8px">Ticket promedio = $ cerrado ÷ clientes cerrados. Ciclo de venta = tiempo desde que entró el lead hasta que se marcó la venta (según seguimientos).</div>';
+  b+='</div>';
+  PN.resumen=b;
 
-  // Tabla: CLIENTES NUEVOS POR DÍA (cuántos leads entraron al CRM cada día)
-  var porDia={};
-  clientes.forEach(function(cl){
-    var f=(cl.fechaCreacion||'').trim();
-    if(!f){var ts=_creacionTS(cl);if(ts)f=new Date(ts).toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'});}
-    if(!f)return;
-    porDia[f]=(porDia[f]||0)+1;
+  // 2) EMBUDO
+  b=tablaAbrir('🔻 Embudo de conversión');
+  var etapas=[{t:'Leads totales',n:fTotal,c:'#1a1a2e'},{t:'Contactados',n:fContact,c:'#1d4ed8'},{t:'Presupuesto enviado',n:fPresu,c:'#7c3aed'},{t:'Cerrados (venta)',n:fCerr,c:'#16a34a'}];
+  etapas.forEach(function(e,i){
+    var wpct=fTotal?Math.round(e.n/fTotal*100):0;
+    var paso=i===0?'':(' · '+_statPct(e.n,etapas[i-1].n)+' del paso anterior');
+    b+='<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="font-weight:700">'+e.t+'</span><span style="color:var(--muted)">'+e.n+' ('+wpct+'% del total)'+paso+'</span></div>'
+      +'<div style="height:22px;border-radius:6px;background:#eee"><div style="height:22px;border-radius:6px;background:'+e.c+';width:'+Math.max(wpct,2)+'%"></div></div></div>';
   });
+  b+='<div style="font-size:11px;color:#94a3b8;margin-top:4px">Mira dónde se caen los negocios: mucha caída entre <b>Contactados → Presupuesto</b> = falta cotizar/dar seguimiento; entre <b>Presupuesto → Cerrados</b> = problema de precio o cierre.</div>';
+  b+='</div>';
+  PN.embudo=b;
+
+  // 3) LEADS SIN ATENDER
+  b=tablaAbrir('🔴 Leads sin atender — '+sinAtList.length+' en total');
+  if(!sinAtList.length)b+='<div style="font-size:12px;color:#166534;font-weight:600">✅ ¡No hay leads sin contactar! Todos fueron atendidos.</div>';
+  else{
+    b+='<div class="stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px">'
+      +tarjeta(sb24,'menos de 24h','#16a34a')
+      +tarjeta(sb48,'24–48h','#b45309')
+      +tarjeta(sb7,'2–7 días','#dc2626')
+      +tarjeta(sbmas,'+7 días','#7f1d1d')
+      +'</div>';
+    b+='<div style="font-size:12px;font-weight:700;margin-bottom:6px">Más antiguos sin atender:</div>';
+    b+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:340px"><thead><tr style="text-align:left;border-bottom:2px solid #111"><th style="padding:6px 4px">Cliente</th><th style="padding:6px 4px">Ciudad</th><th style="padding:6px 4px">Vendedor</th><th style="padding:6px 4px;text-align:right">Esperando</th></tr></thead><tbody>';
+    sinAtList.slice(0,20).forEach(function(x){
+      var urgente=x.ms>86400000;
+      b+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px;font-weight:600">'+esc(x.cl.nombre||'Sin nombre')+'</td>'
+        +'<td style="padding:6px 4px;color:var(--muted)">'+esc(x.cl.ciudad||'—')+'</td>'
+        +'<td style="padding:6px 4px;color:var(--muted)">'+esc(x.cl.vendedor||'—')+'</td>'
+        +'<td style="padding:6px 4px;text-align:right;font-weight:700;color:'+(urgente?'#dc2626':'#b45309')+'">'+(x.ts?_durTxt(x.ms):'sin fecha')+'</td></tr>';
+    });
+    b+='</tbody></table>';
+    if(sinAtList.length>20)b+='<div style="font-size:11px;color:var(--muted);margin-top:6px">Mostrando los 20 más antiguos de '+sinAtList.length+'.</div>';
+  }
+  b+='</div>';
+  PN.sinatender=b;
+
+  // 4) ATENCIÓN (solo Jorge)
+  if(esDuenoJorge()){
+    b=tablaAbrir('⏱ Tiempo de atención — creación → contactado');
+    if(!atDur.length)b+='<div style="font-size:12px;color:var(--muted)">Aún no hay clientes con contacto medible.</div>';
+    else{
+      b+='<div class="stats" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:10px">'
+        +tarjeta(_durTxt(atProm),'promedio','#7c3aed')
+        +tarjeta(_durTxt(atMed),'mediana (típico)','#1d4ed8')
+        +tarjeta(_statPct(at1h,atDur.length),'atendidos en < 1h','#16a34a')
+        +tarjeta(_statPct(at24h,atDur.length),'atendidos en < 24h','#166534')
+        +'</div>';
+      b+='<div style="font-size:11px;color:#94a3b8">Medido sobre '+atDur.length+' clientes que ya fueron contactados. La <b>mediana</b> es el tiempo típico (menos afectado por casos extremos que el promedio).</div>';
+    }
+    b+='</div>';
+    PN.atencion=b;
+  }
+
+  // 5) OBJECIONES
+  b=tablaAbrir('🚫 Por qué NO compran — '+objTot+' registros');
+  if(!objArr.length)b+='<div style="font-size:12px;color:var(--muted)">Aún no hay motivos registrados en la columna "Porqué NO compró".</div>';
+  else{
+    var maxObj=objArr[0].n||1;
+    b+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:340px"><thead><tr style="text-align:left;border-bottom:2px solid #111"><th style="padding:6px 4px">Motivo</th><th style="padding:6px 4px;text-align:right">Veces</th><th style="padding:6px 4px;width:30%"></th></tr></thead><tbody>';
+    objArr.slice(0,25).forEach(function(x){
+      b+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px">'+esc(x.t)+'</td>'
+        +'<td style="padding:6px 4px;text-align:right;font-weight:700">'+x.n+'</td>'
+        +'<td style="padding:6px 4px"><div style="height:12px;border-radius:6px;background:#dc2626;width:'+Math.round(x.n/maxObj*100)+'%;min-width:6px"></div></td></tr>';
+    });
+    b+='</tbody></table>';
+    b+='<div style="font-size:11px;color:#94a3b8;margin-top:6px">Se agrupan por texto exacto. Mientras más parejo escriban los vendedores el motivo, mejor se agrupa.</div>';
+  }
+  b+='</div>';
+  PN.objeciones=b;
+
+  // 6) FUENTES
+  b=tablaAbrir('📣 Fuentes — dónde nos encontraron');
+  if(!fuArr.length)b+='<div style="font-size:12px;color:var(--muted)">Aún no hay clientes con red social / fuente registrada.</div>';
+  else{
+    b+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:360px"><thead><tr style="text-align:left;border-bottom:2px solid #111"><th style="padding:6px 4px">Fuente</th><th style="padding:6px 4px;text-align:right">Leads</th><th style="padding:6px 4px;text-align:right">Cerrados</th><th style="padding:6px 4px;text-align:right">Conversión</th></tr></thead><tbody>';
+    fuArr.forEach(function(x){
+      b+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px;font-weight:600">'+esc(x.t)+'</td>'
+        +'<td style="padding:6px 4px;text-align:right">'+x.n+'</td>'
+        +'<td style="padding:6px 4px;text-align:right">'+x.c+'</td>'
+        +'<td style="padding:6px 4px;text-align:right;font-weight:700;color:#16a34a">'+_statPct(x.c,x.n)+'</td></tr>';
+    });
+    b+='</tbody></table>';
+    b+='<div style="font-size:11px;color:#94a3b8;margin-top:6px">Ojo con el canal que trae muchos leads pero convierte poco: ahí hay que mejorar la calidad del lead o el seguimiento.</div>';
+  }
+  b+='</div>';
+  PN.fuentes=b;
+
+  // 7) CIUDADES
+  var ciuTotal={},ciuSem={};
+  clientes.forEach(function(cl){var val=(cl.ciudad||'').toString().trim().toUpperCase();if(!val)return;ciuTotal[val]=(ciuTotal[val]||0)+1;if(last7set[cl.fechaCreacion||''])ciuSem[val]=(ciuSem[val]||0)+1;});
+  var ciuArr=Object.keys(ciuTotal).map(function(k){return {k:k,n:ciuTotal[k],sem:ciuSem[k]||0};}).sort(function(a,b){return b.sem-a.sem||b.n-a.n;});
+  var semTot=ciuArr.reduce(function(s,x){return s+x.sem;},0);
+  var maxCiu=ciuArr.reduce(function(m,x){return Math.max(m,x.sem||0);},0)||1;
+  b=tablaAbrir('🏙️ Ciudades más preguntadas — esta semana: '+semTot+' nuevos');
+  if(!ciuArr.length)b+='<div style="font-size:12px;color:var(--muted)">Aún no hay clientes con ciudad registrada.</div>';
+  else{
+    b+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:340px"><thead><tr style="text-align:left;border-bottom:2px solid #111"><th style="padding:6px 4px">Ciudad</th><th style="padding:6px 4px;text-align:right">Esta semana</th><th style="padding:6px 4px;text-align:right">Total</th><th style="padding:6px 4px;width:35%"></th></tr></thead><tbody>';
+    ciuArr.slice(0,25).forEach(function(x){
+      var destaca=x.sem>0;
+      b+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px'+(destaca?';font-weight:700':'')+'">'+esc(x.k)+'</td>'
+        +'<td style="padding:6px 4px;text-align:right;font-weight:700;color:'+(destaca?'#1d4ed8':'var(--muted)')+'">'+x.sem+'</td>'
+        +'<td style="padding:6px 4px;text-align:right;font-weight:600">'+x.n+'</td>'
+        +'<td style="padding:6px 4px"><div style="height:12px;border-radius:6px;background:#1d4ed8;width:'+Math.round((x.sem/maxCiu)*100)+'%;min-width:'+(x.sem>0?'6px':'0')+'"></div></td></tr>';
+    });
+    b+='</tbody></table>';
+    b+='<div style="font-size:11px;color:#94a3b8;margin-top:6px">Mismo cálculo que el reporte de los sábados: "esta semana" = clientes nuevos de los últimos 7 días.</div>';
+  }
+  b+='</div>';
+  PN.ciudades=b;
+
+  // 8) CLIENTES NUEVOS POR DÍA
+  var porDia={};
+  clientes.forEach(function(cl){var f=(cl.fechaCreacion||'').trim();if(!f){var ts=_creacionTS(cl);if(ts)f=new Date(ts).toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'});}if(!f)return;porDia[f]=(porDia[f]||0)+1;});
   var diasArr=Object.keys(porDia).map(function(f){return {f:f,n:porDia[f],d:parseFechaDMY(f)};});
   diasArr.sort(function(a,b){return (b.d?b.d.getTime():0)-(a.d?a.d.getTime():0);});
   var hoyStrCRM=fecha();
   var nHoy=porDia[hoyStrCRM]||0;
   var n7=0;diasArr.forEach(function(x){if(x.d){var dd=Math.round((Date.now()-x.d.getTime())/86400000);if(dd>=0&&dd<7)n7+=x.n;}});
   var maxDia=diasArr.reduce(function(m,x){return Math.max(m,x.n);},1);
-  h+=tablaAbrir('🗓️ Clientes nuevos por día — hoy: '+nHoy+' · últimos 7 días: '+n7+' · total: '+clientes.length);
-  if(!diasArr.length)h+='<div style="font-size:12px;color:var(--muted)">Aún no hay clientes con fecha de creación registrada.</div>';
+  b=tablaAbrir('🗓️ Clientes nuevos por día — hoy: '+nHoy+' · 7 días: '+n7+' · total: '+clientes.length);
+  if(!diasArr.length)b+='<div style="font-size:12px;color:var(--muted)">Aún no hay clientes con fecha de creación registrada.</div>';
   else{
-    h+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:320px"><thead><tr style="text-align:left;border-bottom:2px solid #111"><th style="padding:6px 4px">Día</th><th style="padding:6px 4px;text-align:right">Clientes</th><th style="padding:6px 4px;width:45%"></th></tr></thead><tbody>';
+    b+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:320px"><thead><tr style="text-align:left;border-bottom:2px solid #111"><th style="padding:6px 4px">Día</th><th style="padding:6px 4px;text-align:right">Clientes</th><th style="padding:6px 4px;width:45%"></th></tr></thead><tbody>';
     diasArr.slice(0,45).forEach(function(x){
       var esHoy=x.f===hoyStrCRM;
-      h+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px'+(esHoy?';font-weight:700;color:#166534':'')+'">'+esc(x.f)+(esHoy?' · HOY':'')+'</td>'
+      b+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px'+(esHoy?';font-weight:700;color:#166534':'')+'">'+esc(x.f)+(esHoy?' · HOY':'')+'</td>'
         +'<td style="padding:6px 4px;text-align:right;font-weight:700">'+x.n+'</td>'
         +'<td style="padding:6px 4px"><div style="height:12px;border-radius:6px;background:'+(esHoy?'#16a34a':'#1a1a2e')+';width:'+Math.round(x.n/maxDia*100)+'%;min-width:6px"></div></td></tr>';
     });
-    h+='</tbody></table>';
-    if(diasArr.length>45)h+='<div style="font-size:11px;color:var(--muted);margin-top:6px">Mostrando los 45 días más recientes con altas. Usa el CSV del CRM para el detalle completo.</div>';
+    b+='</tbody></table>';
+    if(diasArr.length>45)b+='<div style="font-size:11px;color:var(--muted);margin-top:6px">Mostrando los 45 días más recientes con altas.</div>';
   }
-  h+='</div>';
+  b+='</div>';
+  PN.pordia=b;
 
-  // Tabla: CIUDADES MÁS PREGUNTADAS POR SEMANA (misma lógica del resumen semanal
-  // que llega a los admins los sábados: "esta semana" = clientes con fechaCreacion
-  // en los últimos 7 días; "total" = acumulado histórico). Se ordena por la semana.
-  var last7set={};
-  for(var _i7=0;_i7<7;_i7++){var _d7=new Date(Date.now()-_i7*86400000);last7set[('0'+_d7.getDate()).slice(-2)+'/'+('0'+(_d7.getMonth()+1)).slice(-2)+'/'+_d7.getFullYear()]=true;}
-  var ciuTotal={},ciuSem={};
-  clientes.forEach(function(cl){
-    var val=(cl.ciudad||'').toString().trim().toUpperCase();
-    if(!val)return;
-    ciuTotal[val]=(ciuTotal[val]||0)+1;
-    if(last7set[cl.fechaCreacion||''])ciuSem[val]=(ciuSem[val]||0)+1;
-  });
-  var ciuArr=Object.keys(ciuTotal).map(function(k){return {k:k,n:ciuTotal[k],sem:ciuSem[k]||0};}).sort(function(a,b){return b.sem-a.sem||b.n-a.n;});
-  var semTot=ciuArr.reduce(function(s,x){return s+x.sem;},0);
-  var maxCiu=ciuArr.reduce(function(m,x){return Math.max(m,x.sem||0);},0)||1;
-  h+=tablaAbrir('🏙️ Ciudades más preguntadas — esta semana: '+semTot+' clientes nuevos · igual al reporte de los sábados');
-  if(!ciuArr.length)h+='<div style="font-size:12px;color:var(--muted)">Aún no hay clientes con ciudad registrada.</div>';
-  else{
-    h+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:340px"><thead><tr style="text-align:left;border-bottom:2px solid #111"><th style="padding:6px 4px">Ciudad</th><th style="padding:6px 4px;text-align:right">Esta semana</th><th style="padding:6px 4px;text-align:right">Total</th><th style="padding:6px 4px;width:35%"></th></tr></thead><tbody>';
-    ciuArr.slice(0,25).forEach(function(x){
-      var destaca=x.sem>0;
-      h+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px'+(destaca?';font-weight:700':'')+'">'+esc(x.k)+'</td>'
-        +'<td style="padding:6px 4px;text-align:right;font-weight:700;color:'+(destaca?'#1d4ed8':'var(--muted)')+'">'+x.sem+'</td>'
-        +'<td style="padding:6px 4px;text-align:right;font-weight:600">'+x.n+'</td>'
-        +'<td style="padding:6px 4px"><div style="height:12px;border-radius:6px;background:#1d4ed8;width:'+Math.round((x.sem/maxCiu)*100)+'%;min-width:'+(x.sem>0?'6px':'0')+'"></div></td></tr>';
-    });
-    h+='</tbody></table>';
-    if(ciuArr.length>25)h+='<div style="font-size:11px;color:var(--muted);margin-top:6px">Mostrando las 25 ciudades con más clientes.</div>';
-  }
-  h+='</div>';
-
-  // Tabla: productos mas PREGUNTADOS (columna Producto/Servicio)
+  // 9) PRODUCTOS MÁS PREGUNTADOS
   var masPreg=Object.keys(preg).map(function(k){return preg[k];}).sort(function(a,b){return b.veces-a.veces;});
-  h+=tablaAbrir('❓ Productos más preguntados (columna Producto/Servicio)');
-  if(!masPreg.length)h+='<div style="font-size:12px;color:var(--muted)">Aún no hay productos en la columna Producto/Servicio de los clientes.</div>';
-  else{h+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:320px"><thead><tr style="text-align:left;border-bottom:2px solid #111"><th style="padding:6px 4px">Producto / Servicio</th><th style="padding:6px 4px;text-align:right">Veces preguntado</th></tr></thead><tbody>';
-    masPreg.forEach(function(pr){h+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px">'+esc(pr.nombre)+'</td><td style="padding:6px 4px;text-align:right;font-weight:600">'+pr.veces+'</td></tr>';});
-    h+='</tbody></table>';}
-  h+='</div>';
+  b=tablaAbrir('❓ Productos más preguntados (columna Producto/Servicio)');
+  if(!masPreg.length)b+='<div style="font-size:12px;color:var(--muted)">Aún no hay productos en la columna Producto/Servicio de los clientes.</div>';
+  else{b+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:320px"><thead><tr style="text-align:left;border-bottom:2px solid #111"><th style="padding:6px 4px">Producto / Servicio</th><th style="padding:6px 4px;text-align:right">Veces preguntado</th></tr></thead><tbody>';
+    masPreg.forEach(function(pr){b+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px">'+esc(pr.nombre)+'</td><td style="padding:6px 4px;text-align:right;font-weight:600">'+pr.veces+'</td></tr>';});
+    b+='</tbody></table>';}
+  b+='</div>';
+  PN.preguntados=b;
 
-  // Tabla: productos mas cotizados
+  // 10) PRODUCTOS MÁS COTIZADOS
   var masCot=Object.keys(prod).map(function(k){return prod[k];}).sort(function(a,b){return b.cotPres-a.cotPres||b.cant-a.cant;}).slice(0,25);
-  h+=tablaAbrir('🔝 Productos más cotizados');
-  if(!masCot.length)h+='<div style="font-size:12px;color:var(--muted)">Aún no hay presupuestos con ítems para analizar.</div>';
-  else{h+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:520px"><thead><tr style="text-align:left;border-bottom:2px solid #111"><th style="padding:6px 4px">Producto</th><th style="padding:6px 4px;text-align:right">Veces cotizado</th><th style="padding:6px 4px;text-align:right">Cantidad</th><th style="padding:6px 4px;text-align:right">Veces cerrado</th><th style="padding:6px 4px;text-align:right">Conversión</th><th style="padding:6px 4px;text-align:right">$ cotizado</th></tr></thead><tbody>';
-    masCot.forEach(function(pr){h+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px">'+esc(pr.nombre)+'</td><td style="padding:6px 4px;text-align:right">'+pr.cotPres+'</td><td style="padding:6px 4px;text-align:right">'+fmtMoney(pr.cant)+'</td><td style="padding:6px 4px;text-align:right">'+pr.cerPres+'</td><td style="padding:6px 4px;text-align:right;font-weight:600">'+_statPct(pr.cerPres,pr.cotPres)+'</td><td style="padding:6px 4px;text-align:right">'+fmtMoney(pr.mCot)+'</td></tr>';});
-    h+='</tbody></table>';}
-  h+='</div>';
+  b=tablaAbrir('🔝 Productos más cotizados');
+  if(!masCot.length)b+='<div style="font-size:12px;color:var(--muted)">Aún no hay presupuestos con ítems para analizar.</div>';
+  else{b+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:520px"><thead><tr style="text-align:left;border-bottom:2px solid #111"><th style="padding:6px 4px">Producto</th><th style="padding:6px 4px;text-align:right">Veces cotizado</th><th style="padding:6px 4px;text-align:right">Cantidad</th><th style="padding:6px 4px;text-align:right">Veces cerrado</th><th style="padding:6px 4px;text-align:right">Conversión</th><th style="padding:6px 4px;text-align:right">$ cotizado</th></tr></thead><tbody>';
+    masCot.forEach(function(pr){b+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px">'+esc(pr.nombre)+'</td><td style="padding:6px 4px;text-align:right">'+pr.cotPres+'</td><td style="padding:6px 4px;text-align:right">'+fmtMoney(pr.cant)+'</td><td style="padding:6px 4px;text-align:right">'+pr.cerPres+'</td><td style="padding:6px 4px;text-align:right;font-weight:600">'+_statPct(pr.cerPres,pr.cotPres)+'</td><td style="padding:6px 4px;text-align:right">'+fmtMoney(pr.mCot)+'</td></tr>';});
+    b+='</tbody></table>';}
+  b+='</div>';
+  PN.cotizados=b;
 
-  // Tabla: productos que mas se cierran (ventas reales)
+  // 11) PRODUCTOS QUE MÁS SE CIERRAN
   var masVen=Object.keys(vendidos).map(function(k){return vendidos[k];}).sort(function(a,b){return b.veces-a.veces||b.cant-a.cant;}).slice(0,25);
-  h+=tablaAbrir('✅ Productos que más se cierran (ventas reales)');
-  if(!masVen.length)h+='<div style="font-size:12px;color:var(--muted)">Todavía no hay ventas cerradas con productos. En cuanto entren pedidos o se marquen clientes con presupuesto como <b>CERRADO</b>, aparecen aquí.</div>';
-  else{h+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:420px"><thead><tr style="text-align:left;border-bottom:2px solid #111"><th style="padding:6px 4px">Producto</th><th style="padding:6px 4px;text-align:right">Veces vendido</th><th style="padding:6px 4px;text-align:right">Cantidad vendida</th><th style="padding:6px 4px;text-align:right">$ vendido</th></tr></thead><tbody>';
-    masVen.forEach(function(pr){h+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px">'+esc(pr.nombre)+'</td><td style="padding:6px 4px;text-align:right">'+pr.veces+'</td><td style="padding:6px 4px;text-align:right">'+fmtMoney(pr.cant)+'</td><td style="padding:6px 4px;text-align:right">'+fmtMoney(pr.monto)+'</td></tr>';});
-    h+='</tbody></table>';}
-  h+='</div>';
+  b=tablaAbrir('✅ Productos que más se cierran (ventas reales)');
+  if(!masVen.length)b+='<div style="font-size:12px;color:var(--muted)">Todavía no hay ventas cerradas con productos. En cuanto entren pedidos o se marquen clientes con presupuesto como <b>CERRADO</b>, aparecen aquí.</div>';
+  else{b+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:420px"><thead><tr style="text-align:left;border-bottom:2px solid #111"><th style="padding:6px 4px">Producto</th><th style="padding:6px 4px;text-align:right">Veces vendido</th><th style="padding:6px 4px;text-align:right">Cantidad vendida</th><th style="padding:6px 4px;text-align:right">$ vendido</th></tr></thead><tbody>';
+    masVen.forEach(function(pr){b+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px">'+esc(pr.nombre)+'</td><td style="padding:6px 4px;text-align:right">'+pr.veces+'</td><td style="padding:6px 4px;text-align:right">'+fmtMoney(pr.cant)+'</td><td style="padding:6px 4px;text-align:right">'+fmtMoney(pr.monto)+'</td></tr>';});
+    b+='</tbody></table>';}
+  b+='</div>';
+  PN.cerrados=b;
 
-  // Tabla: supervision por vendedor
+  // 12) SUPERVISIÓN POR VENDEDOR
   var vend2=Object.keys(vend).map(function(k){return {nombre:k,d:vend[k]};}).sort(function(a,b){return b.d.pres-a.d.pres;});
-  h+=tablaAbrir('🧑‍💼 Supervisión por vendedor');
-  h+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:520px"><thead><tr style="text-align:left;border-bottom:2px solid #111">'
+  b=tablaAbrir('🧑‍💼 Supervisión por vendedor');
+  b+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:520px"><thead><tr style="text-align:left;border-bottom:2px solid #111">'
     +'<th style="padding:6px 4px">Vendedor</th><th style="padding:6px 4px;text-align:right">Presupuestos</th><th style="padding:6px 4px;text-align:right">Cerrados</th><th style="padding:6px 4px;text-align:right">Conversión</th><th style="padding:6px 4px;text-align:right">$ cotizado</th><th style="padding:6px 4px;text-align:right">$ cerrado</th></tr></thead><tbody>';
-  vend2.forEach(function(v){var d=v.d;h+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px">'+esc(v.nombre)+'</td><td style="padding:6px 4px;text-align:right">'+d.pres+'</td><td style="padding:6px 4px;text-align:right">'+d.cer+'</td><td style="padding:6px 4px;text-align:right;font-weight:600">'+_statPct(d.cer,d.pres)+'</td><td style="padding:6px 4px;text-align:right">'+fmtMoney(d.mCot)+'</td><td style="padding:6px 4px;text-align:right">'+fmtMoney(d.mCer)+'</td></tr>';});
-  h+='</tbody></table></div>';
+  vend2.forEach(function(v){var d=v.d;b+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px">'+esc(v.nombre)+'</td><td style="padding:6px 4px;text-align:right">'+d.pres+'</td><td style="padding:6px 4px;text-align:right">'+d.cer+'</td><td style="padding:6px 4px;text-align:right;font-weight:600">'+_statPct(d.cer,d.pres)+'</td><td style="padding:6px 4px;text-align:right">'+fmtMoney(d.mCot)+'</td><td style="padding:6px 4px;text-align:right">'+fmtMoney(d.mCer)+'</td></tr>';});
+  b+='</tbody></table>';
+  b+='<div style="font-size:11px;color:#94a3b8;margin-top:6px">Los productos se agrupan por descripción exacta. "Veces vendido" cuenta 1 por cliente cerrado.</div>';
+  b+='</div>';
+  PN.vendedores=b;
 
-  h+='<div style="font-size:11px;color:#94a3b8;margin-bottom:6px">Los productos se agrupan por su descripción exacta (ignorando mayúsculas y espacios de más). "Veces vendido" cuenta 1 por cliente cerrado. Los presupuestos en PDF cuentan sus ítems solo si la IA logró leerlos.</div>';
-  h+='<div style="font-size:10px;color:#cbd5e1;text-align:center;margin-top:4px">'+APP_VERSION+'</div>';
-  return h+'</div>';
+  // 13) PEDIDOS (cumplimiento)
+  b=tablaAbrir('🚚 Cumplimiento de pedidos');
+  b+='<div class="stats" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:10px">'
+    +tarjeta(pedEnt.length,'pedidos entregados','#16a34a')
+    +tarjeta(pedConLim?_statPct(pedTiempo,pedConLim):'—','entregados a tiempo','#166534')
+    +tarjeta(pedPromEnt?_durTxt(pedPromEnt):'—','tiempo prom. de entrega','#1d4ed8')
+    +tarjeta(pedVenc.length,'pendientes vencidos','#dc2626')
+    +'</div>';
+  if(pedVenc.length){
+    b+='<div style="font-size:12px;font-weight:700;margin-bottom:6px;color:#dc2626">Pendientes vencidos (ya pasó la fecha límite):</div>';
+    b+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:320px"><thead><tr style="text-align:left;border-bottom:2px solid #111"><th style="padding:6px 4px">Pedido</th><th style="padding:6px 4px">Cliente</th><th style="padding:6px 4px;text-align:right">Días vencido</th></tr></thead><tbody>';
+    pedVenc.slice(0,20).forEach(function(x){
+      b+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px;font-weight:600">#'+esc(x.p.numero||'?')+'</td>'
+        +'<td style="padding:6px 4px">'+esc(x.p.cliente||'—')+'</td>'
+        +'<td style="padding:6px 4px;text-align:right;font-weight:700;color:#dc2626">'+Math.abs(x.d)+' d</td></tr>';
+    });
+    b+='</tbody></table>';
+  }
+  b+='<div style="font-size:11px;color:#94a3b8;margin-top:6px">"A tiempo" = entregado en o antes de la fecha límite. Solo cuenta pedidos que tenían fecha límite ('+pedConLim+' de '+pedEnt.length+' entregados).</div>';
+  b+='</div>';
+  PN.pedidos=b;
+
+  // ── SELECTOR (chips) ─────────────────────────────────────────
+  var chips=[['resumen','📊 Resumen'],['embudo','🔻 Embudo'],['sinatender','🔴 Sin atender']];
+  if(esDuenoJorge())chips.push(['atencion','⏱ Atención']);
+  chips=chips.concat([['objeciones','🚫 Por qué no compran'],['fuentes','📣 Fuentes'],['ciudades','🏙️ Ciudades'],['pordia','🗓️ Por día'],['preguntados','❓ Preguntados'],['cotizados','🔝 Cotizados'],['cerrados','✅ Más vendidos'],['vendedores','🧑‍💼 Vendedores'],['pedidos','🚚 Pedidos']]);
+  var keysSet={};chips.forEach(function(c){keysSet[c[0]]=true;});
+  if(!keysSet[STAT_SEL])STAT_SEL='resumen';
+
+  var h='<div class="section-pad" style="max-width:760px;margin:0 auto">';
+  h+='<style>.stat-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}.stat-chip{border:1px solid #d1d5db;background:#fff;color:#374151;border-radius:999px;padding:7px 13px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}.stat-chip.on{background:#1a1a2e;color:#fff;border-color:#1a1a2e}</style>';
+  h+='<div style="font-size:11px;color:#7c3aed;font-weight:700;text-align:right;margin-bottom:6px">'+APP_VERSION+'</div>';
+  h+='<div class="stat-chips">';
+  chips.forEach(function(c){h+='<button class="stat-chip'+(c[0]===STAT_SEL?' on':'')+'" data-sp="'+c[0]+'" onclick="statSel(\''+c[0]+'\')">'+c[1]+'</button>';});
+  h+='</div>';
+  chips.forEach(function(c){h+='<div class="stat-panel" data-sp="'+c[0]+'" style="display:'+(c[0]===STAT_SEL?'block':'none')+'">'+(PN[c[0]]||'')+'</div>';});
+  h+='</div>';
+  return h;
+}
+var STAT_SEL='resumen';
+function statSel(k){
+  STAT_SEL=k;
+  var ps=document.querySelectorAll('.stat-panel');
+  for(var i=0;i<ps.length;i++)ps[i].style.display=(ps[i].getAttribute('data-sp')===k)?'block':'none';
+  var cs=document.querySelectorAll('.stat-chip');
+  for(var j=0;j<cs.length;j++)cs[j].classList.toggle('on',cs[j].getAttribute('data-sp')===k);
 }
 
 function goTab(tab,btn){
