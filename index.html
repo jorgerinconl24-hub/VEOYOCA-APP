@@ -1112,7 +1112,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v85 · ciudad top por semana';
+var APP_VERSION='v86 · resumen general más claro';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1482,7 +1482,8 @@ function cotUIstats(){
   clientes.forEach(function(cl){var k=_statNorm(cl.producto);if(!k)return;if(!preg[k])preg[k]={nombre:(cl.producto||'').trim(),veces:0};preg[k].veces++;});
   var nCot=Object.keys(telsCot).length,nCer=Object.keys(telsCer).length;
 
-  function tarjeta(v,l,col){return '<div class="stat" style="min-width:0"><div class="stat-v" style="color:'+col+'">'+v+'</div><div class="stat-l">'+l+'</div></div>';}
+  function tarjeta(v,l,col){return '<div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:10px 8px;text-align:center;min-width:0"><div style="font-size:20px;font-weight:800;color:'+col+'">'+v+'</div><div style="font-size:11px;color:#475569;font-weight:600;margin-top:3px;line-height:1.2">'+l+'</div></div>';}
+  function filaR(label,val,desc,col){return '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 2px;border-bottom:1px solid #f0f0f0"><div style="flex:1"><div style="font-size:13px;font-weight:700;color:#111">'+label+'</div><div style="font-size:11px;color:#94a3b8;margin-top:1px">'+desc+'</div></div><div style="font-size:21px;font-weight:800;color:'+col+';white-space:nowrap">'+val+'</div></div>';}
   function tablaAbrir(t){return '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin-bottom:14px;overflow:auto"><div style="font-size:14px;font-weight:700;margin-bottom:8px">'+t+'</div>';}
 
   // ── CÁLCULOS EXTRA (KPIs nuevos) ─────────────────────────────
@@ -1545,21 +1546,19 @@ function cotUIstats(){
 
   // 1) RESUMEN
   b=tablaAbrir('📊 Resumen general');
-  b+='<div style="font-size:12px;color:var(--muted);margin-bottom:10px">Presupuestos (app, WhatsApp y PDFs de los vendedores) y ventas cerradas. "Cerrado" = el cliente quedó en estado <b>CERRADO</b> en el CRM.</div>';
-  b+='<div class="stats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">'
-    +tarjeta(totPresu,'presupuestos','#1a1a2e')
-    +tarjeta(nCot,'clientes cotizados','#1d4ed8')
-    +tarjeta(nCer,'clientes cerrados','#16a34a')
-    +tarjeta(_statPct(nCer,nCot),'conversión','#7c3aed')
-    +tarjeta(fmtMoney(montoCot),'$ cotizado','#0369a1')
-    +tarjeta(fmtMoney(montoCer),'$ cerrado','#166534')
-    +'</div>';
-  b+='<div class="stats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">'
-    +tarjeta(fmtMoney(ticket),'ticket promedio ($)','#166534')
-    +tarjeta(cicloProm?_durTxt(cicloProm):'—','ciclo de venta prom.','#b45309')
-    +tarjeta(fTotal,'clientes en CRM','#1a1a2e')
-    +'</div>';
-  b+='<div style="font-size:11px;color:#94a3b8;margin-top:8px">Ticket promedio = $ cerrado ÷ clientes cerrados. Ciclo de venta = tiempo desde que entró el lead hasta que se marcó la venta (según seguimientos).</div>';
+  b+='<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Un vistazo a toda tu operación de ventas. Cada número trae su explicación al lado.</div>';
+  b+='<div style="font-size:12px;font-weight:800;color:#1a1a2e;margin:14px 0 4px">📋 Clientes y cotizaciones</div>';
+  b+=filaR('Clientes en el CRM',fTotal,'Total de clientes registrados en el sistema','#1a1a2e');
+  b+=filaR('Presupuestos enviados',totPresu,'Cotizaciones hechas en total (app, WhatsApp y PDFs)','#1a1a2e');
+  b+=filaR('Clientes cotizados',nCot,'Personas distintas a las que se les cotizó','#1d4ed8');
+  b+=filaR('Clientes cerrados',nCer,'Clientes que sí compraron (quedaron en CERRADO)','#16a34a');
+  b+=filaR('Conversión',_statPct(nCer,nCot),'De cada 100 clientes cotizados, cuántos compraron','#7c3aed');
+  b+='<div style="font-size:12px;font-weight:800;color:#1a1a2e;margin:16px 0 4px">💰 Dinero</div>';
+  b+=filaR('Monto cotizado','$'+fmtMoney(montoCot),'Suma de todo lo que se ha cotizado','#0369a1');
+  b+=filaR('Monto cerrado','$'+fmtMoney(montoCer),'Suma de lo que realmente se vendió','#166534');
+  b+=filaR('Ticket promedio','$'+fmtMoney(ticket),'Cuánto vale en promedio cada venta cerrada','#166534');
+  b+='<div style="font-size:12px;font-weight:800;color:#1a1a2e;margin:16px 0 4px">⏱ Tiempo</div>';
+  b+=filaR('Ciclo de venta',cicloProm?_durTxt(cicloProm):'—','Lo que tarda un cliente desde que entra hasta que compra','#b45309');
   b+='</div>';
   PN.resumen=b;
 
