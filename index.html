@@ -544,7 +544,24 @@ async function guardarDB(){
   if(!cambiados.length){if(_savePending)_savePending=false;return;} // nada que guardar
   SAVING=true;mostrarBadge('syncing');
   try{
-    var {setDoc,doc}=window._firestore;var _ua=Date.now();
+    var {setDoc,doc,getDoc}=window._firestore;var _ua=Date.now();
+    // ── ANTI-PISADO DE INVENTARIO ──
+    // Si en este guardado va el inventario, primero traemos la última copia del
+    // servidor y FUSIONAMOS de forma aditiva (items, ubicaciones, movimientos y
+    // el stock que generan). Así dos almacenistas cargando a la vez no se borran
+    // lo del otro. Si la lectura falla (sin señal), se guarda como antes.
+    if(carga.inv&&getDoc){
+      try{
+        var _snap=await getDoc(doc(_db,'veoyoca','data'));
+        var _srvInv=(_snap&&_snap.exists&&_snap.exists()&&_snap.data().inv)||null;
+        if(_srvInv&&typeof _srvInv==='object'){
+          var _baseInv=null;try{_baseInv=JSON.parse(_campoHuella['inv']||'null');}catch(e){_baseInv=null;}
+          var _mrg=_mergeInv(_srvInv,carga.inv,_baseInv||{});
+          carga.inv=_mrg;DB.inv=_mrg;
+          try{huellasNuevas['inv']=JSON.stringify(_mrg);}catch(e){}
+        }
+      }catch(e){console.warn('Fusión de inventario no disponible, guardo normal:',e&&e.message);}
+    }
     carga.updatedAt=_ua;
     await setDoc(doc(_db,'veoyoca','data'),carga,{merge:true});
     _lastAppliedUpdatedAt=_ua;
@@ -1095,7 +1112,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v77 · cargar prellenado con lo contado';
+var APP_VERSION='v78 · inventario a prueba de pisado entre almacenistas';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -3620,6 +3637,73 @@ function invMover(tipo,itemId,ubic,cant,opts){opts=opts||{};var inv=invDB();var 
   else if(tipo==='TRASLADO'){invAplicar(itemId,ubic,-q);invAplicar(itemId,opts.ubicDest,q);}
   inv.movs.push({id:uid(),tipo:tipo,itemId:itemId,ubic:ubic,ubicDest:opts.ubicDest||'',cant:q,motivo:opts.motivo||'',usuario:SESSION?SESSION.nombre:'',fecha:fecha(),hora:hora(),ts:Date.now()});
   if(inv.movs.length>1200)inv.movs=inv.movs.slice(-1200);}
+
+// ═══════════════════════════════════════════════════════════
+// FUSIÓN ADITIVA DEL INVENTARIO (anti-pisado entre almacenistas)
+// Cuando dos personas cargan a la vez, la app ya NO reescribe el bloque de
+// inventario de golpe: antes de guardar trae la última copia del servidor y
+// SUMA lo nuevo de este aparato (items, ubicaciones, movimientos y el stock
+// que generan esos movimientos). Así nadie pisa lo que cargó el otro.
+// ═══════════════════════════════════════════════════════════
+function _invById(arr){var m={};(arr||[]).forEach(function(x){if(x&&x.id!=null)m[x.id]=x;});return m;}
+function _mergeArrById(server,local,base){
+  var bM=_invById(base),out={},order=[];
+  (server||[]).forEach(function(x){if(x&&x.id!=null){out[x.id]=x;order.push(x.id);}});
+  (local||[]).forEach(function(x){
+    if(!x||x.id==null)return;
+    var b=bM[x.id],cambio=!b||JSON.stringify(b)!==JSON.stringify(x);
+    if(cambio){if(!(x.id in out))order.push(x.id);out[x.id]=x;}
+    else if(!(x.id in out)){out[x.id]=x;order.push(x.id);}
+  });
+  return order.map(function(id){return out[id];});
+}
+function _cloneStock(s){var o={};Object.keys(s||{}).forEach(function(it){o[it]={};Object.keys(s[it]||{}).forEach(function(u){o[it][u]=s[it][u];});});return o;}
+function _applyMovStock(stock,mov){
+  var q=+mov.cant||0,it=mov.itemId;if(!it)return;
+  function add(u,d){if(!u)return;stock[it]=stock[it]||{};stock[it][u]=(stock[it][u]||0)+d;}
+  if(mov.tipo==='ENTRADA')add(mov.ubic,q);
+  else if(mov.tipo==='SALIDA')add(mov.ubic,-q);
+  else if(mov.tipo==='AJUSTE')add(mov.ubic,q);
+  else if(mov.tipo==='TRASLADO'){add(mov.ubic,-q);add(mov.ubicDest,q);}
+}
+function _mergeConteo(server,local,base){
+  server=server||{historial:[],activo:null};local=local||{historial:[],activo:null};
+  var out={historial:_mergeArrById(server.historial||[],local.historial||[],(base&&base.historial)||[])};
+  var sa=server.activo,la=local.activo,ba=(base&&base.activo)||null;
+  if(!sa&&!la)out.activo=null;
+  else if(sa&&la&&sa.id===la.id){
+    var merged=JSON.parse(JSON.stringify(sa));merged.lineas=merged.lineas||{};
+    var baseL=(ba&&ba.id===la.id&&ba.lineas)||{};
+    Object.keys(la.lineas||{}).forEach(function(k){
+      var ll=la.lineas[k],bl=baseL[k],cambio=!bl||JSON.stringify(bl)!==JSON.stringify(ll);
+      if(cambio)merged.lineas[k]=ll;else if(!(k in merged.lineas))merged.lineas[k]=ll;
+    });
+    out.activo=merged;
+  } else { out.activo=(JSON.stringify(la||null)!==JSON.stringify(ba||null))?la:sa; }
+  return out;
+}
+function _mergeInv(server,local,base){
+  server=server||{};local=local||{};base=base||{};
+  var out={};
+  out.items=_mergeArrById(server.items,local.items,base.items);
+  out.ubicaciones=_mergeArrById(server.ubicaciones,local.ubicaciones,base.ubicaciones);
+  var sMovIds={};(server.movs||[]).forEach(function(m){if(m&&m.id!=null)sMovIds[m.id]=true;});
+  var movs=(server.movs||[]).slice(),nuevos=[];
+  (local.movs||[]).forEach(function(m){if(m&&m.id!=null&&!sMovIds[m.id]){movs.push(m);nuevos.push(m);}});
+  if(movs.length>2000)movs=movs.slice(-2000);
+  out.movs=movs;
+  var stock=_cloneStock(server.stock);
+  nuevos.forEach(function(m){_applyMovStock(stock,m);});
+  out.stock=stock;
+  if(server.conteo||local.conteo)out.conteo=_mergeConteo(server.conteo,local.conteo,base.conteo);
+  var keys={};Object.keys(server).concat(Object.keys(local)).forEach(function(k){keys[k]=true;});
+  Object.keys(keys).forEach(function(k){
+    if(['items','ubicaciones','movs','stock','conteo'].indexOf(k)>=0)return;
+    var lv=local[k],bv=base[k];
+    out[k]=(JSON.stringify(lv)!==JSON.stringify(bv))?lv:(k in server?server[k]:lv);
+  });
+  return out;
+}
 function invEstado(it,total){var r=invNum(it.reorden),mn=invNum(it.minimo);if(mn>0&&total<=mn)return {t:'CRÍTICO',c:'#dc2626',bg:'#fee2e2'};if(r>0&&total<=r)return {t:'REORDENAR',c:'#d97706',bg:'#fef3c7'};return {t:'OK',c:'#16a34a',bg:'#dcfce7'};}
 function invReorden(){return invDB().items.map(function(it){var t=invStockItem(it.id);return {it:it,total:t,est:invEstado(it,t)};}).filter(function(x){return x.est.t!=='OK';}).sort(function(a,b){return a.total-b.total;});}
 function invSetFiltroUb(u){INV_UBIC_FILTRO=u;renderInventario(document.getElementById('content'));}
