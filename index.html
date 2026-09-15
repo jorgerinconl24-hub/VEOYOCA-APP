@@ -1112,7 +1112,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v84 · Estadísticas con selector + embudo/KPIs';
+var APP_VERSION='v85 · ciudad top por semana';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1671,6 +1671,39 @@ function cotUIstats(){
     });
     b+='</tbody></table>';
     b+='<div style="font-size:11px;color:#94a3b8;margin-top:6px">Mismo cálculo que el reporte de los sábados: "esta semana" = clientes nuevos de los últimos 7 días.</div>';
+  }
+  b+='</div>';
+  // Historial: CIUDAD TOP POR SEMANA (agrupa los clientes nuevos por semana calendario
+  // —lunes a domingo— y muestra las ciudades más preguntadas de cada semana).
+  function _lunesSem(d){var x=new Date(d.getFullYear(),d.getMonth(),d.getDate());var dw=x.getDay();x.setDate(x.getDate()+(dw===0?-6:1-dw));x.setHours(0,0,0,0);return x;}
+  function _fmtDM(d){return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2);}
+  var semCiu={};
+  clientes.forEach(function(cl){
+    var ts=_creacionTS(cl);if(!ts)return;
+    var wk=_lunesSem(new Date(ts)),key=wk.getTime();
+    if(!semCiu[key])semCiu[key]={ini:wk,ciu:{},total:0};
+    semCiu[key].total++;
+    var val=(cl.ciudad||'').toString().trim().toUpperCase();
+    if(val)semCiu[key].ciu[val]=(semCiu[key].ciu[val]||0)+1;
+  });
+  var semArr=Object.keys(semCiu).map(function(k){var s=semCiu[k];var top=Object.keys(s.ciu).map(function(c){return {c:c,n:s.ciu[c]};}).sort(function(a,b){return b.n-a.n;});return {ini:s.ini,total:s.total,top:top};}).sort(function(a,b){return b.ini.getTime()-a.ini.getTime();});
+  b+=tablaAbrir('🏆 Ciudad top por semana');
+  if(!semArr.length)b+='<div style="font-size:12px;color:var(--muted)">Aún no hay clientes con fecha para agrupar por semana.</div>';
+  else{
+    var iniHoy=_lunesSem(new Date()).getTime();
+    b+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:360px"><thead><tr style="text-align:left;border-bottom:2px solid #111"><th style="padding:6px 4px">Semana</th><th style="padding:6px 4px">Ciudades top</th><th style="padding:6px 4px;text-align:right">Total</th></tr></thead><tbody>';
+    semArr.slice(0,16).forEach(function(x){
+      var fin=new Date(x.ini.getTime()+6*86400000);
+      var esSemHoy=x.ini.getTime()===iniHoy;
+      var tops=x.top.slice(0,3).map(function(t,i){return (i===0?'<b>'+esc(t.c)+' ('+t.n+')</b>':esc(t.c)+' ('+t.n+')');}).join(' · ');
+      if(x.top.length>3)tops+=' · +'+(x.top.length-3);
+      b+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px;white-space:nowrap'+(esSemHoy?';font-weight:700;color:#166534':'')+'">'+_fmtDM(x.ini)+' – '+_fmtDM(fin)+(esSemHoy?' · ESTA':'')+'</td>'
+        +'<td style="padding:6px 4px">'+(tops||'<span style="color:var(--muted)">sin ciudad</span>')+'</td>'
+        +'<td style="padding:6px 4px;text-align:right;font-weight:700">'+x.total+'</td></tr>';
+    });
+    b+='</tbody></table>';
+    if(semArr.length>16)b+='<div style="font-size:11px;color:var(--muted);margin-top:6px">Mostrando las 16 semanas más recientes.</div>';
+    b+='<div style="font-size:11px;color:#94a3b8;margin-top:6px">Cada semana va de lunes a domingo. "Total" = clientes nuevos de esa semana; en negrita la ciudad más preguntada.</div>';
   }
   b+='</div>';
   PN.ciudades=b;
