@@ -1112,7 +1112,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v81 · ⏱ atención solo usuario admin';
+var APP_VERSION='v82 · clientes/día + ⏱ atención';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1485,6 +1485,7 @@ function cotUIstats(){
   function tarjeta(v,l,col){return '<div class="stat" style="min-width:0"><div class="stat-v" style="color:'+col+'">'+v+'</div><div class="stat-l">'+l+'</div></div>';}
   function tablaAbrir(t){return '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin-bottom:14px;overflow:auto"><div style="font-size:14px;font-weight:700;margin-bottom:8px">'+t+'</div>';}
   var h='<div class="section-pad" style="max-width:760px;margin:0 auto">';
+  h+='<div style="font-size:11px;color:#7c3aed;font-weight:700;text-align:right;margin-bottom:2px">'+APP_VERSION+'</div>';
   h+='<div style="font-size:12px;color:var(--muted);margin-bottom:10px">Analiza los presupuestos (app, WhatsApp y PDFs que mandan los vendedores) y las ventas cerradas por pedido. "Cerrado" = el cliente quedó en estado <b>CERRADO</b> en el CRM.</div>';
   // Resumen
   h+='<div class="stats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">'
