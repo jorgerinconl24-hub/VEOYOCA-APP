@@ -513,9 +513,11 @@ function _campoValor(k){
   if(k==='desgloses')return DB.desgloses||[];
   if(k==='inv')return DB.inv||{items:[],ubicaciones:[],movs:[],stock:{}};
   if(k==='fin')return DB.fin||{cobrar:[],pagar:[],gastos:[]};
+  if(k==='botProductos')return DB.botProductos||{};
+  if(k==='fotosPrecios')return DB.fotosPrecios||{};
   return null;
 }
-var _CAMPOS=['usuarios','pedidos','bitacora','presupuestosDoc','pedidosDoc','ofertasPrecios','instaladores','cargaPlan','desgloses','inv','fin'];
+var _CAMPOS=['usuarios','pedidos','bitacora','presupuestosDoc','pedidosDoc','ofertasPrecios','instaladores','cargaPlan','desgloses','inv','fin','botProductos','fotosPrecios'];
 // Marca todos los campos como "iguales al servidor" (al cargar o al recibir cambios).
 function _sellarHuellas(){
   _CAMPOS.forEach(function(k){try{_campoHuella[k]=JSON.stringify(_campoValor(k));}catch(e){_campoHuella[k]='';}});
@@ -918,19 +920,88 @@ function preciosRenderLista(){
   var h='';
   if(PRECIOS_TITSEL&&!q)h+=preciosOfertasHTML(PRECIOS_TITSEL,esAdmin);
   if(!rows.length)h+='<div style="text-align:center;color:var(--muted);font-size:13px;padding:20px">Sin resultados.</div>';
-  else{h+='<div style="font-size:11px;color:var(--muted);margin:2px 2px 8px">'+rows.length+' producto(s)</div>';rows.forEach(function(pair){h+=preciosCardHTML(pair[0],pair[1]);});}
+  else{
+    var enBotN=rows.filter(function(pair){return DB.botProductos&&DB.botProductos[preciosNorm(pair[0][1])];}).length;
+    h+='<div style="font-size:11px;color:var(--muted);margin:2px 2px 8px">'+rows.length+' producto(s) · <b style="color:#7c3aed">'+enBotN+' en el bot 🤖</b></div>';
+    if(esAdmin&&PRECIOS_TITSEL&&!q)h+='<div style="display:flex;gap:6px;margin:0 2px 10px"><button class="btn btn-sm" style="flex:1;background:#7c3aed;color:#fff" onclick="preciosBotCategoria(true)">🤖 Dar toda esta categoría al bot</button><button class="btn btn-ghost btn-sm" onclick="preciosBotCategoria(false)">Quitar todos</button></div>';
+    rows.forEach(function(pair){h+=preciosCardHTML(pair[0],pair[1]);});
+  }
   el.innerHTML=h;
 }
 function preciosCardHTML(r,idx){
   var c=r[2],v=r[3],p=r[4];
+  var esAdmin=SESSION&&SESSION.rol==='admin';
+  var k=preciosNorm(r[1]);
+  var enBot=!!(DB.botProductos&&DB.botProductos[k]);
+  var foto=(DB.fotosPrecios&&DB.fotosPrecios[k])||'';
   function fila(lbl,usd,bs,col){return '<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:2px 0"><span style="color:#475569">'+lbl+'</span><span><b style="color:'+col+'">'+_pf(usd)+'</b> <span style="color:#64748b">· en Bs '+_pf(bs)+'</span></span></div>';}
-  var h='<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin-bottom:8px">';
-  h+='<div style="font-size:13px;font-weight:600;color:#1a1a2e;margin-bottom:6px">'+esc(r[1])+'</div>';
+  var h='<div style="background:#fff;border:1px solid '+(enBot?'#7c3aed':'#e5e7eb')+';border-radius:10px;padding:12px;margin-bottom:8px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px"><div style="font-size:13px;font-weight:600;color:#1a1a2e">'+esc(r[1])+'</div>'+(enBot?'<span style="font-size:10px;font-weight:700;color:#7c3aed;background:#f3e8ff;border-radius:999px;padding:2px 8px;white-space:nowrap">🤖 BOT</span>':'')+'</div>';
+  if(foto)h+='<img src="'+esc(foto)+'" alt="" style="width:100%;max-height:160px;object-fit:contain;border-radius:8px;background:#f8fafc;margin-bottom:6px">';
   h+=fila('Contado',c,preciosBs(c),'#065f46');
   h+=fila('Por volumen',v,preciosBs(v),'#1d4ed8');
   h+=fila('Pronto pago',p,preciosBs(p),'#7c3aed');
   h+='<button class="btn btn-ghost btn-sm" style="width:100%;margin-top:8px" onclick="preciosCopiar('+idx+')">📋 Copiar para el cliente</button>';
+  if(esAdmin){
+    h+='<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">';
+    h+='<button class="btn btn-sm" style="flex:1;min-width:120px;background:'+(enBot?'#7c3aed':'#f3f4f6')+';color:'+(enBot?'#fff':'#374151')+';border:1px solid '+(enBot?'#7c3aed':'#d1d5db')+'" onclick="preciosToggleBot('+idx+')">'+(enBot?'🤖 Quitar del bot':'🤖 Dar al bot')+'</button>';
+    h+='<input type="file" accept="image/*" id="pfoto-'+idx+'" style="display:none" onchange="preciosFotoSubir('+idx+',this)">';
+    h+='<button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'pfoto-'+idx+'\').click()">📷 '+(foto?'Cambiar foto':'Foto')+'</button>';
+    if(foto)h+='<button class="btn btn-ghost btn-sm" style="color:#dc2626" onclick="preciosQuitarFoto('+idx+')">🗑️</button>';
+    h+='</div>';
+    if(enBot&&!foto)h+='<div style="font-size:10px;color:#b45309;margin-top:4px">El bot dará su precio, pero sin foto hasta que le cargues una.</div>';
+  }
   h+='</div>';return h;
+}
+// Marca/desmarca un producto para que el bot vendedor pueda darlo (precio + foto).
+function preciosToggleBot(idx){
+  if(!(SESSION&&SESSION.rol==='admin'))return;
+  var r=preciosCat()[idx];if(!r)return;
+  var k=preciosNorm(r[1]);
+  if(!DB.botProductos)DB.botProductos={};
+  if(DB.botProductos[k]){delete DB.botProductos[k];toast('"'+r[1]+'" ya NO lo da el bot','warn');}
+  else{DB.botProductos[k]=true;toast('"'+r[1]+'" ahora lo puede dar el bot','ok');}
+  guardarDB();preciosRenderLista();
+}
+// Sube/actualiza la foto del producto que el bot enviará (clave = nombre normalizado).
+function preciosFotoSubir(idx,inp){
+  if(!(SESSION&&SESSION.rol==='admin'))return;
+  var file=inp.files&&inp.files[0];inp.value='';if(!file)return;
+  var r=preciosCat()[idx];if(!r)return;
+  var k=preciosNorm(r[1]);
+  toast('Preparando la foto...','');
+  invComprimir(file,function(dataUrl){
+    if(!dataUrl){toast('No se pudo leer esa imagen','err');return;}
+    toast('Subiendo foto...','');
+    fetch('https://veoyoca-webhook.onrender.com/subir-pdf-orden',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify({data:dataUrl,mediaType:'image/jpeg',nombre:'precio_'+k.replace(/[^a-z0-9]+/g,'_').substring(0,40)})})
+    .then(function(r2){return r2.json();})
+    .then(function(res){
+      if(res&&res.ok&&res.url){
+        if(!DB.fotosPrecios)DB.fotosPrecios={};
+        DB.fotosPrecios[k]=res.url;
+        guardarDB();toast('Foto guardada ✓','ok');preciosRenderLista();
+      }else toast('No se pudo subir: '+((res&&res.error)||'error'),'err');
+    })
+    .catch(function(){toast('Sin señal — la foto no subió. Reinténtalo con conexión.','err');});
+  });
+}
+// Da o quita del bot TODOS los productos de la categoría seleccionada.
+function preciosBotCategoria(activar){
+  if(!(SESSION&&SESSION.rol==='admin'))return;
+  var t=PRECIOS_TITSEL;if(!t)return;
+  if(!DB.botProductos)DB.botProductos={};
+  var n=0;
+  preciosCat().forEach(function(r){if((r[0]||'')!==t)return;var k=preciosNorm(r[1]);if(activar){if(!DB.botProductos[k]){DB.botProductos[k]=true;n++;}}else{if(DB.botProductos[k]){delete DB.botProductos[k];n++;}}});
+  guardarDB();preciosRenderLista();
+  toast(activar?('Le di '+n+' producto(s) al bot'):('Quité '+n+' producto(s) del bot'),activar?'ok':'warn');
+}
+function preciosQuitarFoto(idx){
+  if(!(SESSION&&SESSION.rol==='admin'))return;
+  var r=preciosCat()[idx];if(!r)return;
+  var k=preciosNorm(r[1]);
+  if(!DB.fotosPrecios||!DB.fotosPrecios[k])return;
+  if(!confirm('¿Quitar la foto de "'+r[1]+'"?'))return;
+  delete DB.fotosPrecios[k];guardarDB();preciosRenderLista();toast('Foto quitada','warn');
 }
 function preciosCopiar(idx){
   var r=preciosCat()[idx];if(!r){toast('No encontré el producto','err');return;}
@@ -1112,7 +1183,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v86 · resumen general más claro';
+var APP_VERSION='v88 · marcar productos y foto para el bot';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -2736,6 +2807,26 @@ function notificarNuevoLeadGrupo(cl){
     })}).then(function(r){return r.json();}).then(function(d){if(d&&d.ok)toast('Lead anunciado en el grupo','ok');}).catch(function(e){console.log('nuevo-lead-crm err',e);});
   }catch(e){console.log('notif lead grupo err',e);}
 }
+// Cuando un lead queda con VENDEDOR asignado y TELÉFONO, se le pide al webhook
+// que el bot le escriba al cliente desde el WhatsApp de ese vendedor. El webhook
+// solo envía si el vendedor tiene su instancia configurada, y no repite por
+// (cliente + vendedor). Se marca localmente para no llamar de más en la sesión.
+function notificarBienvenidaVendedor(cl){
+  try{
+    if(!cl||!cl.id||!cl.vendedor)return;
+    var tel=(cl.telefono||'').replace(/[^0-9]/g,'');
+    if(tel.length<7)return;
+    var marca=cl.vendedor+'|'+tel;
+    if(cl._bienvenidaVend===marca)return;   // ya se pidió para este vendedor+tel
+    cl._bienvenidaVend=marca;
+    fetch('https://veoyoca-webhook.onrender.com/lead-bienvenida',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify({
+      clienteId:cl.id,nombre:cl.nombre||'',telefono:cl.telefono||'',vendedor:cl.vendedor||'',producto:cl.producto||''
+    })}).then(function(r){return r.json();}).then(function(d){
+      if(d&&d.enviado){toast('El bot le escribió al cliente desde el WhatsApp de '+cl.vendedor,'ok');}
+      else if(!d||!d.ya){cl._bienvenidaVend='';} // no se envió (vendedor sin WhatsApp o falló): permitir reintento
+    }).catch(function(e){cl._bienvenidaVend='';console.log('lead-bienvenida err',e);});
+  }catch(e){console.log('notificarBienvenidaVendedor err',e);}
+}
 function chipCliente(txt,bg,col){return '<span class="card-vend" style="background:'+bg+';color:'+col+';margin-right:4px">'+esc(txt)+'</span>';}
 function renderVentas(c){
   var cls=getClientes();
@@ -3076,6 +3167,8 @@ function crmCampo(id,campo,valor){
   CRM_SAVE_TIMER=setTimeout(function(){guardarCliente1(cl);},900);
   if(campo==='proximoContacto'&&valor)notificarProximoContacto(cl);
   if(campo==='redSocial'&&valor)notificarNuevoLeadGrupo(cl);
+  // Bot vendedor: al asignar el vendedor, o al poner el teléfono cuando ya hay vendedor.
+  if((campo==='vendedor'&&valor)||(campo==='telefono'&&cl.vendedor))notificarBienvenidaVendedor(cl);
   // Si se registró un resultado, refresca la lista para que se vea la fecha de
   // "último contacto" marcada de una (y el badge/orden actualizado).
   if(logueado)filtrarVentas();
@@ -3286,6 +3379,7 @@ async function guardarCliente(){
   registrarBitacora(cl.id,(esNuevo?'CLIENTE CRM creado: ':'CLIENTE CRM editado: ')+nombre+' por '+SESSION.nombre);
   if(cl.proximoContacto&&cl.proximoContacto!==proxAntes)notificarProximoContacto(cl);
   if(cl.redSocial)notificarNuevoLeadGrupo(cl);
+  if(cl.vendedor&&cl.telefono)notificarBienvenidaVendedor(cl); // bot vendedor saluda al cliente
   await guardarCliente1(cl);
   cerrarModal('modal-cliente');
   if(TAB==='ventas')renderVentas(document.getElementById('content'));
@@ -5827,6 +5921,7 @@ async function initFirebase(){
       DB.cargaPlan=d.cargaPlan||{items:[]};
       DB.inv=d.inv||{items:[],ubicaciones:[],movs:[],stock:{}};
       DB.fin=d.fin||{cobrar:[],pagar:[],gastos:[]};
+      DB.botProductos=d.botProductos||{};DB.fotosPrecios=d.fotosPrecios||{};
       _servidorLeido=true;
     }
     else{DB.usuarios=[{id:'admin',nombre:'Administrador',username:'admin',password:'admin123',rol:'admin',creado:fecha()}];}
@@ -5890,6 +5985,8 @@ function _aplicarSnap(d){
     else if(k==='desgloses')DB.desgloses=d.desgloses||[];
     else if(k==='inv')DB.inv=d.inv||{items:[],ubicaciones:[],movs:[],stock:{}};
     else if(k==='fin')DB.fin=d.fin||{cobrar:[],pagar:[],gastos:[]};
+    else if(k==='botProductos')DB.botProductos=d.botProductos||{};
+    else if(k==='fotosPrecios')DB.fotosPrecios=d.fotosPrecios||{};
     _campoHuella[k]=(k==='bitacora')?JSON.stringify(DB.bitacora.slice(-500)):JSON.stringify(_campoValor(k));
   });
   // Pestañas con estado transitorio que no debe redibujarse en vivo.
