@@ -1183,7 +1183,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v88 · marcar productos y foto para el bot';
+var APP_VERSION='v89 · cotizaciones de rack más pedidas (bot)';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1866,10 +1866,44 @@ function cotUIstats(){
   b+='</div>';
   PN.pedidos=b;
 
+  // 14) COTIZACIONES MÁS ENVIADAS (BOT) — racks que el bot cotizó a los vendedores
+  var cbArr=Array.isArray(DB.cotizacionesBot)?DB.cotizacionesBot:[];
+  var cbMap={};
+  cbArr.forEach(function(x){
+    var k=x.sig||x.resumen||'';if(!k)return;
+    if(!cbMap[k])cbMap[k]={resumen:x.resumen||k,n:0,vends:{},ultFecha:x.fecha||'',ultTs:x.ts||0,precio:x.precioUSD||null};
+    var e=cbMap[k];e.n++;
+    if(x.vendedor)e.vends[x.vendedor]=(e.vends[x.vendedor]||0)+1;
+    if((x.ts||0)>=e.ultTs){e.ultTs=x.ts||0;e.ultFecha=x.fecha||e.ultFecha;if(x.precioUSD)e.precio=x.precioUSD;}
+  });
+  var cbList=Object.keys(cbMap).map(function(k){return cbMap[k];}).sort(function(a,b){return b.n-a.n;});
+  b=tablaAbrir('🏗️ Cotizaciones más enviadas (bot) — '+cbArr.length+' en total');
+  if(!cbList.length)b+='<div style="font-size:12px;color:var(--muted)">Aún no hay cotizaciones de rack registradas por el bot. En cuanto los vendedores le pidan racks al bot, aparecen aquí sumadas.</div>';
+  else{
+    var maxCb=cbList[0].n||1;
+    b+='<div style="font-size:11px;color:var(--muted);margin-bottom:6px">'+cbList.length+' rack(s) distintos · ordenados por los más pedidos</div>';
+    b+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:360px"><thead><tr style="text-align:left;border-bottom:2px solid #111"><th style="padding:6px 4px">Rack (medidas y specs)</th><th style="padding:6px 4px;text-align:right">Veces</th><th style="padding:6px 4px;width:22%"></th></tr></thead><tbody>';
+    cbList.slice(0,40).forEach(function(x){
+      var vtxt=Object.keys(x.vends).map(function(v){return esc(v)+' ('+x.vends[v]+')';}).join(', ');
+      var sub='';
+      if(x.precio)sub+='ref. $'+Number(x.precio).toFixed(2);
+      if(vtxt)sub+=(sub?' · ':'')+vtxt;
+      if(x.ultFecha)sub+=(sub?' · ':'')+'últ. '+esc(x.ultFecha);
+      b+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px"><div style="font-weight:600">'+esc(x.resumen)+'</div>'+(sub?'<div style="font-size:10px;color:#94a3b8;margin-top:2px">'+sub+'</div>':'')+'</td>'
+        +'<td style="padding:6px 4px;text-align:right;font-weight:800;color:#b45309">'+x.n+'</td>'
+        +'<td style="padding:6px 4px"><div style="height:12px;border-radius:6px;background:#b45309;width:'+Math.round(x.n/maxCb*100)+'%;min-width:6px"></div></td></tr>';
+    });
+    b+='</tbody></table>';
+    if(cbList.length>40)b+='<div style="font-size:11px;color:var(--muted);margin-top:6px">Mostrando los 40 racks más pedidos.</div>';
+    b+='<div style="font-size:11px;color:#94a3b8;margin-top:6px">Cada vez que un vendedor le pide un rack al bot por WhatsApp, queda registrado aquí. Los racks con las mismas medidas y specs se suman.</div>';
+  }
+  b+='</div>';
+  PN.cotizbot=b;
+
   // ── SELECTOR (chips) ─────────────────────────────────────────
   var chips=[['resumen','📊 Resumen'],['embudo','🔻 Embudo'],['sinatender','🔴 Sin atender']];
   if(esDuenoJorge())chips.push(['atencion','⏱ Atención']);
-  chips=chips.concat([['objeciones','🚫 Por qué no compran'],['fuentes','📣 Fuentes'],['ciudades','🏙️ Ciudades'],['pordia','🗓️ Por día'],['preguntados','❓ Preguntados'],['cotizados','🔝 Cotizados'],['cerrados','✅ Más vendidos'],['vendedores','🧑‍💼 Vendedores'],['pedidos','🚚 Pedidos']]);
+  chips=chips.concat([['objeciones','🚫 Por qué no compran'],['fuentes','📣 Fuentes'],['ciudades','🏙️ Ciudades'],['pordia','🗓️ Por día'],['preguntados','❓ Preguntados'],['cotizados','🔝 Cotizados'],['cerrados','✅ Más vendidos'],['cotizbot','🏗️ Cotizaciones bot'],['vendedores','🧑‍💼 Vendedores'],['pedidos','🚚 Pedidos']]);
   var keysSet={};chips.forEach(function(c){keysSet[c[0]]=true;});
   if(!keysSet[STAT_SEL])STAT_SEL='resumen';
 
@@ -5922,6 +5956,7 @@ async function initFirebase(){
       DB.inv=d.inv||{items:[],ubicaciones:[],movs:[],stock:{}};
       DB.fin=d.fin||{cobrar:[],pagar:[],gastos:[]};
       DB.botProductos=d.botProductos||{};DB.fotosPrecios=d.fotosPrecios||{};
+      DB.cotizacionesBot=d.cotizacionesBot||[];
       _servidorLeido=true;
     }
     else{DB.usuarios=[{id:'admin',nombre:'Administrador',username:'admin',password:'admin123',rol:'admin',creado:fecha()}];}
@@ -5989,6 +6024,8 @@ function _aplicarSnap(d){
     else if(k==='fotosPrecios')DB.fotosPrecios=d.fotosPrecios||{};
     _campoHuella[k]=(k==='bitacora')?JSON.stringify(DB.bitacora.slice(-500)):JSON.stringify(_campoValor(k));
   });
+  // Solo-lectura en la app (lo escribe el webhook): cotizaciones del bot para la estadística.
+  if(d.cotizacionesBot)DB.cotizacionesBot=d.cotizacionesBot;
   // Pestañas con estado transitorio que no debe redibujarse en vivo.
   if(TAB==='cotizar')return;
   if(TAB==='plan'&&PLAN_MODO==='carga')return;
