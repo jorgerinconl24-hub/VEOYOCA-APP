@@ -680,9 +680,9 @@ var RKV_VIGA_IND_ESC={0.10:{1.25:27.80,1.50:32.43,1.75:37.07,2.00:41.70,2.25:46.
 var RKV_VIGA_IND_CUA={0.10:{1.25:30.18,1.50:35.30,1.75:40.41,2.00:45.52,2.25:50.63,2.50:68.08,2.75:74.43,3.00:80.78},0.125:{1.25:32.91,1.50:38.57,1.75:44.22,2.00:49.88,2.25:55.54,2.50:74.85,2.75:81.88,3.00:88.90},0.15:{1.25:37.00,1.50:43.48,1.75:49.95,2.00:56.42,2.25:62.90,2.50:85.01,2.75:93.04,3.00:101.08}};
 var RKV_RES_IND={0.10:{1.25:4514,1.50:3761,1.75:3224,2.00:2821,2.25:2508,2.50:2257,2.75:2052,3.00:1880},0.125:{1.25:6480,1.50:5400,1.75:4629,2.00:4050,2.25:3601,2.50:3240,2.75:2945,3.00:2700},0.15:{1.25:8849,1.50:7375,1.75:6321,2.00:5531,2.25:4916,2.50:4424,2.75:4022,3.00:3687}};
 var RKV_MARCO_MINI={2.00:{0.60:46.40,0.70:48.28,0.80:50.19},2.50:{0.60:54.71,0.70:56.49,0.80:58.37},3.00:{0.60:61.31,0.70:63.08,0.80:64.96},3.50:{0.60:67.92,0.70:69.69,0.80:71.57},4.00:{0.60:93.25,0.70:95.70,0.80:98.32}};
-var RKV_VIGA_MINI_12={1.00:12.17,1.25:14.78,1.50:17.38,1.75:19.98,2.00:22.58,2.25:25.18,2.40:26.74};
+var RKV_VIGA_MINI_12={1.00:12.17,1.25:14.78,1.50:17.38,1.75:19.98,2.00:22.58,2.25:25.18,2.40:26.74,2.60:37,2.70:43};
 var RKV_VIGA_MINI_25={1.20:16.71,1.50:20.45,2.00:26.67,2.40:31.66};
-var RKV_RES_MINI_12={1.00:2500,1.25:2300,1.50:1900,1.75:1700,2.00:1500,2.25:1300,2.40:1200};
+var RKV_RES_MINI_12={1.00:2500,1.25:2300,1.50:1900,1.75:1700,2.00:1500,2.25:1300,2.40:1200,2.60:800,2.70:500};
 var RKV_MARCO_LIGHT={1.20:{0.30:17.58,0.40:18.47,0.60:20.78,0.80:23.22,1.00:30.93},2.00:{0.30:24.90,0.40:25.44,0.60:27.75,0.80:30.19,1.00:37.90},2.40:{0.30:28.55,0.40:28.92,0.60:31.23,0.80:33.67,1.00:41.38}};
 var RKV_VIGA_LIGHT={1.25:{1.5:12.09,2.0:15.48},1.50:{1.5:14.15,2.0:18.21},1.75:{1.5:16.20,2.0:20.94},2.00:{1.5:18.26,2.0:23.68}};
 var RKV_RES_LIGHT={1.25:{1.5:470,2.0:620},1.50:{1.5:400,2.0:550},1.75:{1.5:320,2.0:470},2.00:{1.5:250,2.0:400}};
@@ -1154,10 +1154,63 @@ function calcularCotizacion(){
   var hacer=function(t){
     params.tasaBCV=t&&t.bcv?t.bcv:0;params.tasaBinance=t&&t.binance?t.binance:0;
     var r=cotizarRack(params);
-    if(!r.ok){res.innerHTML='<div style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:10px;padding:12px;font-size:13px">⚠️ '+r.error+'</div>';return;}
+    if(!r.ok){var _altH=rkvAlternativasHTML(params,(params.tasaBCV>0&&params.tasaBinance>0)?(params.tasaBinance/params.tasaBCV):null);res.innerHTML='<div style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:10px;padding:12px;font-size:13px">⚠️ '+r.error+'</div>'+_altH;return;}
     res.innerHTML=cot_render(r);
   };
   if(RKV_TASAS)hacer(RKV_TASAS);else rkvCargarTasas(hacer);
+}
+// Racks ESTÁNDAR (predefinidos por Jorge) — misma lista que el webhook. 2ª alternativa.
+var RKV_RACKS_ESTANDAR=[
+  {nombre:'Rack Industrial',alto:3.00,largo:2.70,fondo:1.00,carga:2000,modulos:false,tier:'inventario',marcoUnit:86.60,vigaUnit:47.90,
+   match:{alto:[3.00,4.00],largo:[2.40,3.00],fondo:[0.80,1.20],carga:[1000,2000]}},
+  {nombre:'Rack Industrial',alto:6.00,largo:2.70,fondo:1.00,carga:2000,modulos:false,tier:'inventario',marcoUnit:194.00,vigaUnit:47.90,
+   match:{alto:[5.00,6.00],largo:[2.40,3.00],fondo:[0.80,1.20],carga:[1000,2000]}},
+  {nombre:'Rack Industrial',alto:5.50,largo:2.70,fondo:1.00,carga:2000,modulos:false,tier:'fabricacion',marcoUnit:206.77,vigaUnit:71.93,
+   match:{alto:[5.00,6.00],largo:[2.40,3.00],fondo:[0.80,1.20],carga:[1000,2000]}},
+  {nombre:'Mini Rack',alto:3.00,largo:2.20,fondo:0.70,niveles:5,carga:300,modulos:false,tier:'fabricacion',fijo:true,precioCompleto:729.00,precioAdicional:677.42,
+   match:{alto:[2.40,3.50],largo:[1.80,2.40],fondo:[0.50,1.00],carga:[100,300]}}
+];
+function rkvEnRango(v,r){return v!=null&&!isNaN(v)&&v>=r[0]-1e-9&&v<=r[1]+1e-9;}
+function rkvRacksEstandarAplican(p){var carga=(p.cargaPorNivel!=null)?p.cargaPorNivel:p.carga;return RKV_RACKS_ESTANDAR.filter(function(e){var m=e.match;return rkvEnRango(p.alto,m.alto)&&rkvEnRango(p.largo,m.largo)&&rkvEnRango(p.fondo,m.fondo)&&rkvEnRango(carga,m.carga);});}
+function rkvAlternativasHTML(p,factorBs){
+  var aps=rkvRacksEstandarAplican(p);if(!aps.length)return '';
+  var N=(p.niveles&&p.niveles>0)?Math.round(p.niveles):2; // escala con los niveles pedidos
+  function card(e){
+    if(e.fijo){ // precio fijo (unidad completa), variantes 2 marcos / 1 marco
+      var bsC=(factorBs&&factorBs>0)?(Math.round(e.precioCompleto*factorBs*100)/100):null;
+      var bsA=(factorBs&&factorBs>0)?(Math.round(e.precioAdicional*factorBs*100)/100):null;
+      var cf='<div style="background:#fff;border:1px solid #fde68a;border-radius:10px;padding:12px;margin-bottom:8px">';
+      cf+='<div style="font-weight:700;color:#1a1a2e">🏗️ '+esc(e.nombre)+'</div>';
+      cf+='<div style="font-size:11px;color:var(--muted);margin:2px 0 8px">'+e.alto.toFixed(2)+' alto × '+e.largo.toFixed(2)+' largo × '+e.fondo.toFixed(2)+' fondo · '+e.niveles+' niveles · '+e.carga+' kg/nivel · '+(e.modulos?'con módulos':'sin módulos')+'</div>';
+      cf+='<div style="display:flex;gap:8px">';
+      cf+='<div style="flex:1;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:8px;text-align:center"><div style="font-size:10px;color:#047857;font-weight:600">COMPLETO (2 marcos)</div><div style="font-size:18px;font-weight:800;color:#065f46">$'+e.precioCompleto.toFixed(2)+'</div>'+(bsC!=null?'<div style="font-size:10px;color:#10b981">Bs $'+bsC.toFixed(2)+'</div>':'')+'</div>';
+      cf+='<div style="flex:1;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:8px;text-align:center"><div style="font-size:10px;color:#9a3412;font-weight:600">ADICIONAL (1 marco)</div><div style="font-size:18px;font-weight:800;color:#9a3412">$'+e.precioAdicional.toFixed(2)+'</div>'+(bsA!=null?'<div style="font-size:10px;color:#c2410c">Bs $'+bsA.toFixed(2)+'</div>':'')+'</div>';
+      cf+='</div><div style="font-size:10px;color:var(--muted);margin-top:6px">El "adicional" es cuando va pegado a otro y comparten un marco.</div></div>';
+      return cf;
+    }
+    var subMarco=Math.round(2*e.marcoUnit*100)/100;
+    var nVigas=2*N;var subViga=Math.round(nVigas*e.vigaUnit*100)/100;
+    var precio=Math.round((subMarco+subViga)*100)/100;
+    var bs=(factorBs&&factorBs>0)?(Math.round(precio*factorBs*100)/100):null;
+    var c='<div style="background:#fff;border:1px solid #fde68a;border-radius:10px;padding:12px;margin-bottom:8px">';
+    c+='<div style="font-weight:700;color:#1a1a2e">🏗️ '+esc(e.nombre)+'</div>';
+    c+='<div style="font-size:11px;color:var(--muted);margin:2px 0 8px">'+e.alto.toFixed(2)+' alto × '+e.largo.toFixed(2)+' largo × '+e.fondo.toFixed(2)+' fondo · '+N+' niveles ('+nVigas+' vigas) · '+e.carga+' kg/nivel · '+(e.modulos?'con módulos':'sin módulos')+'</div>';
+    c+='<div style="font-size:12px;color:#374151">• Marco — 2 × $'+e.marcoUnit.toFixed(2)+' = $'+subMarco.toFixed(2)+'</div>';
+    c+='<div style="font-size:12px;color:#374151">• Vigas — '+nVigas+' × $'+e.vigaUnit.toFixed(2)+' = $'+subViga.toFixed(2)+'</div>';
+    c+='<div style="margin-top:8px;display:flex;gap:8px">';
+    c+='<div style="flex:1;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:8px;text-align:center"><div style="font-size:10px;color:#047857;font-weight:600">PRECIO</div><div style="font-size:18px;font-weight:800;color:#065f46">$'+precio.toFixed(2)+'</div></div>';
+    if(bs!=null)c+='<div style="flex:1;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:8px;text-align:center"><div style="font-size:10px;color:#4338ca;font-weight:600">EN BOLÍVARES</div><div style="font-size:18px;font-weight:800;color:#3730a3">$'+bs.toFixed(2)+'</div></div>';
+    c+='</div></div>';
+    return c;
+  }
+  var inv=aps.filter(function(e){return (e.tier||'inventario')==='inventario';});
+  var fab=aps.filter(function(e){return e.tier==='fabricacion';});
+  var h='<div style="margin-top:14px;background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:14px">';
+  h+='<div style="font-size:13px;font-weight:700;color:#92400e;margin-bottom:4px">💡 2ª alternativa — modelo estándar</div>';
+  if(inv.length&&fab.length)h+='<div style="font-size:11px;color:#92400e;margin-bottom:8px">Si lo tienes en inventario ofrece el primero; si no, el de sobre pedido.</div>';
+  if(inv.length){h+='<div style="font-size:12px;font-weight:700;color:#065f46;margin:6px 0 4px">📦 Si lo tienes en inventario</div>';inv.forEach(function(e){h+=card(e);});}
+  if(fab.length){h+='<div style="font-size:12px;font-weight:700;color:#9a3412;margin:6px 0 4px">🏭 Si NO lo tienes en inventario (sobre pedido)</div>';fab.forEach(function(e){h+=card(e);});}
+  h+='</div>';return h;
 }
 function cot_render(r){
   var p=r.params;
@@ -1175,7 +1228,8 @@ function cot_render(r){
     +notas
     +'<button class="btn btn-ghost btn-sm" style="width:100%;margin-top:12px" onclick="cot_copiar(this)" data-msg="'+encodeURIComponent(texto)+'">📋 Copiar cotización</button>'
     +'<div style="font-size:11px;color:var(--muted);text-align:center;margin-top:8px">Precios sin IVA</div>'
-    +'</div>';
+    +'</div>'
+    +rkvAlternativasHTML(p,r.factorBs);
 }
 function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg'));copiarAlPortapapeles(msg,'Cotización copiada');}
 
@@ -1183,7 +1237,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v89 · cotizaciones de rack más pedidas (bot)';
+var APP_VERSION='v101 · mini rack cubre rack light (fondo a 1.00)';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
