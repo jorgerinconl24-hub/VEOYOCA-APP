@@ -447,16 +447,25 @@ const CONFIG = {
 /* ===================================================================
    FIREBASE
    =================================================================== */
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+// Misma version de Firebase que index.html: comparten la cache y la sesion.
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc,
   query, where, orderBy, onSnapshot, serverTimestamp, writeBatch
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+} from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 
 const app = initializeApp(CONFIG.firebase);
 const db  = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+});
+
+// Sesion de VeoYoca: el conteo usa la misma cuenta con la que se entra a la
+// app. Sin sesion, las reglas de Firestore no dejan leer ni escribir.
+const auth = getAuth(app);
+const sesionVeo = new Promise(resolve => {
+  const off = onAuthStateChanged(auth, u => { off(); resolve(u); });
 });
 
 /* ===================================================================
@@ -558,6 +567,7 @@ $("#inRol").addEventListener("change", e => {
 $("#btnEntrar").addEventListener("click", async () => {
   const nombre = $("#inNombre").value.trim();
   const rol    = $("#inRol").value;
+  if(!(await sesionVeo)) return avisar("Inicia sesión en VeoYoca","Primero entra a la app VeoYoca con tu usuario y contraseña en este mismo teléfono, y luego vuelve a abrir el conteo.","malo");
   if(nombre.length < 3) return avisar("Falta el nombre","Escribe nombre y apellido para que quede el rastro de quién contó.","malo");
   if(rol === "supervisor" && $("#inPin").value !== CONFIG.pinSupervisor)
     return avisar("PIN incorrecto","Ese PIN no corresponde a un supervisor.","malo");
@@ -586,6 +596,10 @@ try {
     if(guardado.rol === "supervisor") $("#campoPin").style.display = "block";
   }
 } catch(e){}
+sesionVeo.then(u => {
+  if(u) return;
+  $(".pie").innerHTML = '⚠️ No has iniciado sesión en VeoYoca en este teléfono.<br><a href="./" style="color:inherit;font-weight:700">Abrir VeoYoca para entrar</a>';
+});
 
 /* ===================================================================
    SESIONES

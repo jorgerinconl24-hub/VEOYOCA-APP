@@ -179,7 +179,7 @@ table.crm{border-collapse:collapse;font-size:12px;min-width:1780px}
 <div class="field"><label>Usuario o WhatsApp</label><input type="text" id="r-ident" placeholder="tu usuario o tu n&#xFA;mero"></div>
 <button class="btn-primary" onclick="resetSolicitar()">Enviar c&#xF3;digo por WhatsApp</button></div>
 <div id="reset-step2" style="display:none">
-<div class="field"><label>C&#xF3;digo (lleg&#xF3; a tu correo)</label><input type="text" id="r-code" placeholder="6 d&#xED;gitos" inputmode="numeric"></div>
+<div class="field"><label>C&#xF3;digo (lleg&#xF3; a tu WhatsApp)</label><input type="text" id="r-code" placeholder="6 d&#xED;gitos" inputmode="numeric"></div>
 <div class="field"><label>Nueva contrase&#xF1;a</label><input type="password" id="r-newpass" placeholder="tu nueva clave"></div>
 <button class="btn-primary" onclick="resetConfirmar()">Cambiar contrase&#xF1;a</button></div>
 <div class="login-err" id="r-err" style="display:none"></div>
@@ -279,7 +279,7 @@ table.crm{border-collapse:collapse;font-size:12px;min-width:1780px}
 <div class="sheet-body"><input type="hidden" id="u-id">
 <div class="sfield"><label>Nombre completo</label><input type="text" id="u-nombre" placeholder="Ej: Mar&#xED;a L&#xF3;pez"></div>
 <div class="sfield-row"><div class="sfield"><label>Usuario</label><input type="text" id="u-user" placeholder="marialopez"></div>
-<div class="sfield"><label>Contrase&#xF1;a</label><input type="password" id="u-pass" placeholder="&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;"></div></div>
+<div class="sfield"><label>Contrase&#xF1;a <span style="font-weight:400;color:var(--muted)">(m&#xED;nimo 6; vac&#xED;a = no cambiarla)</span></label><input type="password" id="u-pass" placeholder="&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;"></div></div>
 <div class="sfield-row"><div class="sfield"><label>WhatsApp (con 58)</label><input type="tel" id="u-telefono" placeholder="584121234567"></div>
 <div class="sfield"><label>Correo</label><input type="email" id="u-correo" placeholder="vendedor@correo.com"></div></div>
 <div style="background:var(--ibg);border:1px solid #bfdbfe;border-radius:10px;padding:8px 12px;font-size:11px;color:var(--info);margin-bottom:12px">A este WhatsApp y correo llegar&#xE1;n los recordatorios de contactos del CRM.</div>
@@ -334,10 +334,37 @@ function enviarPushOneSignal(titulo, cuerpo) {
   fetch('https://veoyoca-webhook.onrender.com/push-crm', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token: 'veoyoca-push-2026', all: true, titulo: titulo, cuerpo: cuerpo })
+    body: JSON.stringify({ all: true, titulo: titulo, cuerpo: cuerpo })
   }).then(function(r){ return r.json(); })
     .then(function(d){ console.log('Push general:', JSON.stringify(d)); })
     .catch(function(e){ console.log('Push err:', e); });
+}
+
+// ═══════════════════════════════════════════════════════════
+// SESION (Firebase Auth) Y LLAMADAS AL SERVIDOR DE RENDER
+// Ya no hay claves fijas en esta pagina: cada llamada al servidor lleva el
+// token de la sesion de Firebase, y el servidor lo verifica.
+// ═══════════════════════════════════════════════════════════
+var VEO_API='https://veoyoca-webhook.onrender.com';
+var _auth=null,_authMod=null;
+// Correo interno de cada usuario en Firebase Auth (no se usa para enviar nada).
+// Debe ser IGUAL a emailDeUsuario() del webhook.
+function emailDeUsuario(username){
+  return String(username||'').trim().toLowerCase().replace(/[^a-z0-9._-]/g,function(c){return '_'+c.charCodeAt(0).toString(16);})+'@veoyoca-54caf.firebaseapp.com';
+}
+// Toda llamada fetch() al servidor de Render sale con "Authorization: Bearer <token>".
+var _fetchOriginal=window.fetch.bind(window);
+window.fetch=function(url,opts){
+  if(typeof url!=='string'||url.indexOf(VEO_API)!==0||!_auth||!_auth.currentUser)return _fetchOriginal(url,opts);
+  return _auth.currentUser.getIdToken().then(function(tk){
+    var o=Object.assign({},opts||{});
+    o.headers=Object.assign({},o.headers||{},{'Authorization':'Bearer '+tk});
+    return _fetchOriginal(url,o);
+  });
+};
+function veoPost(ruta,datos){
+  return fetch(VEO_API+ruta,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(datos||{})})
+    .then(function(r){return r.json();});
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -534,6 +561,7 @@ async function guardarDB(){
   // Armar el payload solo con lo que cambio en ESTE aparato.
   var carga={},cambiados=[],huellasNuevas={};
   _CAMPOS.forEach(function(k){
+    if(k==='usuarios')return;           // usuarios: solo los cambia el servidor (/usuarios/...)
     var v=_campoValor(k),j;
     try{j=JSON.stringify(v);}catch(e){return;}
     if(j===_campoHuella[k])return;      // sin cambios locales: no se manda
@@ -605,14 +633,30 @@ async function borrarCliente1(id){
   guardarDB();
 }
 
+// La contraseña la verifica Firebase Auth. Al entrar, onAuthStateChanged
+// (en initFirebase) carga los datos y abre la app.
+var _entrando=false;
 function login(){
   var u=document.getElementById('l-user').value.trim().toLowerCase();
   var p=document.getElementById('l-pass').value;
-  var usuario=DB.usuarios.find(function(x){return x.username.toLowerCase()===u&&x.password===p;});
-  if(!usuario){document.getElementById('l-err').style.display='block';return;}
-  SESSION=usuario;localStorage.setItem('veo_session',JSON.stringify({id:usuario.id}));mostrarApp();
+  var err=document.getElementById('l-err');
+  if(!u||!p||!_auth||_entrando)return;
+  _entrando=true;err.style.display='none';
+  _authMod.signInWithEmailAndPassword(_auth,emailDeUsuario(u),p)
+    .catch(function(e){
+      console.log('login:',e&&e.code);
+      err.textContent=(e&&e.code==='auth/too-many-requests')
+        ?'Demasiados intentos. Espera unos minutos o recupera tu contraseña.'
+        :'Usuario o contraseña incorrectos. Si no puedes entrar, usa "¿Olvidaste tu contraseña?".';
+      err.style.display='block';
+    })
+    .then(function(){_entrando=false;});
 }
-function logout(){SESSION=null;localStorage.removeItem('veo_session');location.reload();}
+function logout(){
+  SESSION=null;
+  var fin=function(){location.reload();};
+  if(_auth&&_authMod)_authMod.signOut(_auth).then(fin,fin);else fin();
+}
 function resetMostrar(show){
   document.getElementById('login-card-main').style.display=show?'none':'block';
   document.getElementById('reset-card').style.display=show?'block':'none';
@@ -627,7 +671,7 @@ function resetSolicitar(){
   var ident=(document.getElementById('r-ident').value||'').trim();
   if(!ident){resetErr('Indica tu usuario o tu n\u00FAmero de WhatsApp');return;}
   resetErr('');document.getElementById('r-msg').textContent='Enviando código...';
-  fetch('https://veoyoca-webhook.onrender.com/reset-solicitar',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify({ident:ident})})
+  fetch('https://veoyoca-webhook.onrender.com/reset-solicitar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ident:ident})})
   .then(function(r){return r.json();}).then(function(res){
     if(!res||!res.ok){document.getElementById('r-msg').textContent='';resetErr((res&&res.error)||'No se pudo enviar el código');return;}
     document.getElementById('r-msg').textContent='Enviamos un código por WhatsApp a '+(res.destino||'tu número')+'.';
@@ -639,9 +683,9 @@ function resetConfirmar(){
   var code=(document.getElementById('r-code').value||'').trim();
   var np=document.getElementById('r-newpass').value||'';
   if(!code||!np){resetErr('Ingresa el código y tu nueva contraseña');return;}
-  if(np.length<4){resetErr('La contraseña debe tener al menos 4 caracteres');return;}
+  if(np.length<6){resetErr('La contraseña debe tener al menos 6 caracteres');return;}
   resetErr('');document.getElementById('r-msg').textContent='Cambiando contraseña...';
-  fetch('https://veoyoca-webhook.onrender.com/reset-confirmar',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify({ident:ident,code:code,password:np})})
+  fetch('https://veoyoca-webhook.onrender.com/reset-confirmar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ident:ident,code:code,password:np})})
   .then(function(r){return r.json();}).then(function(res){
     if(!res||!res.ok){document.getElementById('r-msg').textContent='';resetErr((res&&res.error)||'No se pudo cambiar la contraseña');return;}
     document.getElementById('r-msg').textContent='✅ Contraseña cambiada. Ya puedes iniciar sesión.';
@@ -973,7 +1017,7 @@ function preciosFotoSubir(idx,inp){
   invComprimir(file,function(dataUrl){
     if(!dataUrl){toast('No se pudo leer esa imagen','err');return;}
     toast('Subiendo foto...','');
-    fetch('https://veoyoca-webhook.onrender.com/subir-pdf-orden',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify({data:dataUrl,mediaType:'image/jpeg',nombre:'precio_'+k.replace(/[^a-z0-9]+/g,'_').substring(0,40)})})
+    fetch('https://veoyoca-webhook.onrender.com/subir-pdf-orden',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:dataUrl,mediaType:'image/jpeg',nombre:'precio_'+k.replace(/[^a-z0-9]+/g,'_').substring(0,40)})})
     .then(function(r2){return r2.json();})
     .then(function(res){
       if(res&&res.ok&&res.url){
@@ -1383,7 +1427,7 @@ function presuAdjuntarPDFaCliente(p,cl){
   cargarLibsPDF().then(function(){
     var doc=presuPDF(p);
     var dataUrl=doc.output('datauristring');
-    fetch('https://veoyoca-webhook.onrender.com/subir-pdf-orden',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify({data:dataUrl,mediaType:'application/pdf',nombre:'presupuesto_'+presuNroFmt(p.nro)})})
+    fetch('https://veoyoca-webhook.onrender.com/subir-pdf-orden',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:dataUrl,mediaType:'application/pdf',nombre:'presupuesto_'+presuNroFmt(p.nro)})})
       .then(function(r){return r.json();})
       .then(function(res){
         if(res&&res.ok&&res.url){
@@ -1502,7 +1546,7 @@ function pedidoAdjuntarPDFaCliente(p,cl){
   cargarLibsPDF().then(function(){
     var doc=presuPDF(p,'pedido');
     var dataUrl=doc.output('datauristring');
-    fetch('https://veoyoca-webhook.onrender.com/subir-pdf-orden',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify({data:dataUrl,mediaType:'application/pdf',nombre:'pedido_'+presuNroFmt(p.nro)})})
+    fetch('https://veoyoca-webhook.onrender.com/subir-pdf-orden',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:dataUrl,mediaType:'application/pdf',nombre:'pedido_'+presuNroFmt(p.nro)})})
       .then(function(r){return r.json();})
       .then(function(res){
         if(res&&res.ok&&res.url){
@@ -2482,7 +2526,7 @@ function ordAdjuntarPDF(i,inp){
   reader.onload=function(e){
     var mt=file.type||'application/pdf';
     var nombre=('orden_'+(p.numero||'')+'_'+(p.ordenes[i].numeroOC||i));
-    fetch('https://veoyoca-webhook.onrender.com/subir-pdf-orden',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify({data:e.target.result,mediaType:mt,nombre:nombre})})
+    fetch('https://veoyoca-webhook.onrender.com/subir-pdf-orden',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:e.target.result,mediaType:mt,nombre:nombre})})
       .then(function(r){return r.json();})
       .then(function(res){
         if(res&&res.ok&&res.url){var pp=pedidoOrd();if(pp&&pp.ordenes[i]){pp.ordenes[i].pdfUrl=res.url;guardarDB();renderOrdenesBody();toast('Archivo adjuntado ✓','ok');}}
@@ -2575,7 +2619,7 @@ function instFotoSubir(inp){
     if(file.size>20*1024*1024){toast('Una foto supera 20MB, se omitió','warn');subir(idx+1);return;}
     var reader=new FileReader();
     reader.onload=function(e){
-      fetch('https://veoyoca-webhook.onrender.com/subir-pdf-orden',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify({data:e.target.result,mediaType:file.type||'image/jpeg',nombre:'instalacion_'+(p.numero||'')})})
+      fetch('https://veoyoca-webhook.onrender.com/subir-pdf-orden',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:e.target.result,mediaType:file.type||'image/jpeg',nombre:'instalacion_'+(p.numero||'')})})
         .then(function(r){return r.json();}).then(function(res){if(res&&res.ok&&res.url){if(!Array.isArray(it.fotos))it.fotos=[];it.fotos.push(res.url);}subir(idx+1);})
         .catch(function(){toast('Error subiendo una foto','err');subir(idx+1);});
     };
@@ -2762,23 +2806,15 @@ function enviarReporteGrupo(){
   var reader=new FileReader();
   reader.onload=function(){
     var base64=reader.result; // data:application/pdf;base64,....
-    var xhr=new XMLHttpRequest();
-    xhr.open('POST','https://api.ultramsg.com/instance181941/messages/document',true);
-    xhr.setRequestHeader('Content-Type','application/x-www-form-urlencoded');
-    xhr.timeout=90000;
-    xhr.onload=function(){
-      var ok=false;
-      try{var r=JSON.parse(xhr.responseText);ok=r&&(r.sent==='true'||r.sent===true||(r.message&&String(r.message).toLowerCase()==='ok'));}catch(e){}
-      if(ok){toast('Reporte enviado al grupo de pedidos \u2713','ok');cerrarModal('modal-reporte');}
-      else{toast('UltraMsg no confirm\u00F3 el env\u00EDo, revisa el grupo','warn');console.log('UltraMsg doc resp:',xhr.responseText);}
+    // Lo envia el servidor: la app ya no lleva el token de UltraMsg.
+    veoPost('/enviar-wa-doc',{to:GRUPO_PEDIDOS_WA,filename:REPORTE_NOMBRE,document:base64,
+      caption:'\uD83D\uDCCA Resumen de pedidos pendientes \u2014 '+fecha()})
+    .then(function(r){
+      if(r&&r.ok){toast('Reporte enviado al grupo de pedidos \u2713','ok');cerrarModal('modal-reporte');}
+      else{toast('UltraMsg no confirm\u00F3 el env\u00EDo, revisa el grupo','warn');console.log('enviar-wa-doc resp:',r);}
       restaurar();
-    };
-    xhr.onerror=function(){toast('Error de red al enviar el reporte','err');restaurar();};
-    xhr.ontimeout=function(){toast('Tiempo de espera agotado al enviar','err');restaurar();};
-    xhr.send('token=jd3odrhspk539mmp&to='+encodeURIComponent(GRUPO_PEDIDOS_WA)
-      +'&filename='+encodeURIComponent(REPORTE_NOMBRE)
-      +'&document='+encodeURIComponent(base64)
-      +'&caption='+encodeURIComponent('\uD83D\uDCCA Resumen de pedidos pendientes \u2014 '+fecha()));
+    })
+    .catch(function(){toast('Error de red al enviar el reporte','err');restaurar();});
   };
   reader.onerror=function(){toast('No se pudo leer el PDF generado','err');restaurar();};
   reader.readAsDataURL(REPORTE_BLOB);
@@ -2822,23 +2858,23 @@ function sincronizarPushId(){
           if(!u)return;
           if(!Array.isArray(u.pushIds))u.pushIds=[];
           if(u.pushIds.indexOf(sid)<0){
-            u.pushIds.push(sid);
-            if(u.pushIds.length>5)u.pushIds=u.pushIds.slice(-5);
-            if(SAVING){setTimeout(function(){guardarDB();},1800);}else{guardarDB();}
-            console.log('Aparato push registrado para',SESSION.username,':',sid);
+            veoPost('/usuarios/push-id',{sid:sid})
+              .then(function(r){if(r&&r.ok)console.log('Aparato push registrado para',SESSION.username,':',sid);})
+              .catch(function(e){console.log('push-id err',e);});
           }
         }catch(e){console.log('sync push id err',e);}
       },2500);
     });
   }catch(e){}
 }
-function enviarWAdirecto(numero,msj){if(!numero)return;var xhr=new XMLHttpRequest();xhr.open('POST','https://api.ultramsg.com/instance181941/messages/chat',true);xhr.setRequestHeader('Content-Type','application/x-www-form-urlencoded');xhr.timeout=8000;xhr.send('token=jd3odrhspk539mmp&to='+encodeURIComponent(numero)+'&body='+encodeURIComponent(msj));}
+// WhatsApp por medio del servidor (la app ya no lleva el token de UltraMsg).
+function enviarWAdirecto(numero,msj){if(!numero)return Promise.resolve({ok:false});return veoPost('/enviar-wa',{to:numero,body:msj}).catch(function(e){console.log('enviar-wa err',e);return {ok:false};});}
 // Push SOLO a usuarios específicos. Se envía A TRAVÉS DEL SERVIDOR de
 // Render (endpoint /push-crm) porque iPhone/Safari bloquea la llamada
 // directa del navegador a OneSignal con destinatarios por alias.
 function enviarPushUsuarios(usernames,titulo,cuerpo,cb){
   if(!usernames||!usernames.length)return;
-  fetch('https://veoyoca-webhook.onrender.com/push-crm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:'veoyoca-push-2026',usernames:usernames,titulo:titulo,cuerpo:cuerpo})})
+  fetch('https://veoyoca-webhook.onrender.com/push-crm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({usernames:usernames,titulo:titulo,cuerpo:cuerpo})})
   .then(function(r){return r.json();})
   .then(function(d){
     console.log('push-crm resp:',JSON.stringify(d));
@@ -2890,7 +2926,6 @@ function notificarNuevoLeadGrupo(cl){
     if(REDES_LEAD.indexOf(red)<0)return;
     cl.leadNotificado=true;cl.leadNotificadoFecha=fecha();
     fetch('https://veoyoca-webhook.onrender.com/nuevo-lead-crm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-      token:'veoyoca-leads-2026',
       nombre:cl.nombre,telefono:cl.telefono||'',correo:cl.correo||'',producto:cl.producto||'',ciudad:cl.ciudad||'',notas:cl.notas||'',red:red,vendedor:cl.vendedor||''
     })}).then(function(r){return r.json();}).then(function(d){if(d&&d.ok)toast('Lead anunciado en el grupo','ok');}).catch(function(e){console.log('nuevo-lead-crm err',e);});
   }catch(e){console.log('notif lead grupo err',e);}
@@ -2907,7 +2942,7 @@ function notificarBienvenidaVendedor(cl){
     var marca=cl.vendedor+'|'+tel;
     if(cl._bienvenidaVend===marca)return;   // ya se pidió para este vendedor+tel
     cl._bienvenidaVend=marca;
-    fetch('https://veoyoca-webhook.onrender.com/lead-bienvenida',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify({
+    fetch('https://veoyoca-webhook.onrender.com/lead-bienvenida',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
       clienteId:cl.id,nombre:cl.nombre||'',telefono:cl.telefono||'',vendedor:cl.vendedor||'',producto:cl.producto||''
     })}).then(function(r){return r.json();}).then(function(d){
       if(d&&d.enviado){toast('El bot le escribió al cliente desde el WhatsApp de '+cl.vendedor,'ok');}
@@ -3044,7 +3079,7 @@ function notificarPotencial(cl){
     if(!cl||!cl.nombre)return;
     if(_potAvisado[cl.id])return;           // no repetir en la misma sesion
     _potAvisado[cl.id]=1;
-    fetch('https://veoyoca-webhook.onrender.com/potencial-crm',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify({
+    fetch('https://veoyoca-webhook.onrender.com/potencial-crm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
       nombre:cl.nombre,telefono:cl.telefono||'',producto:cl.producto||'',ciudad:cl.ciudad||'',
       notas:cl.notas||'',vendedor:cl.vendedor||'',marcadoPor:SESSION?SESSION.nombre:'',
       fechaSeguimiento:cl.proximoContacto||''
@@ -3561,7 +3596,8 @@ function renderReportes(c){
 // El rol se verifica TAMBIEN en el servidor: esconder el botón no basta.
 // ═══════════════════════════════════════════════════════════
 var BOT_API='https://veoyoca-webhook.onrender.com';
-var BOT_TOKEN='veoyoca-leads-2026';
+// Sin clave fija: fetch() agrega la sesion de Firebase (Authorization: Bearer).
+// OJO: /bot-estado y /bot-control todavia no existen en el webhook.
 var _botEstado=null,_botCargando=false,_botTimer=null;
 
 function botControlHTML(){
@@ -3611,7 +3647,7 @@ function botPintar(e){
 }
 function botCargar(){
   if(!_botEl('botControlCard'))return;
-  fetch(BOT_API+'/bot-estado?token='+encodeURIComponent(BOT_TOKEN))
+  fetch(BOT_API+'/bot-estado')
     .then(function(r){return r.json();})
     .then(function(d){if(!d||!d.ok)throw new Error((d&&d.error)||'error');botPintar(d);botMsg('');})
     .catch(function(e){botMsg('No pude consultar el estado del bot. '+e.message,true);});
@@ -3627,7 +3663,7 @@ function botAlternar(){
   _botCargando=true;
   var b=_botEl('botToggleBtn');b.disabled=true;b.style.opacity='.6';b.textContent='Un momento…';botMsg('');
   fetch(BOT_API+'/bot-control',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({token:BOT_TOKEN,username:SESSION.username,accion:apagando?'apagar':'encender'})})
+    body:JSON.stringify({username:SESSION.username,accion:apagando?'apagar':'encender'})})
     .then(function(r){return r.json();})
     .then(function(d){
       if(!d||!d.ok)throw new Error((d&&d.error)||'no se pudo');
@@ -3664,9 +3700,35 @@ function renderAdmin(c){
   initBotControl();
 }
 function abrirNuevoUsuario(){document.getElementById('u-titulo').textContent='Nuevo usuario';['u-id','u-nombre','u-user','u-pass','u-telefono','u-correo'].forEach(function(id){document.getElementById(id).value='';});document.getElementById('u-rol').value='empleado';abrirModal('modal-usuario');}
-function editarUsuario(id){var u=DB.usuarios.find(function(x){return x.id===id;});if(!u)return;document.getElementById('u-titulo').textContent='Editar usuario';document.getElementById('u-id').value=id;document.getElementById('u-nombre').value=u.nombre;document.getElementById('u-user').value=u.username;document.getElementById('u-pass').value=u.password;document.getElementById('u-telefono').value=u.telefono||'';document.getElementById('u-correo').value=u.correo||'';document.getElementById('u-rol').value=u.rol;abrirModal('modal-usuario');}
-async function guardarUsuario(){var nombre=document.getElementById('u-nombre').value.trim();var user=document.getElementById('u-user').value.trim().toLowerCase();var pass=document.getElementById('u-pass').value;var rol=document.getElementById('u-rol').value;var eid=document.getElementById('u-id').value;if(!nombre||!user||!pass){toast('Todos los campos son obligatorios','err');return;}if(DB.usuarios.find(function(x){return x.username===user&&x.id!==eid;})){toast('El usuario ya existe','err');return;}var tel=(document.getElementById('u-telefono')||{value:''}).value.trim().replace(/[^0-9]/g,'');var correo=(document.getElementById('u-correo')||{value:''}).value.trim();if(eid){var u=DB.usuarios.find(function(x){return x.id===eid;});if(u){u.nombre=nombre;u.username=user;u.password=pass;u.rol=rol;u.telefono=tel;u.correo=correo;}}else{DB.usuarios.push({id:uid(),nombre:nombre,username:user,password:pass,rol:rol,telefono:tel,correo:correo,creado:fecha()});}await guardarDB();cerrarModal('modal-usuario');goTab('admin',document.getElementById('nb-admin'));toast('Usuario guardado','ok');}
-async function eliminarUsuario(id){if(!confirm('Eliminar este usuario?'))return;DB.usuarios=DB.usuarios.filter(function(x){return x.id!==id;});await guardarDB();goTab('admin',document.getElementById('nb-admin'));toast('Usuario eliminado','warn');}
+function editarUsuario(id){var u=DB.usuarios.find(function(x){return x.id===id;});if(!u)return;document.getElementById('u-titulo').textContent='Editar usuario';document.getElementById('u-id').value=id;document.getElementById('u-nombre').value=u.nombre;document.getElementById('u-user').value=u.username;document.getElementById('u-pass').value='';document.getElementById('u-telefono').value=u.telefono||'';document.getElementById('u-correo').value=u.correo||'';document.getElementById('u-rol').value=u.rol;abrirModal('modal-usuario');}
+// Los usuarios los crea y edita el servidor: ahi vive la cuenta de Firebase Auth
+// con la contraseña, que ya no se guarda en la base de datos.
+async function guardarUsuario(){
+  var nombre=document.getElementById('u-nombre').value.trim();
+  var user=document.getElementById('u-user').value.trim().toLowerCase();
+  var pass=document.getElementById('u-pass').value;
+  var rol=document.getElementById('u-rol').value;
+  var eid=document.getElementById('u-id').value;
+  if(!nombre||!user){toast('Nombre y usuario son obligatorios','err');return;}
+  if(!eid&&!pass){toast('Ponle una contraseña al usuario nuevo','err');return;}
+  if(pass&&pass.length<6){toast('La contraseña debe tener al menos 6 caracteres','err');return;}
+  if(DB.usuarios.find(function(x){return x.username===user&&x.id!==eid;})){toast('El usuario ya existe','err');return;}
+  var tel=(document.getElementById('u-telefono')||{value:''}).value.trim().replace(/[^0-9]/g,'');
+  var correo=(document.getElementById('u-correo')||{value:''}).value.trim();
+  try{
+    var r=await veoPost('/usuarios/guardar',{id:eid,nombre:nombre,username:user,password:pass,rol:rol,telefono:tel,correo:correo});
+    if(!r||!r.ok){toast((r&&r.error)||'No se pudo guardar el usuario','err');return;}
+  }catch(e){toast('Error de conexión con el servidor','err');return;}
+  cerrarModal('modal-usuario');toast('Usuario guardado','ok');
+}
+async function eliminarUsuario(id){
+  if(!confirm('Eliminar este usuario?'))return;
+  try{
+    var r=await veoPost('/usuarios/eliminar',{id:id});
+    if(!r||!r.ok){toast((r&&r.error)||'No se pudo eliminar','err');return;}
+  }catch(e){toast('Error de conexión con el servidor','err');return;}
+  toast('Usuario eliminado','warn');
+}
 async function borrarPedidos(){if(!confirm('Borrar TODOS los pedidos?'))return;DB.pedidos=[];await guardarDB();goTab('admin',document.getElementById('nb-admin'));toast('Pedidos eliminados','warn');}
 async function agregarInstalador(){var nombre=prompt('Nombre del instalador o cuadrilla:');if(!nombre||!nombre.trim())return;var tel=(prompt('Teléfono (opcional, para el recordatorio):','')||'').replace(/[^0-9]/g,'');if(!Array.isArray(DB.instaladores))DB.instaladores=[];DB.instaladores.push({id:uid(),nombre:nombre.trim(),telefono:tel});await guardarDB();goTab('admin',document.getElementById('nb-admin'));toast('Instalador agregado','ok');}
 async function eliminarInstalador(id){if(!confirm('Eliminar este instalador?'))return;DB.instaladores=(DB.instaladores||[]).filter(function(x){return x.id!==id;});await guardarDB();goTab('admin',document.getElementById('nb-admin'));toast('Instalador eliminado','warn');}
@@ -3787,7 +3849,7 @@ var DGN_MODO='plano';
 function dgNuevoAbrir(){DGN_MODO='plano';var g=function(id){return document.getElementById(id);};if(g('dgn-pedido'))g('dgn-pedido').value='';if(g('dgn-plano'))g('dgn-plano').value='';['dgn-pc','dgn-pk','dgn-pw','dgn-marcos'].forEach(function(id){if(g(id))g(id).value='0';});if(g('dgn-prov'))g('dgn-prov').value='IMPORTADO';if(g('dgn-grupo'))g('dgn-grupo').checked=true;if(g('dgn-msg'))g('dgn-msg').innerHTML='';var sel=g('dgn-pedidoref');if(sel){var ops='<option value="">— Detectar por el número del PDF —</option>';(DB.pedidos||[]).slice().reverse().forEach(function(p){var n=(p.numero||'');ops+='<option value="'+esc(n)+'">#'+esc(n||p.id.substring(0,6))+' · '+esc(p.cliente||'Sin nombre')+'</option>';});sel.innerHTML=ops;sel.value='';}dgNuevoModo('plano');abrirModal('modal-desglose-nuevo');}
 function dgNuevoModo(m){DGN_MODO=m;var pb=document.getElementById('dgn-plano-box'),mb=document.getElementById('dgn-manual-box'),bp=document.getElementById('dgn-btn-plano'),bm=document.getElementById('dgn-btn-manual');if(pb)pb.style.display=(m==='plano')?'':'none';if(mb)mb.style.display=(m==='manual')?'':'none';if(bp)bp.className='btn btn-sm '+((m==='plano')?'btn-dark':'btn-ghost');if(bm)bm.className='btn btn-sm '+((m==='manual')?'btn-dark':'btn-ghost');}
 function _dgFileB64(file){return new Promise(function(resolve,reject){var r=new FileReader();r.onload=function(){resolve(r.result);};r.onerror=reject;r.readAsDataURL(file);});}
-function dgNuevoGenerar(){var g=function(id){return document.getElementById(id);};var pedInput=g('dgn-pedido');var pedFile=pedInput&&pedInput.files&&pedInput.files[0];if(!pedFile){toast('Adjunta el PDF del pedido','err');return;}var msg=g('dgn-msg'),btn=g('dgn-gen');var body={proveedor:(g('dgn-prov')||{}).value||'IMPORTADO',publicarGrupo:!!(g('dgn-grupo')||{}).checked,creadoPor:((typeof SESSION!=='undefined'&&SESSION&&SESSION.nombre)?SESSION.nombre:'App')};var refNum=(g('dgn-pedidoref')||{}).value||'';if(refNum)body.numero=refNum;var planoFile=null;if(DGN_MODO==='plano'){var pl=g('dgn-plano');planoFile=pl&&pl.files&&pl.files[0];if(!planoFile){toast('Adjunta el plano o cambia a "A mano"','err');return;}}else{body.parales={central:+(g('dgn-pc')||{}).value||0,cabezal:+(g('dgn-pk')||{}).value||0,pared:+(g('dgn-pw')||{}).value||0};body.marcos=+(g('dgn-marcos')||{}).value||0;}if(btn){btn.disabled=true;btn.textContent='Generando...';}if(msg)msg.innerHTML='<span style="color:#6b7280">Leyendo con IA y armando el desglose… (puede tardar unos segundos)</span>';Promise.all([_dgFileB64(pedFile),planoFile?_dgFileB64(planoFile):Promise.resolve(null)]).then(function(arr){body.pedidoData=arr[0];body.pedidoMediaType=pedFile.type||'application/pdf';if(arr[1]){body.planoData=arr[1];body.planoMediaType=planoFile.type||'application/pdf';}return fetch(BOT_API+'/desglose-manual',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify(body)});}).then(function(r){return r.json();}).then(function(d){if(btn){btn.disabled=false;btn.textContent='Generar desglose';}if(!d.ok){if(msg)msg.innerHTML='<span style="color:#dc2626">'+esc(d.error||'No se pudo generar')+'</span>';toast('Error: '+(d.error||'no se pudo'),'err');return;}var extra=(d.discrepancias&&d.discrepancias.length)?('<br><span style="color:#1e40af">⚠️ '+d.discrepancias.map(esc).join('<br>⚠️ ')+'</span>'):'';if(msg)msg.innerHTML='<span style="color:#16a34a">✓ Desglose del pedido #'+esc(d.numero||'')+' listo'+(d.pdfUrl?' — <a href="'+esc(d.pdfUrl)+'" target="_blank">ver PDF</a>':'')+'</span>'+extra;toast('Desglose generado ✓','ok');setTimeout(function(){cerrarModal('modal-desglose-nuevo');if(TAB==='plan'&&PLAN_MODO==='desgloses')renderPlanificacion(document.getElementById('content'));},2000);}).catch(function(e){if(btn){btn.disabled=false;btn.textContent='Reintentar';}if(msg)msg.innerHTML='<span style="color:#dc2626">Error: '+esc(e.message)+'</span>';});}
+function dgNuevoGenerar(){var g=function(id){return document.getElementById(id);};var pedInput=g('dgn-pedido');var pedFile=pedInput&&pedInput.files&&pedInput.files[0];if(!pedFile){toast('Adjunta el PDF del pedido','err');return;}var msg=g('dgn-msg'),btn=g('dgn-gen');var body={proveedor:(g('dgn-prov')||{}).value||'IMPORTADO',publicarGrupo:!!(g('dgn-grupo')||{}).checked,creadoPor:((typeof SESSION!=='undefined'&&SESSION&&SESSION.nombre)?SESSION.nombre:'App')};var refNum=(g('dgn-pedidoref')||{}).value||'';if(refNum)body.numero=refNum;var planoFile=null;if(DGN_MODO==='plano'){var pl=g('dgn-plano');planoFile=pl&&pl.files&&pl.files[0];if(!planoFile){toast('Adjunta el plano o cambia a "A mano"','err');return;}}else{body.parales={central:+(g('dgn-pc')||{}).value||0,cabezal:+(g('dgn-pk')||{}).value||0,pared:+(g('dgn-pw')||{}).value||0};body.marcos=+(g('dgn-marcos')||{}).value||0;}if(btn){btn.disabled=true;btn.textContent='Generando...';}if(msg)msg.innerHTML='<span style="color:#6b7280">Leyendo con IA y armando el desglose… (puede tardar unos segundos)</span>';Promise.all([_dgFileB64(pedFile),planoFile?_dgFileB64(planoFile):Promise.resolve(null)]).then(function(arr){body.pedidoData=arr[0];body.pedidoMediaType=pedFile.type||'application/pdf';if(arr[1]){body.planoData=arr[1];body.planoMediaType=planoFile.type||'application/pdf';}return fetch(BOT_API+'/desglose-manual',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}).then(function(r){return r.json();}).then(function(d){if(btn){btn.disabled=false;btn.textContent='Generar desglose';}if(!d.ok){if(msg)msg.innerHTML='<span style="color:#dc2626">'+esc(d.error||'No se pudo generar')+'</span>';toast('Error: '+(d.error||'no se pudo'),'err');return;}var extra=(d.discrepancias&&d.discrepancias.length)?('<br><span style="color:#1e40af">⚠️ '+d.discrepancias.map(esc).join('<br>⚠️ ')+'</span>'):'';if(msg)msg.innerHTML='<span style="color:#16a34a">✓ Desglose del pedido #'+esc(d.numero||'')+' listo'+(d.pdfUrl?' — <a href="'+esc(d.pdfUrl)+'" target="_blank">ver PDF</a>':'')+'</span>'+extra;toast('Desglose generado ✓','ok');setTimeout(function(){cerrarModal('modal-desglose-nuevo');if(TAB==='plan'&&PLAN_MODO==='desgloses')renderPlanificacion(document.getElementById('content'));},2000);}).catch(function(e){if(btn){btn.disabled=false;btn.textContent='Reintentar';}if(msg)msg.innerHTML='<span style="color:#dc2626">Error: '+esc(e.message)+'</span>';});}
 var PLAN_MODO='carga';
 function planSetModo(m){PLAN_MODO=m;renderPlanificacion(document.getElementById('content'));}
 function planToggleHTML(){return '<div class="section-pad" style="padding-bottom:0"><div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap"><button class="btn '+(PLAN_MODO==='carga'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:90px" onclick="planSetModo(\'carga\')">🚚 Carga</button><button class="btn '+(PLAN_MODO==='entrega'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:90px" onclick="planSetModo(\'entrega\')">📦 Entrega</button><button class="btn '+(PLAN_MODO==='rutas'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:90px" onclick="planSetModo(\'rutas\')">🗺️ Rutas</button><button class="btn '+(PLAN_MODO==='instalaciones'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:90px" onclick="planSetModo(\'instalaciones\')">🔧 Instalaciones</button><button class="btn '+(PLAN_MODO==='desgloses'?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:90px" onclick="planSetModo(\'desgloses\')">🧩 Desgloses</button></div></div>';}
@@ -3949,7 +4011,7 @@ function entregaGuiaSubir(inp){
   toast('Leyendo y verificando la guía...','ok');
   var rd=new FileReader();
   rd.onload=function(e){
-    fetch('https://veoyoca-webhook.onrender.com/verificar-guia',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify({data:e.target.result,mediaType:mt})})
+    fetch('https://veoyoca-webhook.onrender.com/verificar-guia',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:e.target.result,mediaType:mt})})
     .then(function(r){return r.json();})
     .then(function(res){inp.value='';
       ENTREGA_GUIA_MSG=(res&&(res.mensaje||res.error))||'';
@@ -4595,7 +4657,7 @@ function invFotoSubir(itemId,inp){
   invComprimir(file,function(dataUrl){
     if(!dataUrl){toast('No se pudo leer esa imagen','err');return;}
     toast('Subiendo foto...','');
-    fetch('https://veoyoca-webhook.onrender.com/subir-pdf-orden',{method:'POST',headers:{'Content-Type':'application/json','X-Veoyoca-Token':'veoyoca-leads-2026'},body:JSON.stringify({data:dataUrl,mediaType:'image/jpeg',nombre:'producto_'+(it.sku||it.id)})})
+    fetch('https://veoyoca-webhook.onrender.com/subir-pdf-orden',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:dataUrl,mediaType:'image/jpeg',nombre:'producto_'+(it.sku||it.id)})})
     .then(function(r){return r.json();})
     .then(function(res){
       if(res&&res.ok&&res.url){
@@ -5682,11 +5744,7 @@ function notificarCamposIncompletos(){
   // WhatsApp
   if(cfg.waActivo && cfg.waNumero){
     var msgWA = '⚠️ *VeoYoca — Órdenes incompletas*\n\n'+incompletos.length+' pedidos creados hace más de 1 día sin órdenes registradas o sin fechas estimadas:\n\n'+lista+'\n\nCompleta la información en la app.';
-    var xhr=new XMLHttpRequest();
-    xhr.open('POST','https://api.ultramsg.com/instance181941/messages/chat',true);
-    xhr.setRequestHeader('Content-Type','application/x-www-form-urlencoded');
-    xhr.timeout=8000;
-    xhr.send('token=jd3odrhspk539mmp&to='+encodeURIComponent(cfg.waNumero)+'&body='+encodeURIComponent(msgWA));
+    enviarWAdirecto(cfg.waNumero,msgWA);
   }
 
   // Correo
@@ -5737,7 +5795,7 @@ function verificarCamposIncompletosAlEntrar(){
 function getNotifConfig(){try{return JSON.parse(localStorage.getItem('veo_notif')||'{}');}catch(e){return {};}}
 function setNotifConfig(cfg){localStorage.setItem('veo_notif',JSON.stringify(cfg));}
 function buildReporte(){var vencidos=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO'&&clasif(p)==='vencido';});var urgentes=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO'&&clasif(p)==='urgente';});return {vencidos:vencidos,urgentes:urgentes};}
-function enviarWhatsApp(){var cfg=getNotifConfig();if(!cfg.waNumero||!cfg.waApikey){toast('Configura WhatsApp primero','err');return;}var r=buildReporte();var total=r.vencidos.length+r.urgentes.length;if(total===0){toast('No hay pedidos críticos','ok');return;}var msg='🚨 *VeoYoca — '+fecha()+'*\n\n';if(r.vencidos.length){msg+='🔴 *VENCIDOS ('+r.vencidos.length+')*\n';r.vencidos.forEach(function(p){msg+='• #'+(p.numero||'?')+' '+p.cliente+' — '+Math.abs(diasRestantes(p.fechaLimite))+'d vencido\n';});msg+='\n';}if(r.urgentes.length){msg+='🟡 *URGENTES ('+r.urgentes.length+')*\n';r.urgentes.forEach(function(p){msg+='• #'+(p.numero||'?')+' '+p.cliente+' — vence en '+diasRestantes(p.fechaLimite)+'d\n';});}var xhr=new XMLHttpRequest();xhr.open('POST','https://api.ultramsg.com/instance181941/messages/chat',true);xhr.setRequestHeader('Content-Type','application/x-www-form-urlencoded');xhr.timeout=8000;xhr.onload=function(){toast('WhatsApp enviado ✓','ok');};xhr.onerror=function(){toast('WhatsApp enviado','ok');};xhr.send('token=jd3odrhspk539mmp&to='+encodeURIComponent(cfg.waNumero)+'&body='+encodeURIComponent(msg));}
+function enviarWhatsApp(){var cfg=getNotifConfig();if(!cfg.waNumero||!cfg.waApikey){toast('Configura WhatsApp primero','err');return;}var r=buildReporte();var total=r.vencidos.length+r.urgentes.length;if(total===0){toast('No hay pedidos críticos','ok');return;}var msg='🚨 *VeoYoca — '+fecha()+'*\n\n';if(r.vencidos.length){msg+='🔴 *VENCIDOS ('+r.vencidos.length+')*\n';r.vencidos.forEach(function(p){msg+='• #'+(p.numero||'?')+' '+p.cliente+' — '+Math.abs(diasRestantes(p.fechaLimite))+'d vencido\n';});msg+='\n';}if(r.urgentes.length){msg+='🟡 *URGENTES ('+r.urgentes.length+')*\n';r.urgentes.forEach(function(p){msg+='• #'+(p.numero||'?')+' '+p.cliente+' — vence en '+diasRestantes(p.fechaLimite)+'d\n';});}enviarWAdirecto(cfg.waNumero,msg).then(function(r){if(r&&r.ok)toast('WhatsApp enviado ✓','ok');else toast('No se pudo enviar el WhatsApp'+(r&&r.error?': '+r.error:''),'err');});}
 function enviarTodo(){var cfg=getNotifConfig();enviarPushOneSignal('🚨 VeoYoca — Reporte de pedidos','Revisa los pedidos vencidos y urgentes');if(cfg.emailActivo)enviarCorreo();if(cfg.waActivo)enviarWhatsApp();}
 function enviarCorreo(){
   var cfg = getNotifConfig();
@@ -5997,56 +6055,90 @@ async function initFirebase(){
     try{_db=fs.initializeFirestore(app,{localCache:fs.persistentLocalCache({tabManager:fs.persistentMultipleTabManager()})});}
     catch(e){console.log('Cache local no disponible, usando modo normal:',e&&e.message);_db=fs.getFirestore(app);}
     window._firestore=fs;
-    var snap=await fs.getDoc(fs.doc(_db,'veoyoca','data'));
-    if(snap.exists()){
-      var d=snap.data();
-      DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];
-      DB.desgloses=d.desgloses||[];DB.presupuestosDoc=d.presupuestosDoc||[];DB.pedidosDoc=d.pedidosDoc||[];
-      // Estos cuatro faltaban y era un hueco grave: si no se cargan aqui, la
-      // huella se sella contra un objeto VACIO. El primer guardado del aparato
-      // mandaria un inventario vacio y borraria el del servidor.
-      DB.ofertasPrecios=d.ofertasPrecios||{};DB.instaladores=d.instaladores||[];
-      DB.cargaPlan=d.cargaPlan||{items:[]};
-      DB.inv=d.inv||{items:[],ubicaciones:[],movs:[],stock:{}};
-      DB.fin=d.fin||{cobrar:[],pagar:[],gastos:[]};
-      DB.botProductos=d.botProductos||{};DB.fotosPrecios=d.fotosPrecios||{};
-      DB.cotizacionesBot=d.cotizacionesBot||[];
-      _servidorLeido=true;
-    }
-    else{DB.usuarios=[{id:'admin',nombre:'Administrador',username:'admin',password:'admin123',rol:'admin',creado:fecha()}];}
-    // Huella de partida: a partir de aqui solo se manda lo que cambie aqui.
-    _sellarHuellas();
-    if(!DB.usuarios.length){DB.usuarios=[{id:'admin',nombre:'Administrador',username:'admin',password:'admin123',rol:'admin',creado:fecha()}];await guardarDB();}
-    // Clientes del CRM: viven en su propia coleccion.
-    document.getElementById('splash-msg').textContent='Cargando clientes...';
-    try{
-      var csnap=await fs.getDocs(fs.collection(_db,'clientes'));
-      DB.clientes=csnap.docs.map(function(d){return d.data();});
-    }catch(e){console.error('No se pudieron cargar los clientes:',e);DB.clientes=DB.clientes||[];}
-    // Escucha en vivo: si otro vendedor agrega o edita, se refleja aqui.
-    fs.onSnapshot(fs.collection(_db,'clientes'),function(cs){
-      var mapa={};
-      cs.docs.forEach(function(d){mapa[d.id]=d.data();});
-      DB.clientes=Object.keys(mapa).map(function(k){return mapa[k];});
-      if(TAB==='ventas')programarRerender();
-    },function(e){console.error('Escucha de clientes:',e);});
-
-    fs.onSnapshot(fs.doc(_db,'veoyoca','data'),function(snap){
-      if(!snap.exists())return;
-      // Si estamos guardando, NO se descarta el cambio (antes se perdia y la
-      // copia en memoria quedaba vieja para siempre): se guarda y se aplica
-      // en cuanto termine el guardado.
-      if(SAVING){_snapPendiente=snap.data();return;}
-      _aplicarSnap(snap.data());
+    // Sesion: Firebase Auth recuerda al usuario en este aparato. Sin sesion
+    // no se descarga NADA de la base (las reglas de Firestore lo impiden).
+    var fa=await import('https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js');
+    _authMod=fa;_auth=fa.getAuth(app);
+    try{localStorage.removeItem('veo_session');}catch(e){}   // sesion vieja (ya no se usa)
+    var primera=true;
+    fa.onAuthStateChanged(_auth,function(user){
+      if(user){if(!SESSION)entrarConSesion(user);}
+      else if(primera){mostrarLogin();}
+      primera=false;
     });
-    var sess=null;try{sess=JSON.parse(localStorage.getItem('veo_session')||'null');}catch(e){}
-    if(sess){var u=DB.usuarios.find(function(x){return x.id===sess.id;});if(u){SESSION=u;mostrarApp();return;}}
-    document.getElementById('splash').style.display='none';
-    document.getElementById('login-screen').style.display='flex';
-    setTimeout(function(){document.getElementById('l-user').focus();},100);
-    document.getElementById('l-user').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('l-pass').focus();});
-    document.getElementById('l-pass').addEventListener('keydown',function(e){if(e.key==='Enter')login();});
   }catch(e){document.getElementById('splash-msg').textContent='Error: '+e.message;console.error('Firebase error:',e);}
+}
+
+function mostrarLogin(){
+  document.getElementById('splash').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+  setTimeout(function(){document.getElementById('l-user').focus();},100);
+}
+document.getElementById('l-user').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('l-pass').focus();});
+document.getElementById('l-pass').addEventListener('keydown',function(e){if(e.key==='Enter')login();});
+
+async function entrarConSesion(user){
+  try{
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('splash').style.display='';
+    document.getElementById('splash-msg').textContent='Cargando datos...';
+    await cargarDatos();
+    var u=DB.usuarios.find(function(x){return x.id===user.uid;});
+    if(!u){
+      await _authMod.signOut(_auth);
+      var err=document.getElementById('l-err');
+      err.textContent='Tu usuario ya no existe en VeoYoca. Habla con un administrador.';err.style.display='block';
+      mostrarLogin();return;
+    }
+    SESSION=u;mostrarApp();
+  }catch(e){document.getElementById('splash-msg').textContent='Error: '+e.message;console.error('Carga de datos:',e);}
+}
+
+var _datosCargados=false;
+async function cargarDatos(){
+  if(_datosCargados)return;
+  _datosCargados=true;
+  var fs=window._firestore;
+  var snap=await fs.getDoc(fs.doc(_db,'veoyoca','data'));
+  if(snap.exists()){
+    var d=snap.data();
+    DB.usuarios=d.usuarios||[];DB.pedidos=d.pedidos||[];DB.bitacora=d.bitacora||[];
+    DB.desgloses=d.desgloses||[];DB.presupuestosDoc=d.presupuestosDoc||[];DB.pedidosDoc=d.pedidosDoc||[];
+    // Estos cuatro faltaban y era un hueco grave: si no se cargan aqui, la
+    // huella se sella contra un objeto VACIO. El primer guardado del aparato
+    // mandaria un inventario vacio y borraria el del servidor.
+    DB.ofertasPrecios=d.ofertasPrecios||{};DB.instaladores=d.instaladores||[];
+    DB.cargaPlan=d.cargaPlan||{items:[]};
+    DB.inv=d.inv||{items:[],ubicaciones:[],movs:[],stock:{}};
+    DB.fin=d.fin||{cobrar:[],pagar:[],gastos:[]};
+    DB.botProductos=d.botProductos||{};DB.fotosPrecios=d.fotosPrecios||{};
+    DB.cotizacionesBot=d.cotizacionesBot||[];
+    _servidorLeido=true;
+  }
+  // Huella de partida: a partir de aqui solo se manda lo que cambie aqui.
+  _sellarHuellas();
+  // Clientes del CRM: viven en su propia coleccion.
+  document.getElementById('splash-msg').textContent='Cargando clientes...';
+  try{
+    var csnap=await fs.getDocs(fs.collection(_db,'clientes'));
+    DB.clientes=csnap.docs.map(function(d){return d.data();});
+  }catch(e){console.error('No se pudieron cargar los clientes:',e);DB.clientes=DB.clientes||[];}
+  // Escucha en vivo: si otro vendedor agrega o edita, se refleja aqui.
+  fs.onSnapshot(fs.collection(_db,'clientes'),function(cs){
+    var mapa={};
+    cs.docs.forEach(function(d){mapa[d.id]=d.data();});
+    DB.clientes=Object.keys(mapa).map(function(k){return mapa[k];});
+    if(TAB==='ventas')programarRerender();
+  },function(e){console.error('Escucha de clientes:',e);});
+
+  fs.onSnapshot(fs.doc(_db,'veoyoca','data'),function(snap){
+    if(!snap.exists())return;
+    // Si estamos guardando, NO se descarta el cambio (antes se perdia y la
+    // copia en memoria quedaba vieja para siempre): se guarda y se aplica
+    // en cuanto termine el guardado.
+    if(SAVING){_snapPendiente=snap.data();return;}
+    _aplicarSnap(snap.data());
+  });
 }
 
 // Aplica los cambios que llegan de otro aparato. Al terminar vuelve a sellar
