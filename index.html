@@ -2324,7 +2324,11 @@ function cardHTML(p,conEntregar){
   if(p.pdfUrl)h+='<a href="'+p.pdfUrl+'" target="_blank" class="btn btn-blue btn-sm" style="text-decoration:none">📄 Ver PDF</a>';
   if(p.planoUrl)h+='<a href="'+esc(p.planoUrl)+'" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none">📐 Ver plano</a>';
   if(dgPorNumero(p.numero))h+='<button class="btn btn-ghost btn-sm" onclick="verDesglosePedido(\''+esc((p.numero||'').toString())+'\')">🧩 Desglose</button>';
-  if(SESSION.rol==='admin'){var _crA=cuentaAbonosDePedido(p.numero);if(_crA&&(_crA.abonos||[]).length)h+='<button class="btn btn-ghost btn-sm" onclick="verAbonosPedido(\''+pid+'\')">🧾 Abonos ('+_crA.abonos.length+')</button>';}
+  if(SESSION.rol==='admin'){
+    var _crA=cuentaAbonosDePedido(p.numero);
+    if(_crA&&(_crA.abonos||[]).length)h+='<button class="btn btn-ghost btn-sm" onclick="verAbonosPedido(\''+pid+'\')">🧾 Abonos ('+_crA.abonos.length+')</button>';
+    if(p.estatus!=='ANULADO'&&parseFloat(p.monto||0)>0&&(p.numero||'').toString().trim()&&!(_crA&&finPagado(_crA)))h+='<button class="btn btn-ghost btn-sm" onclick="pedidoAbonoAbrir(\''+pid+'\')">💰 Registrar abono</button>';
+  }
   if(puedeAnular()){if(p.estatus==='ANULADO')h+='<button class="btn btn-ghost btn-sm" style="color:#16a34a" onclick="reactivarPedido(\''+pid+'\')">↩️ Reactivar</button>';else h+='<button class="btn btn-ghost btn-sm" style="color:#dc2626" onclick="anularPedido(\''+pid+'\')">🚫 Anular</button>';}
   if(conEntregar&&p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO'){h+='<input type="text" id="nota-'+pid+'" placeholder="Nota de entrega..."><button class="btn btn-green btn-sm" data-entregar="'+pid+'">Entregar</button>';}
   // Boton de entrega a la derecha del pie. Se muestra a todos; solo se
@@ -5093,6 +5097,14 @@ function finGuardar(){clearTimeout(FIN_SAVE_TIMER);FIN_SAVE_TIMER=setTimeout(fun
 
 function finSetModo(m){FIN_MODO=m;FIN_BUSCA='';renderFinanzas(document.getElementById('content'));}
 function finModal(html){var b=document.getElementById('modal-fin-body');if(b){b.innerHTML=html;abrirModal('modal-fin');}}
+// Filtra sin perder el cursor: el re-dibujo reemplaza el buscador por uno nuevo.
+function finBuscar(el){
+  FIN_BUSCA=el.value;
+  var pos=el.selectionStart;
+  renderFinanzas(document.getElementById('content'));
+  var n=document.getElementById('fin-busca');
+  if(n){n.focus();try{n.setSelectionRange(pos,pos);}catch(e){}}
+}
 
 function renderFinanzas(c){
   if(!SESSION||SESSION.rol!=='admin'){c.innerHTML='<div class="empty">Acceso denegado</div>';return;}
@@ -5164,7 +5176,7 @@ function finTabla(t){
   h+='<div style="background:'+(esC?'#f0fdf4':'#fef2f2')+';border:1px solid '+(esC?'#bbf7d0':'#fecaca')+';border-radius:10px;padding:12px;margin-bottom:10px"><div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">'+(esC?'Total por cobrar':'Total por pagar')+'</div><div style="font-size:26px;font-weight:800;color:'+(esC?'#166534':'#b91c1c')+'">$'+fmtMoney(pend)+'</div></div>';
   h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"><button class="btn btn-dark btn-sm" onclick="finAbrir(\''+t+'\')">+ Agregar</button>'
     +'<button class="btn '+(FIN_SOLO_PEND?'btn-dark':'btn-ghost')+' btn-sm" onclick="FIN_SOLO_PEND=!FIN_SOLO_PEND;renderFinanzas(document.getElementById(\'content\'))">'+(FIN_SOLO_PEND?'Solo pendientes':'Todas')+'</button></div>';
-  h+='<input type="text" placeholder="Buscar..." value="'+esc(FIN_BUSCA)+'" oninput="FIN_BUSCA=this.value;renderFinanzas(document.getElementById(\'content\'))" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;margin-bottom:8px">';
+  h+='<input type="text" id="fin-busca" placeholder="Buscar..." value="'+esc(FIN_BUSCA)+'" oninput="finBuscar(this)" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;margin-bottom:8px">';
   if(!arr.length){h+='<div class="empty"><div class="empty-icon">'+(esC?'\uD83D\uDCB5':'\uD83E\uDDFE')+'</div>'+(FIN_SOLO_PEND?'Nada pendiente aqu\u00ED.':'Sin registros.')+'</div></div>';return h;}
   arr.forEach(function(r){
     var saldo=finSaldo(r),ab=finAbonado(r),pagado=finPagado(r),venc=finVencido(r);
@@ -5204,7 +5216,7 @@ function finGastos(){
   }
   h+=finFijosHTML();
   h+='<div style="display:flex;gap:6px;margin-bottom:8px"><button class="btn btn-dark btn-sm" onclick="finAbrir(\'gastos\')">+ Registrar gasto</button></div>';
-  h+='<input type="text" placeholder="Buscar gasto..." value="'+esc(FIN_BUSCA)+'" oninput="FIN_BUSCA=this.value;renderFinanzas(document.getElementById(\'content\'))" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;margin-bottom:8px">';
+  h+='<input type="text" id="fin-busca" placeholder="Buscar gasto..." value="'+esc(FIN_BUSCA)+'" oninput="finBuscar(this)" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;margin-bottom:8px">';
   if(!arr.length){h+='<div class="empty"><div class="empty-icon">\uD83D\uDCB8</div>Sin gastos registrados.</div></div>';return h;}
   arr.slice(0,120).forEach(function(g){
     h+='<div class="card" style="margin-bottom:5px;padding:10px 12px"><div style="display:flex;justify-content:space-between;gap:8px"><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+esc(g.desc||'(sin detalle)')+'</div><div style="font-size:11px;color:var(--muted)">'+esc(g.categoria||'Otros')+' \u00B7 '+esc(g.fecha||'')+(g.pedidoNum?' \u00B7 pedido #'+esc(g.pedidoNum):'')+(g.metodo?' \u00B7 '+esc(g.metodo):'')+'</div></div><div style="font-size:16px;font-weight:800;color:#7c3aed;flex-shrink:0">$'+fmtMoney(g.monto)+'</div></div>';
@@ -5385,23 +5397,71 @@ function finAbonoAbrir(t,id){
   var h='<div class="sheet-head"><h2>\uD83D\uDCB0 '+(esC?'Registrar cobro':'Registrar pago')+'</h2><button class="sheet-close" onclick="cerrarModal(\'modal-fin\')">\u2715</button></div><div class="sheet-body">';
   h+='<div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:12px"><div style="font-size:13px;font-weight:700">'+esc((esC?r.cliente:r.proveedor)||'')+'</div><div style="font-size:11px;color:var(--muted)">Total $'+fmtMoney(r.monto)+' \u00B7 abonado $'+fmtMoney(finAbonado(r))+'</div><div style="font-size:22px;font-weight:800;color:'+(esC?'#166534':'#b91c1c')+';margin-top:4px">Saldo: $'+fmtMoney(saldo)+'</div></div>';
   h+='<input type="hidden" id="fa-t" value="'+t+'"><input type="hidden" id="fa-id" value="'+esc(id)+'">';
-  h+='<div class="sfield-row"><div class="sfield"><label>Monto *</label><input type="number" step="0.01" id="fa-monto" value="'+saldo.toFixed(2)+'"></div><div class="sfield"><label>Fecha</label><input type="date" id="fa-fecha" value="'+fechaInput(fecha())+'"></div></div>';
+  // El monto arranca vacio: asi un abono parcial no se registra por error como pago total.
+  h+='<div class="sfield-row"><div class="sfield"><label>Monto *</label><input type="number" step="0.01" id="fa-monto" placeholder="0,00"></div><div class="sfield"><label>Fecha</label><input type="date" id="fa-fecha" value="'+fechaInput(fecha())+'"></div></div>';
+  h+='<div style="margin:-4px 0 10px"><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById(\'fa-monto\').value=\''+saldo.toFixed(2)+'\'">Usar todo el saldo ($'+fmtMoney(saldo)+')</button></div>';
   h+='<div class="sfield"><label>Nota</label><input type="text" id="fa-nota" placeholder="Ej: transferencia Banesco, ref 4471"></div>';
-  h+='<div style="font-size:11px;color:var(--muted)">Si es un abono parcial, cambia el monto. El saldo se recalcula solo.</div>';
-  h+='</div><div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal(\'modal-fin\')">Cancelar</button><button class="btn btn-green" onclick="finAbonoGuardar()">Registrar</button></div>';
+  if(esC)h+='<div class="sfield"><label>Comprobante (foto o PDF, opcional)</label><input type="file" id="fa-comp" accept="image/*,application/pdf"></div>';
+  h+='</div><div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal(\'modal-fin\')">Cancelar</button><button class="btn btn-green" id="fa-guardar" onclick="finAbonoGuardar()">Registrar</button></div>';
   finModal(h);
+  var fm=document.getElementById('fa-monto');if(fm)fm.focus();
 }
-function finAbonoGuardar(){
+// Abono manual desde la tarjeta del pedido. Si el pedido aun no tiene cuenta, se abre.
+function pedidoAbonoAbrir(pid){
+  if(SESSION.rol!=='admin')return;
+  var p=DB.pedidos.find(function(x){return x.id===pid;});if(!p)return;
+  var cr=cuentaAbonosDePedido(p.numero);
+  if(!cr){cobrarDesdePedido(p);cr=cuentaAbonosDePedido(p.numero);}
+  if(!cr){toast('Ese pedido no tiene monto para llevarle la cuenta','err');return;}
+  finAbonoAbrir('cobrar',cr.id);
+}
+// Sube el comprobante por el webhook, igual que los archivos de las ordenes.
+function finSubirComprobante(file,nombre){
+  return new Promise(function(ok,mal){
+    var rd=new FileReader();
+    rd.onerror=function(){mal(new Error('No se pudo leer el archivo'));};
+    rd.onload=function(e){
+      fetch('https://veoyoca-webhook.onrender.com/subir-pdf-orden',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:e.target.result,mediaType:file.type||'application/pdf',nombre:nombre})})
+        .then(function(res){return res.json();})
+        .then(function(res){if(res&&res.ok&&res.url)ok(res.url);else mal(new Error((res&&res.error)||'error'));})
+        .catch(mal);
+    };
+    rd.readAsDataURL(file);
+  });
+}
+async function finAbonoGuardar(){
   var t=document.getElementById('fa-t').value,id=document.getElementById('fa-id').value;
   var r=finReg(t,id);if(!r)return;
   var m=finNum(document.getElementById('fa-monto').value);
   if(m<=0){toast('El monto debe ser mayor a 0','err');return;}
   var saldo=finSaldo(r);
   if(m>saldo+0.01&&!confirm('El monto ($'+fmtMoney(m)+') es mayor al saldo ($'+fmtMoney(saldo)+'). \u00BFRegistrar igual?'))return;
+  var f=inputFecha(document.getElementById('fa-fecha').value)||fecha();
+  var nota=(document.getElementById('fa-nota').value||'').trim();
+  var fc=document.getElementById('fa-comp'),file=fc&&fc.files&&fc.files[0];
+  var comp='';
+  if(file){
+    if(file.size>20*1024*1024){toast('El archivo es muy grande (m\u00E1x 20MB)','err');return;}
+    var btn=document.getElementById('fa-guardar');
+    if(btn){btn.disabled=true;btn.textContent='Subiendo...';}
+    try{comp=await finSubirComprobante(file,'abono_'+(r.pedidoNum||id));}
+    catch(e){
+      console.error('Comprobante del abono:',e);
+      if(btn){btn.disabled=false;btn.textContent='Registrar';}
+      toast('No se pudo subir el comprobante. El abono NO se registr\u00F3.','err');
+      return;
+    }
+    // Mientras subia pudo llegar un cambio del servidor: se vuelve a buscar la cuenta.
+    r=finReg(t,id);
+    if(!r){toast('Esa cuenta ya no existe. El abono NO se registr\u00F3.','err');return;}
+  }
   if(!Array.isArray(r.abonos))r.abonos=[];
-  r.abonos.push({m:m,f:inputFecha(document.getElementById('fa-fecha').value)||fecha(),nota:(document.getElementById('fa-nota').value||'').trim(),por:SESSION.nombre});
+  var abono={id:'ab'+uid(),m:m,f:f,nota:nota,por:SESSION.nombre,ts:Date.now()};
+  if(comp)abono.comp=comp;
+  r.abonos.push(abono);
   registrarBitacora('fin'+id,'FINANZAS abono ['+t+'] $'+m+' por '+SESSION.nombre);
-  guardarDB();cerrarModal('modal-fin');renderFinanzas(document.getElementById('content'));
+  guardarDB();cerrarModal('modal-fin');
+  if(TAB==='finanzas')renderFinanzas(document.getElementById('content'));else programarRerender();
   toast(finPagado(r)?'Saldado por completo \u2713':'Abono registrado \u2713','ok');
 }
 function finCSV(){
@@ -6295,7 +6355,12 @@ function verificarGoto(){
 
 // Tocar el fondo oscuro cierra el panel abierto
 document.querySelectorAll('.overlay').forEach(function(ov){
-  ov.addEventListener('click',function(e){if(e.target===ov)ov.classList.remove('open');});
+  // Solo si el clic EMPEZO en el fondo: seleccionar un texto con el raton y soltar
+  // afuera del panel tambien cuenta como clic en el fondo, y antes lo cerraba.
+  var _desdeFondo=false;
+  ov.addEventListener('mousedown',function(e){_desdeFondo=e.target===ov;});
+  ov.addEventListener('touchstart',function(e){_desdeFondo=e.target===ov;},{passive:true});
+  ov.addEventListener('click',function(e){if(e.target===ov&&_desdeFondo)ov.classList.remove('open');_desdeFondo=false;});
 });
 
 if('serviceWorker' in navigator){
