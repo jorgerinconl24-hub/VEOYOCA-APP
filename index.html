@@ -2315,8 +2315,9 @@ function cardHTML(p,conEntregar){
   if(SESSION.rol==='admin'&&parseFloat(p.monto||0)>0){
     var _cr=(typeof cobrarDePedido==='function')?cobrarDePedido(p.numero):null;
     var _sal=_cr?finSaldo(_cr):parseFloat(p.monto);
-    var _col=_cr&&finPagado(_cr)?'#166534':(_cr&&finAbonado(_cr)>0?'#d97706':'#64748b');
-    h+='<div style="font-size:11px;color:'+_col+';font-weight:600;margin-top:3px">\uD83D\uDCB5 $'+fmtMoney(p.monto)+(_cr?(finPagado(_cr)?' \u00B7 COBRADO':' \u00B7 falta $'+fmtMoney(_sal)):'')+'</div>';
+    var _exc=_cr?finExcedente(_cr):0;
+    var _col=_exc?'#b45309':_cr&&finPagado(_cr)?'#166534':(_cr&&finAbonado(_cr)>0?'#d97706':'#64748b');
+    h+='<div style="font-size:11px;color:'+_col+';font-weight:600;margin-top:3px">\uD83D\uDCB5 $'+fmtMoney(p.monto)+(_cr?(_exc?' \u00B7 COBRADO \u00B7 \u26A0\uFE0F excedente $'+fmtMoney(_exc):finPagado(_cr)?' \u00B7 COBRADO':' \u00B7 falta $'+fmtMoney(_sal)):'')+'</div>';
   }
   h+='<button class="btn btn-ghost btn-sm" data-ordenes="'+pid+'">\u00D3rdenes'+(r.total?' ('+r.listas+'/'+r.total+')':'')+'</button>';
   if(p.instalacion&&p.instalacion.lleva)h+='<button class="btn btn-ghost btn-sm" data-instalacion="'+pid+'">\uD83D\uDD27 Instalaci\u00F3n</button>';
@@ -2380,6 +2381,9 @@ async function finAbonoDevolver(cuentaId,abonoId){
   toast('Devuelto a Por asignar','warn');
   programarRerender();
 }
+// Bs y tasa de un abono, para auditar despues.
+function fmtTasa(n){return Number(n||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:4});}
+function abonoTasaTxt(a){return a&&finNum(a.tasa)>0?fmtMoney(a.bs||0)+' Bs · tasa '+fmtTasa(a.tasa):'';}
 var _abonosPedidoId=null;
 function verAbonosPedido(id){
   if(SESSION.rol!=='admin')return;
@@ -2387,11 +2391,12 @@ function verAbonosPedido(id){
   var cr=cuentaAbonosDePedido(p.numero);if(!cr)return;
   _abonosPedidoId=id;
   document.getElementById('abonos-titulo').textContent='Abonos del pedido #'+(p.numero||'');
-  var h='<div style="font-size:13px;margin-bottom:12px">Abonado <strong>$'+fmtMoney(finAbonado(cr))+'</strong> de $'+fmtMoney(cr.monto)+' · Saldo <strong>$'+fmtMoney(Math.max(finSaldo(cr),0))+'</strong></div>';
+  var h='<div style="font-size:13px;margin-bottom:12px">Abonado <strong>$'+fmtMoney(finAbonado(cr))+'</strong> de $'+fmtMoney(cr.monto)+' · '+(finExcedente(cr)?'<strong style="color:#b45309">⚠️ Excedente $'+fmtMoney(finExcedente(cr))+'</strong>':'Saldo <strong>$'+fmtMoney(Math.max(finSaldo(cr),0))+'</strong>')+'</div>';
   (cr.abonos||[]).map(function(a,i){return {a:a,i:i};}).reverse().forEach(function(x){
     var a=x.a;
     var url=/^https:\/\//.test(a.comp||'')?a.comp:'';
     h+='<div class="card" style="padding:11px 13px;margin-bottom:8px"><div style="font-size:15px;font-weight:700">$'+fmtMoney(a.m)+' <span style="font-size:12px;font-weight:400;color:var(--muted)">el '+esc(a.f)+'</span></div>';
+    if(abonoTasaTxt(a))h+='<div style="font-size:12px;font-weight:600;color:#475569;margin-top:2px">'+abonoTasaTxt(a)+'</div>';
     if(a.nota)h+='<div style="font-size:12px;color:#475569;margin-top:2px">'+esc(a.nota)+'</div>';
     if(a.por)h+='<div style="font-size:11px;color:var(--muted);margin-top:2px">Reportó: '+esc(a.por)+'</div>';
     if(url){
@@ -5105,6 +5110,9 @@ function finNum(v){var n=parseFloat(String(v==null?'':v).replace(',','.'));retur
 function finAbonado(r){return (r.abonos||[]).reduce(function(t,a){return t+finNum(a.m);},0);}
 function finSaldo(r){return Math.round((finNum(r.monto)-finAbonado(r))*100)/100;}
 function finPagado(r){return finSaldo(r)<=0.009;}
+// Lo transferido de mas sobre el total de la cuenta. No se rechaza: queda a la vista.
+function finExcedente(r){var s=finSaldo(r);return s<-0.009?Math.round(-s*100)/100:0;}
+function finTotalExcedente(t){return finLista(t).reduce(function(s,r){return s+finExcedente(r);},0);}
 function finVencido(r){if(finPagado(r))return false;var d=diasRestantes(r.vence);return d!==null&&d<0;}
 function finLista(t){return finDB()[t]||[];}
 function finReg(t,id){return finLista(t).find(function(x){return x.id===id;});}
@@ -5156,13 +5164,19 @@ function finColaMonto(x){
   if(!usd&&x.monedaComprobante==='BS'&&x.tasa)usd=x.montoComprobante/x.tasa;
   return usd?Math.round(usd*100)/100:0;
 }
-function finColaBs(x){return x.monedaComprobante==='BS'?x.montoComprobante:(x.monedaTexto==='BS'?x.montoTexto:0);}
+function finColaBs(x){return x.monedaComprobante==='BS'?x.montoComprobante:(x.monedaTexto==='BS'?x.montoTexto:(x.bsTexto||0));}
+// La tasa escrita o, si hay Bs y su total en $, la de la division.
+function finColaTasaDe(x){
+  if(x.tasa)return x.tasa;
+  var bs=finColaBs(x),usd=finColaMonto(x);
+  return bs&&usd?Math.round(bs/usd*10000)/10000:0;
+}
 function finColaLeido(x){
   var p=[];
   var usd=x.monedaTexto==='USD'?x.montoTexto:(x.monedaComprobante==='USD'?x.montoComprobante:0);
   if(usd)p.push('$'+fmtMoney(usd));
   var bs=finColaBs(x);if(bs)p.push(fmtMoney(bs)+' Bs');
-  if(x.tasa)p.push('tasa '+fmtMoney(x.tasa));
+  var tc=finColaTasaDe(x);if(tc)p.push('tasa '+fmtTasa(tc)+(x.tasa?'':' (calculada)'));
   if(x.metodo)p.push(esc(x.metodo));
   if(x.referencia)p.push('Ref '+esc(x.referencia));
   return p.join(' · ')||'Monto sin leer';
@@ -5202,7 +5216,7 @@ function finColaAbrir(id){
   h+='<input type="hidden" id="fc-id" value="'+esc(id)+'">';
   h+='<div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:12px"><div style="font-size:13px;font-weight:700">'+finColaLeido(x)+'</div>'+finColaComp(x,200)+'</div>';
   var bs=finColaBs(x);
-  if(bs)h+='<div class="sfield"><label>Tasa (para pasar '+fmtMoney(bs)+' Bs a $)</label><input type="number" step="0.0001" id="fc-tasa" value="'+(x.tasa||'')+'" oninput="finColaTasa('+bs+')"></div>';
+  if(bs)h+='<div class="sfield"><label>Tasa (para pasar '+fmtMoney(bs)+' Bs a $)</label><input type="number" step="0.0001" id="fc-tasa" value="'+(finColaTasaDe(x)||'')+'" oninput="finColaTasa('+bs+')"></div>';
   h+='<div id="fc-filas">'+finColaFila(x.pedido,finColaMonto(x))+'</div>';
   h+='<button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById(\'fc-filas\').insertAdjacentHTML(\'beforeend\',finColaFila(\'\',\'\'))" style="margin-bottom:10px">+ Repartir con otro pedido</button>';
   h+='<div id="fc-total" style="font-size:13px;font-weight:700;margin-bottom:10px"></div>';
@@ -5231,7 +5245,7 @@ function finColaInfo(){
     if(p.estatus==='ANULADO'){inf.textContent='⚠️ '+(p.cliente||'')+' · pedido anulado';return;}
     var cr=cuentaAbonosDePedido(p.numero);
     var sal=cr?finSaldo(cr):(finNum(p.totalOperacion)||finNum(p.monto));
-    inf.textContent=(p.cliente||'')+' · saldo $'+fmtMoney(sal)+(m?' → quedaría $'+fmtMoney(sal-m):'');
+    inf.textContent=(p.cliente||'')+' · saldo $'+fmtMoney(sal)+(m?(m>sal+0.009?' → ⚠️ excedente $'+fmtMoney(m-sal):' → quedaría $'+fmtMoney(sal-m)):'');
   });
   var t=document.getElementById('fc-total');
   if(t)t.textContent='Total a registrar: $'+fmtMoney(total);
@@ -5252,7 +5266,7 @@ async function finColaGuardar(){
   var btn=document.getElementById('fc-guardar');
   if(btn){btn.disabled=true;btn.textContent='Guardando...';}
   var res=null;
-  try{res=await veoPost('/abonos-cola/asignar',{id:id,lineas:lineas,fecha:inputFecha(document.getElementById('fc-fecha').value),nota:(document.getElementById('fc-nota').value||'').trim()});}
+  try{res=await veoPost('/abonos-cola/asignar',{id:id,lineas:lineas,tasa:finNum((document.getElementById('fc-tasa')||{}).value),fecha:inputFecha(document.getElementById('fc-fecha').value),nota:(document.getElementById('fc-nota').value||'').trim()});}
   catch(e){console.error('Asignar abono:',e);}
   if(!res||!res.ok){
     if(btn){btn.disabled=false;btn.textContent='Registrar';}
@@ -5285,6 +5299,7 @@ function finResumen(){
   h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px">';
   h+=tarjeta(porCobrar,'Por cobrar','#166534',vencC.length?('\u26A0\uFE0F '+vencC.length+' vencida(s)'):'al d\u00EDa');
   h+=tarjeta(porPagar,'Por pagar','#b91c1c',vencP.length?('\u26A0\uFE0F '+vencP.length+' vencida(s)'):'al d\u00EDa');
+  if(finTotalExcedente('cobrar'))h+=tarjeta(finTotalExcedente('cobrar'),'Excedente de clientes','#b45309','transfirieron de m\u00E1s');
   h+=tarjeta(neto,'Posici\u00F3n neta',neto>=0?'#1d4ed8':'#b91c1c','por cobrar menos por pagar');
   h+=tarjeta(finGastosMes(),'Gastos del mes','#7c3aed',finMesActual());
   h+=tarjeta(finCobradoMes(),'Cobrado este mes','#166534','abonos recibidos');
@@ -5315,30 +5330,56 @@ function finResumen(){
 }
 
 // ── POR COBRAR / POR PAGAR ──────────────────────────────────
+// Pedidos entregados que aun deben dinero. "sinCuenta": entregados con monto que
+// todavia no tienen cuenta por cobrar (se le abre al registrarles un abono).
+var FIN_ENTREG=false;
+function finNumPedido(v){return String(v==null?'':v).trim().replace(/^0+/,'');}
+function finEntregadosPorCobrar(){
+  var entregados={};
+  (DB.pedidos||[]).forEach(function(p){if(p.estatus==='ENTREGADO'&&finNumPedido(p.numero))entregados[finNumPedido(p.numero)]=p;});
+  var cuentas=finLista('cobrar').filter(function(r){return entregados[finNumPedido(r.pedidoNum)]&&finSaldo(r)>0.009;});
+  var conCuenta={};
+  finLista('cobrar').forEach(function(r){conCuenta[finNumPedido(r.pedidoNum)]=true;});
+  var sinCuenta=Object.keys(entregados).filter(function(n){return !conCuenta[n]&&(finNum(entregados[n].totalOperacion)||finNum(entregados[n].monto))>0;}).map(function(n){return entregados[n];});
+  var total=cuentas.reduce(function(s,r){return s+finSaldo(r);},0)+sinCuenta.reduce(function(s,p){return s+(finNum(p.totalOperacion)||finNum(p.monto));},0);
+  return {entregados:entregados,cuentas:cuentas,sinCuenta:sinCuenta,total:total,n:cuentas.length+sinCuenta.length};
+}
 function finTabla(t){
   var esC=t==='cobrar';
-  var arr=finLista(t).slice();
+  var ent=esC?finEntregadosPorCobrar():null;
+  var filtroEnt=esC&&FIN_ENTREG;
+  var arr=filtroEnt?ent.cuentas.slice():finLista(t).slice();
   var q=FIN_BUSCA.toLowerCase().trim();
   if(q)arr=arr.filter(function(r){return ((esC?r.cliente:r.proveedor)+' '+(r.pedidoNum||'')+' '+(r.nota||'')).toLowerCase().indexOf(q)>=0;});
-  if(FIN_SOLO_PEND)arr=arr.filter(function(r){return !finPagado(r);});
-  arr.sort(function(a,b){var da=diasRestantes(a.vence),db=diasRestantes(b.vence);if(da===null&&db===null)return 0;if(da===null)return 1;if(db===null)return -1;return da-db;});
+  var huerfanos=filtroEnt?ent.sinCuenta.filter(function(p){return !q||((p.cliente||'')+' '+(p.numero||'')).toLowerCase().indexOf(q)>=0;}):[];
+  if(FIN_SOLO_PEND&&!filtroEnt)arr=arr.filter(function(r){return !finPagado(r)||finExcedente(r);});
+  arr.sort(function(a,b){if(filtroEnt)return finSaldo(b)-finSaldo(a);var da=diasRestantes(a.vence),db=diasRestantes(b.vence);if(da===null&&db===null)return 0;if(da===null)return 1;if(db===null)return -1;return da-db;});
   var pend=finTotalPend(t);
   var h='<div class="section-pad" style="padding-top:0">';
-  h+='<div style="background:'+(esC?'#f0fdf4':'#fef2f2')+';border:1px solid '+(esC?'#bbf7d0':'#fecaca')+';border-radius:10px;padding:12px;margin-bottom:10px"><div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">'+(esC?'Total por cobrar':'Total por pagar')+'</div><div style="font-size:26px;font-weight:800;color:'+(esC?'#166534':'#b91c1c')+'">$'+fmtMoney(pend)+'</div></div>';
+  h+='<div style="background:'+(esC?'#f0fdf4':'#fef2f2')+';border:1px solid '+(esC?'#bbf7d0':'#fecaca')+';border-radius:10px;padding:12px;margin-bottom:10px"><div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">'+(esC?'Total por cobrar':'Total por pagar')+'</div><div style="font-size:26px;font-weight:800;color:'+(esC?'#166534':'#b91c1c')+'">$'+fmtMoney(pend)+'</div>'+(finTotalExcedente(t)?'<div style="font-size:12px;font-weight:700;color:#b45309;margin-top:2px">⚠️ '+(esC?'Excedente a favor de clientes':'Pagado de más')+': $'+fmtMoney(finTotalExcedente(t))+'</div>':'')+'</div>';
   h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"><button class="btn btn-dark btn-sm" onclick="finAbrir(\''+t+'\')">+ Agregar</button>'
-    +'<button class="btn '+(FIN_SOLO_PEND?'btn-dark':'btn-ghost')+' btn-sm" onclick="FIN_SOLO_PEND=!FIN_SOLO_PEND;renderFinanzas(document.getElementById(\'content\'))">'+(FIN_SOLO_PEND?'Solo pendientes':'Todas')+'</button></div>';
+    +'<button class="btn '+(FIN_SOLO_PEND?'btn-dark':'btn-ghost')+' btn-sm" onclick="FIN_SOLO_PEND=!FIN_SOLO_PEND;renderFinanzas(document.getElementById(\'content\'))">'+(FIN_SOLO_PEND?'Solo pendientes':'Todas')+'</button>'
+    +(esC?'<button class="btn '+(FIN_ENTREG?'btn-dark':'btn-ghost')+' btn-sm" onclick="FIN_ENTREG=!FIN_ENTREG;renderFinanzas(document.getElementById(\'content\'))">🚚 Entregados por cobrar ('+ent.n+')</button>':'')+'</div>';
+  if(filtroEnt)h+='<div style="font-size:13px;font-weight:700;color:#b45309;margin-bottom:8px">🚚 Entregados por cobrar: $'+fmtMoney(ent.total)+'</div>';
   h+='<input type="text" id="fin-busca" placeholder="Buscar..." value="'+esc(FIN_BUSCA)+'" oninput="finBuscar(this)" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;margin-bottom:8px">';
-  if(!arr.length){h+='<div class="empty"><div class="empty-icon">'+(esC?'\uD83D\uDCB5':'\uD83E\uDDFE')+'</div>'+(FIN_SOLO_PEND?'Nada pendiente aqu\u00ED.':'Sin registros.')+'</div></div>';return h;}
+  if(!arr.length&&!huerfanos.length){h+='<div class="empty"><div class="empty-icon">'+(esC?'\uD83D\uDCB5':'\uD83E\uDDFE')+'</div>'+(filtroEnt?'No hay pedidos entregados por cobrar.':FIN_SOLO_PEND?'Nada pendiente aqu\u00ED.':'Sin registros.')+'</div></div>';return h;}
+  huerfanos.forEach(function(p){
+    var m=finNum(p.totalOperacion)||finNum(p.monto);
+    h+='<div class="card" style="margin-bottom:6px;padding:11px 13px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700">'+esc(p.cliente||'?')+'</div><div style="font-size:11px;color:var(--muted)">Pedido #'+esc(p.numero)+' \u00B7 sin cuenta por cobrar</div></div><span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;background:#dbeafe;color:#1d4ed8;flex-shrink:0">\uD83D\uDE9A ENTREGADO</span></div>'
+      +'<div style="font-size:20px;font-weight:800;color:#166534;margin-top:7px">$'+fmtMoney(m)+'</div>'
+      +'<div style="margin-top:8px"><button class="btn btn-green btn-sm" onclick="pedidoAbonoAbrir(\''+esc(p.id)+'\')">\uD83D\uDCB0 Registrar abono</button></div></div>';
+  });
   arr.forEach(function(r){
-    var saldo=finSaldo(r),ab=finAbonado(r),pagado=finPagado(r),venc=finVencido(r);
+    var saldo=finSaldo(r),ab=finAbonado(r),pagado=finPagado(r),venc=finVencido(r),exc=finExcedente(r);
     var d=diasRestantes(r.vence);
-    var estado=pagado?{t:'PAGADO',c:'#166534',b:'#dcfce7'}:venc?{t:'VENCIDO '+Math.abs(d)+'d',c:'#b91c1c',b:'#fee2e2'}:(d!==null&&d<=7?{t:'vence en '+d+'d',c:'#d97706',b:'#fef3c7'}:{t:'pendiente',c:'#64748b',b:'#f1f5f9'});
-    h+='<div class="card" style="margin-bottom:6px;padding:11px 13px'+(pagado?';opacity:.65':'')+'">';
+    var estado=exc?{t:'EXCEDENTE $'+fmtMoney(exc),c:'#b45309',b:'#fef3c7'}:pagado?{t:'PAGADO',c:'#166534',b:'#dcfce7'}:venc?{t:'VENCIDO '+Math.abs(d)+'d',c:'#b91c1c',b:'#fee2e2'}:(d!==null&&d<=7?{t:'vence en '+d+'d',c:'#d97706',b:'#fef3c7'}:{t:'pendiente',c:'#64748b',b:'#f1f5f9'});
+    h+='<div class="card" style="margin-bottom:6px;padding:11px 13px'+(pagado&&!exc?';opacity:.65':'')+'">';
     h+='<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700">'+esc((esC?r.cliente:r.proveedor)||'?')+'</div><div style="font-size:11px;color:var(--muted)">'+(r.pedidoNum?'Pedido #'+esc(r.pedidoNum)+(r.origen==='pedido'?' \uD83D\uDD17':'')+' \u00B7 ':'')+'emitido '+esc(r.fecha||'')+(r.vence?' \u00B7 vence '+esc(r.vence):'')+'</div></div>';
+    h+=(esC&&ent.entregados[finNumPedido(r.pedidoNum)]?'<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;background:#dbeafe;color:#1d4ed8;flex-shrink:0">🚚 ENTREGADO</span>':'');
     h+='<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;background:'+estado.b+';color:'+estado.c+';flex-shrink:0">'+estado.t+'</span></div>';
-    h+='<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:7px"><div><div style="font-size:20px;font-weight:800;color:'+(pagado?'#166534':esC?'#166534':'#b91c1c')+'">$'+fmtMoney(saldo>0?saldo:0)+'</div><div style="font-size:11px;color:var(--muted)">de $'+fmtMoney(r.monto)+(finNum(r.base)&&finNum(r.base)!==finNum(r.monto)?' (base $'+fmtMoney(r.base)+')':'')+(ab?' \u00B7 abonado $'+fmtMoney(ab):'')+'</div></div></div>';
+    h+='<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:7px"><div><div style="font-size:20px;font-weight:800;color:'+(pagado?'#166534':esC?'#166534':'#b91c1c')+'">$'+fmtMoney(saldo>0?saldo:0)+'</div><div style="font-size:11px;color:var(--muted)">de $'+fmtMoney(r.monto)+(finNum(r.base)&&finNum(r.base)!==finNum(r.monto)?' (base $'+fmtMoney(r.base)+')':'')+(ab?' \u00B7 abonado $'+fmtMoney(ab):'')+'</div>'+(exc?'<div style="font-size:12px;font-weight:700;color:#b45309;margin-top:2px">\u26A0\uFE0F '+(esC?'El cliente transfiri\u00F3 de m\u00E1s':'Se pag\u00F3 de m\u00E1s')+': $'+fmtMoney(exc)+'</div>':'')+'</div></div>';
     if(r.nota)h+='<div style="font-size:11px;color:var(--muted);margin-top:4px">\uD83D\uDCDD '+esc(r.nota)+'</div>';
-    if((r.abonos||[]).length)h+='<div style="font-size:11px;color:#475569;margin-top:5px;border-top:1px dashed var(--border);padding-top:5px">'+r.abonos.map(function(a,i){return '\u2022 $'+fmtMoney(a.m)+' el '+esc(a.f)+(a.nota?' \u2014 '+esc(a.nota):'')+(a.por?' \u00b7 '+esc(a.por):'')+(/^https:\/\//.test(a.comp||'')?' \u00b7 <a href="'+esc(a.comp)+'" target="_blank" rel="noopener">\ud83e\uddfe comprobante</a>':'')+' <a href="#" style="color:#dc2626" onclick="finAbonoBorrar(\''+t+'\',\''+r.id+'\','+i+');return false">borrar</a>';}).join('<br>')+'</div>';
+    if((r.abonos||[]).length)h+='<div style="font-size:11px;color:#475569;margin-top:5px;border-top:1px dashed var(--border);padding-top:5px">'+r.abonos.map(function(a,i){return '\u2022 $'+fmtMoney(a.m)+' el '+esc(a.f)+(abonoTasaTxt(a)?' ('+abonoTasaTxt(a)+')':'')+(a.nota?' \u2014 '+esc(a.nota):'')+(a.por?' \u00b7 '+esc(a.por):'')+(/^https:\/\//.test(a.comp||'')?' \u00b7 <a href="'+esc(a.comp)+'" target="_blank" rel="noopener">\ud83e\uddfe comprobante</a>':'')+' <a href="#" style="color:#dc2626" onclick="finAbonoBorrar(\''+t+'\',\''+r.id+'\','+i+');return false">borrar</a>';}).join('<br>')+'</div>';
     h+='<div style="display:flex;gap:6px;margin-top:8px">'+(pagado?'':'<button class="btn btn-green btn-sm" onclick="finAbonoAbrir(\''+t+'\',\''+r.id+'\')">\uD83D\uDCB0 Registrar abono</button>')
       +'<button class="btn btn-ghost btn-sm" onclick="finAbrir(\''+t+'\',\''+r.id+'\')">\u270F\uFE0F</button>'
       +'<button class="btn btn-ghost btn-sm" style="color:#dc2626;margin-left:auto" onclick="finBorrar(\''+t+'\',\''+r.id+'\')">\uD83D\uDDD1</button></div>';
@@ -5549,13 +5590,19 @@ function finAbonoAbrir(t,id){
   h+='<div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:12px"><div style="font-size:13px;font-weight:700">'+esc((esC?r.cliente:r.proveedor)||'')+'</div><div style="font-size:11px;color:var(--muted)">Total $'+fmtMoney(r.monto)+' \u00B7 abonado $'+fmtMoney(finAbonado(r))+'</div><div style="font-size:22px;font-weight:800;color:'+(esC?'#166534':'#b91c1c')+';margin-top:4px">Saldo: $'+fmtMoney(saldo)+'</div></div>';
   h+='<input type="hidden" id="fa-t" value="'+t+'"><input type="hidden" id="fa-id" value="'+esc(id)+'">';
   // El monto arranca vacio: asi un abono parcial no se registra por error como pago total.
-  h+='<div class="sfield-row"><div class="sfield"><label>Monto *</label><input type="number" step="0.01" id="fa-monto" placeholder="0,00"></div><div class="sfield"><label>Fecha</label><input type="date" id="fa-fecha" value="'+fechaInput(fecha())+'"></div></div>';
+  h+='<div class="sfield-row"><div class="sfield"><label>Monto *</label><input type="number" step="0.01" id="fa-monto" placeholder="0,00" oninput="finAbonoTasaVer()"></div><div class="sfield"><label>Fecha</label><input type="date" id="fa-fecha" value="'+fechaInput(fecha())+'"></div></div>';
   h+='<div style="margin:-4px 0 10px"><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById(\'fa-monto\').value=\''+saldo.toFixed(2)+'\'">Usar todo el saldo ($'+fmtMoney(saldo)+')</button></div>';
   h+='<div class="sfield"><label>Nota</label><input type="text" id="fa-nota" placeholder="Ej: transferencia Banesco, ref 4471"></div>';
+  if(esC)h+='<div class="sfield"><label>Monto en Bs, si pagó en Bs (opcional)</label><input type="number" step="0.01" id="fa-bs" placeholder="La tasa se calcula sola" oninput="finAbonoTasaVer()"><div id="fa-bs-tasa" style="font-size:11px;color:var(--muted);margin-top:3px"></div></div>';
   if(esC)h+='<div class="sfield"><label>Comprobante (foto o PDF, opcional)</label><input type="file" id="fa-comp" accept="image/*,application/pdf"></div>';
   h+='</div><div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal(\'modal-fin\')">Cancelar</button><button class="btn btn-green" id="fa-guardar" onclick="finAbonoGuardar()">Registrar</button></div>';
   finModal(h);
   var fm=document.getElementById('fa-monto');if(fm)fm.focus();
+}
+function finAbonoTasaVer(){
+  var bs=finNum((document.getElementById('fa-bs')||{}).value),m=finNum((document.getElementById('fa-monto')||{}).value);
+  var e=document.getElementById('fa-bs-tasa');
+  if(e)e.textContent=bs>0&&m>0?'Tasa: '+fmtTasa(bs/m):'';
 }
 // Abono manual desde la tarjeta del pedido. Si el pedido aun no tiene cuenta, se abre.
 function pedidoAbonoAbrir(pid){
@@ -5586,9 +5633,10 @@ async function finAbonoGuardar(){
   var m=finNum(document.getElementById('fa-monto').value);
   if(m<=0){toast('El monto debe ser mayor a 0','err');return;}
   var saldo=finSaldo(r);
-  if(m>saldo+0.01&&!confirm('El monto ($'+fmtMoney(m)+') es mayor al saldo ($'+fmtMoney(saldo)+'). \u00BFRegistrar igual?'))return;
+  if(m>saldo+0.01&&!confirm('El monto ($'+fmtMoney(m)+') es mayor al saldo ($'+fmtMoney(saldo)+'). Quedar\u00E1 un excedente de $'+fmtMoney(m-saldo)+'. \u00BFRegistrar igual?'))return;
   var f=inputFecha(document.getElementById('fa-fecha').value)||fecha();
   var nota=(document.getElementById('fa-nota').value||'').trim();
+  var bsAb=finNum((document.getElementById('fa-bs')||{}).value);
   var fc=document.getElementById('fa-comp'),file=fc&&fc.files&&fc.files[0];
   var comp='';
   if(file){
@@ -5609,11 +5657,13 @@ async function finAbonoGuardar(){
   if(!Array.isArray(r.abonos))r.abonos=[];
   var abono={id:'ab'+uid(),m:m,f:f,nota:nota,por:SESSION.nombre,ts:Date.now()};
   if(comp)abono.comp=comp;
+  if(bsAb>0){abono.bs=bsAb;abono.tasa=Math.round(bsAb/m*10000)/10000;}
   r.abonos.push(abono);
   registrarBitacora('fin'+id,'FINANZAS abono ['+t+'] $'+m+' por '+SESSION.nombre);
   guardarDB();cerrarModal('modal-fin');
   if(TAB==='finanzas')renderFinanzas(document.getElementById('content'));else programarRerender();
-  toast(finPagado(r)?'Saldado por completo \u2713':'Abono registrado \u2713','ok');
+  if(finExcedente(r))toast('Registrado. Excedente: $'+fmtMoney(finExcedente(r)),'warn');
+  else toast(finPagado(r)?'Saldado por completo \u2713':'Abono registrado \u2713','ok');
 }
 function finCSV(){
   var rows=[['Tipo','Quien','Pedido','Monto','Abonado','Saldo','Fecha','Vence','Categoria','Nota']];
