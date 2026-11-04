@@ -2352,13 +2352,33 @@ function cuentaAbonosDePedido(num){
 function finAbonoBorrar(t,id,i){
   if(SESSION.rol!=='admin')return;
   var r=finReg(t,id),a=r&&(r.abonos||[])[i];if(!a)return;
-  if(!confirm('¿Borrar el abono de $'+fmtMoney(a.m)+' del '+a.f+'? El saldo vuelve a subir.'))return;
+  // Un reparto son varios abonos con el mismo comprobante: este boton borra solo uno.
+  var otros=a.h?finLista('cobrar').filter(function(c){return c!==r&&(c.abonos||[]).some(function(x){return x.h===a.h;});}).map(function(c){return '#'+c.pedidoNum;}):[];
+  var av=otros.length?'\n\nEste pago también se repartió en '+otros.join(', ')+' y ese abono NO se borra. Para deshacer todo el reparto usa Devolver a Por asignar.':'';
+  if(!confirm('¿Borrar el abono de $'+fmtMoney(a.m)+' del '+a.f+'? El saldo vuelve a subir.'+av))return;
   r.abonos.splice(i,1);
   registrarBitacora('fin'+id,'FINANZAS abono borrado ['+t+'] $'+a.m+' del '+a.f+' por '+SESSION.nombre);
   guardarDB();toast('Abono borrado','warn');
   var ov=document.getElementById('modal-abonos');
   if(ov&&ov.classList.contains('open')&&_abonosPedidoId)verAbonosPedido(_abonosPedidoId);
   if(TAB==='finanzas')renderFinanzas(document.getElementById('content'));else programarRerender();
+}
+// Deshace una asignacion: el servidor quita el abono (o todo el reparto) y devuelve
+// el comprobante a Finanzas -> Por asignar. El cambio llega a la app por la escucha.
+async function finAbonoDevolver(cuentaId,abonoId){
+  if(SESSION.rol!=='admin')return;
+  var r=finReg('cobrar',cuentaId),a=r&&(r.abonos||[]).find(function(x){return x.id===abonoId;});if(!a)return;
+  var del=a.h?finLista('cobrar').filter(function(c){return (c.abonos||[]).some(function(x){return x.h===a.h;});}):[r];
+  var txt=del.length>1?'Se quitará de TODOS estos pedidos: '+del.map(function(c){return '#'+c.pedidoNum;}).join(', ')+'.':'Se quitará del pedido #'+(r.pedidoNum||'')+'.';
+  if(!confirm('¿Devolver este abono a Por asignar?\n\n'+txt+' El saldo vuelve a subir y el comprobante queda listo para asignarlo de nuevo.'))return;
+  var res=null;
+  try{res=await veoPost('/abonos-cola/devolver',{cuentaId:cuentaId,abonoId:abonoId});}catch(e){console.error('Devolver abono:',e);}
+  if(!res||!res.ok){toast((res&&res.error)||'Error de conexión. No se cambió nada.','err');return;}
+  registrarBitacora('fin'+cuentaId,'FINANZAS abono devuelto a Por asignar $'+res.total+' por '+SESSION.nombre);
+  guardarDB();
+  cerrarModal('modal-abonos');
+  toast('Devuelto a Por asignar','warn');
+  programarRerender();
 }
 var _abonosPedidoId=null;
 function verAbonosPedido(id){
@@ -2379,7 +2399,9 @@ function verAbonosPedido(id){
         ?'<a href="'+esc(url)+'" target="_blank" rel="noopener" class="btn btn-blue btn-sm" style="text-decoration:none;margin-top:8px;display:inline-block">📄 Ver comprobante</a>'
         :'<a href="'+esc(url)+'" target="_blank" rel="noopener"><img src="'+esc(url)+'" alt="Comprobante del abono" loading="lazy" style="display:block;width:100%;max-height:320px;object-fit:contain;margin-top:8px;border-radius:8px;background:#f1f5f9"></a>';
     }
-    h+='<div style="margin-top:8px"><button class="btn btn-ghost btn-sm" style="color:#dc2626" onclick="finAbonoBorrar(\'cobrar\',\''+cr.id+'\','+x.i+')">🗑 Borrar abono</button></div>';
+    h+='<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" style="color:#dc2626" onclick="finAbonoBorrar(\'cobrar\',\''+cr.id+'\','+x.i+')">🗑 Borrar abono</button>';
+    if(url&&a.id)h+='<button class="btn btn-ghost btn-sm" onclick="finAbonoDevolver(\''+esc(cr.id)+'\',\''+esc(a.id)+'\')">↩️ Devolver a Por asignar</button>';
+    h+='</div>';
     h+='</div>';
   });
   document.getElementById('abonos-body').innerHTML=h;
@@ -5109,11 +5131,13 @@ function finBuscar(el){
 function renderFinanzas(c){
   if(!SESSION||SESSION.rol!=='admin'){c.innerHTML='<div class="empty">Acceso denegado</div>';return;}
   finDB();
-  var modos=[['resumen','\uD83D\uDCCA Resumen'],['cobrar','\uD83D\uDCB5 Por cobrar'],['pagar','\uD83E\uDDFE Por pagar'],['gastos','\uD83D\uDCB8 Gastos'],['rentab','\uD83D\uDCC8 Rentabilidad'],['terra','\uD83E\uDD1D Terramoda']];
+  var _nCola=(DB.abonosCola||[]).length;
+  var modos=[['resumen','\uD83D\uDCCA Resumen'],['cola','\uD83D\uDCE5 Por asignar'+(_nCola?' ('+_nCola+')':'')],['cobrar','\uD83D\uDCB5 Por cobrar'],['pagar','\uD83E\uDDFE Por pagar'],['gastos','\uD83D\uDCB8 Gastos'],['rentab','\uD83D\uDCC8 Rentabilidad'],['terra','\uD83E\uDD1D Terramoda']];
   var h='<div class="section-pad" style="padding-bottom:0"><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">'
-    +modos.map(function(m){return '<button class="btn '+(FIN_MODO===m[0]?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:92px" onclick="finSetModo(\''+m[0]+'\')">'+m[1]+'</button>';}).join('')
+    +modos.map(function(m){return '<button class="btn '+(FIN_MODO===m[0]?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:'+(m[0]==='cola'?140:92)+'px" onclick="finSetModo(\''+m[0]+'\')">'+m[1]+'</button>';}).join('')
     +'</div></div>';
   if(FIN_MODO==='resumen')h+=finResumen();
+  else if(FIN_MODO==='cola')h+=finCola();
   else if(FIN_MODO==='cobrar')h+=finTabla('cobrar');
   else if(FIN_MODO==='pagar')h+=finTabla('pagar');
   else if(FIN_MODO==='gastos')h+=finGastos();
@@ -5121,6 +5145,133 @@ function renderFinanzas(c){
   else if(FIN_MODO==='terra')h+=finTerramoda();
   h+='<div style="font-size:10px;color:#cbd5e1;text-align:center;padding:6px">'+APP_VERSION+'</div>';
   c.innerHTML=h;
+}
+
+// ── POR ASIGNAR ─────────────────────────────────────────────
+// Comprobantes del grupo de abonos que el bot no pudo registrar. Los guarda y
+// los cambia el servidor; desde aqui se asignan a uno o varios pedidos.
+function finColaMonto(x){
+  var usd=x.monedaTexto==='USD'?x.montoTexto:(x.monedaComprobante==='USD'?x.montoComprobante:0);
+  if(!usd&&x.monedaTexto==='BS'&&x.tasa)usd=x.montoTexto/x.tasa;
+  if(!usd&&x.monedaComprobante==='BS'&&x.tasa)usd=x.montoComprobante/x.tasa;
+  return usd?Math.round(usd*100)/100:0;
+}
+function finColaBs(x){return x.monedaComprobante==='BS'?x.montoComprobante:(x.monedaTexto==='BS'?x.montoTexto:0);}
+function finColaLeido(x){
+  var p=[];
+  var usd=x.monedaTexto==='USD'?x.montoTexto:(x.monedaComprobante==='USD'?x.montoComprobante:0);
+  if(usd)p.push('$'+fmtMoney(usd));
+  var bs=finColaBs(x);if(bs)p.push(fmtMoney(bs)+' Bs');
+  if(x.tasa)p.push('tasa '+fmtMoney(x.tasa));
+  if(x.metodo)p.push(esc(x.metodo));
+  if(x.referencia)p.push('Ref '+esc(x.referencia));
+  return p.join(' · ')||'Monto sin leer';
+}
+function finColaComp(x,alto){
+  var url=/^https:\/\//.test(x.comp||'')?x.comp:'';
+  if(!url)return '<div style="font-size:12px;color:#b91c1c;margin-top:6px">El archivo no se pudo guardar.</div>';
+  if(/\.pdf(\?|$)/i.test(url))return '<a href="'+esc(url)+'" target="_blank" rel="noopener" class="btn btn-blue btn-sm" style="text-decoration:none;margin-top:8px;display:inline-block">📄 Ver comprobante</a>';
+  return '<a href="'+esc(url)+'" target="_blank" rel="noopener"><img src="'+esc(url)+'" alt="Comprobante" loading="lazy" style="display:block;width:100%;max-height:'+alto+'px;object-fit:contain;margin-top:8px;border-radius:8px;background:#f1f5f9"></a>';
+}
+function finCola(){
+  var arr=(DB.abonosCola||[]).slice().sort(function(a,b){return (b.ts||0)-(a.ts||0);});
+  var h='<div class="section-pad" style="padding-top:0">';
+  if(!arr.length)return h+'<div class="empty"><div class="empty-icon">📥</div>No hay abonos por asignar.</div></div>';
+  arr.forEach(function(x){
+    h+='<div class="card" style="padding:12px 14px;margin-bottom:10px">';
+    h+='<div style="font-size:15px;font-weight:700">'+finColaLeido(x)+'</div>';
+    h+='<div style="font-size:12px;color:#b91c1c;font-weight:600;margin-top:2px">'+esc(x.motivo||'Sin registrar')+'</div>';
+    h+='<div style="font-size:11px;color:var(--muted);margin-top:2px">'+esc(x.por||'')+' · '+esc(x.f||'')+'</div>';
+    if(x.texto)h+='<div style="font-size:12px;color:#475569;margin-top:4px;white-space:pre-wrap">'+esc(x.texto)+'</div>';
+    h+=finColaComp(x,240);
+    h+='<div style="display:flex;gap:6px;margin-top:10px"><button class="btn btn-green btn-sm" onclick="finColaAbrir(\''+esc(x.id)+'\')">💰 Asignar a pedido</button>'
+      +'<button class="btn btn-ghost btn-sm" style="color:#dc2626;margin-left:auto" onclick="finColaDescartar(\''+esc(x.id)+'\')">Descartar</button></div>';
+    h+='</div>';
+  });
+  return h+'</div>';
+}
+function finColaFila(pedido,monto){
+  return '<div class="fc-fila" style="margin-bottom:10px"><div class="sfield-row"><div class="sfield"><label>Pedido *</label><input type="text" inputmode="numeric" class="fc-ped" value="'+esc(pedido||'')+'" oninput="finColaInfo()"></div>'
+    +'<div class="sfield"><label>Monto en $ *</label><input type="number" step="0.01" class="fc-m" value="'+(monto?monto:'')+'" oninput="finColaInfo()"></div></div>'
+    +'<div class="fc-info" style="font-size:11px;color:var(--muted);margin-top:-6px"></div></div>';
+}
+function finColaItem(id){return (DB.abonosCola||[]).find(function(x){return x.id===id;});}
+function finColaAbrir(id){
+  var x=finColaItem(id);if(!x)return;
+  var h='<div class="sheet-head"><h2>💰 Asignar abono</h2><button class="sheet-close" onclick="cerrarModal(\'modal-fin\')">✕</button></div><div class="sheet-body">';
+  h+='<input type="hidden" id="fc-id" value="'+esc(id)+'">';
+  h+='<div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:12px"><div style="font-size:13px;font-weight:700">'+finColaLeido(x)+'</div>'+finColaComp(x,200)+'</div>';
+  var bs=finColaBs(x);
+  if(bs)h+='<div class="sfield"><label>Tasa (para pasar '+fmtMoney(bs)+' Bs a $)</label><input type="number" step="0.0001" id="fc-tasa" value="'+(x.tasa||'')+'" oninput="finColaTasa('+bs+')"></div>';
+  h+='<div id="fc-filas">'+finColaFila(x.pedido,finColaMonto(x))+'</div>';
+  h+='<button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById(\'fc-filas\').insertAdjacentHTML(\'beforeend\',finColaFila(\'\',\'\'))" style="margin-bottom:10px">+ Repartir con otro pedido</button>';
+  h+='<div id="fc-total" style="font-size:13px;font-weight:700;margin-bottom:10px"></div>';
+  h+='<div class="sfield"><label>Fecha del pago</label><input type="date" id="fc-fecha" value="'+fechaInput(x.fecha||x.f||fecha())+'"></div>';
+  h+='<div class="sfield"><label>Nota</label><input type="text" id="fc-nota" value="'+esc(x.metodo||'')+'"></div>';
+  h+='</div><div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal(\'modal-fin\')">Cancelar</button><button class="btn btn-green" id="fc-guardar" onclick="finColaGuardar()">Registrar</button></div>';
+  finModal(h);
+  finColaInfo();
+}
+function finColaTasa(bs){
+  var t=finNum((document.getElementById('fc-tasa')||{}).value);
+  var ms=document.querySelectorAll('#fc-filas .fc-m');
+  if(t>0&&ms.length===1)ms[0].value=(Math.round(bs/t*100)/100).toFixed(2);
+  finColaInfo();
+}
+// Muestra de quien es cada pedido y como queda su saldo, para evitar errores de numero.
+function finColaInfo(){
+  var total=0;
+  document.querySelectorAll('#fc-filas .fc-fila').forEach(function(f){
+    var n=(f.querySelector('.fc-ped').value||'').replace(/\D/g,'').replace(/^0+/,'');
+    var m=finNum(f.querySelector('.fc-m').value);total+=m;
+    var inf=f.querySelector('.fc-info');
+    if(!n){inf.textContent='';return;}
+    var p=DB.pedidos.find(function(y){return String(y.numero==null?'':y.numero).trim().replace(/^0+/,'')===n;});
+    if(!p){inf.textContent='⚠️ No encuentro ese pedido';return;}
+    if(p.estatus==='ANULADO'){inf.textContent='⚠️ '+(p.cliente||'')+' · pedido anulado';return;}
+    var cr=cuentaAbonosDePedido(p.numero);
+    var sal=cr?finSaldo(cr):(finNum(p.totalOperacion)||finNum(p.monto));
+    inf.textContent=(p.cliente||'')+' · saldo $'+fmtMoney(sal)+(m?' → quedaría $'+fmtMoney(sal-m):'');
+  });
+  var t=document.getElementById('fc-total');
+  if(t)t.textContent='Total a registrar: $'+fmtMoney(total);
+}
+async function finColaGuardar(){
+  var id=document.getElementById('fc-id').value;
+  var x=finColaItem(id);if(!x){toast('Ese comprobante ya no está en la cola','err');cerrarModal('modal-fin');return;}
+  var lineas=[],mal=false,total=0;
+  document.querySelectorAll('#fc-filas .fc-fila').forEach(function(f){
+    var p=(f.querySelector('.fc-ped').value||'').replace(/\D/g,''),m=finNum(f.querySelector('.fc-m').value);
+    if(!p&&!m)return;
+    if(!p||m<=0)mal=true;
+    lineas.push({pedido:p,m:m});total+=m;
+  });
+  if(mal||!lineas.length){toast('Escribe el pedido y el monto','err');return;}
+  var esperado=finColaMonto(x);
+  if(esperado&&Math.abs(esperado-total)>0.02&&!confirm('El total ($'+fmtMoney(total)+') es distinto al del comprobante ($'+fmtMoney(esperado)+'). ¿Registrar igual?'))return;
+  var btn=document.getElementById('fc-guardar');
+  if(btn){btn.disabled=true;btn.textContent='Guardando...';}
+  var res=null;
+  try{res=await veoPost('/abonos-cola/asignar',{id:id,lineas:lineas,fecha:inputFecha(document.getElementById('fc-fecha').value),nota:(document.getElementById('fc-nota').value||'').trim()});}
+  catch(e){console.error('Asignar abono:',e);}
+  if(!res||!res.ok){
+    if(btn){btn.disabled=false;btn.textContent='Registrar';}
+    toast((res&&res.error)||'Error de conexión. El abono NO se registró.','err');
+    return;
+  }
+  DB.abonosCola=(DB.abonosCola||[]).filter(function(y){return y.id!==id;});
+  cerrarModal('modal-fin');
+  if(TAB==='finanzas')renderFinanzas(document.getElementById('content'));
+  toast('Abono registrado ✓','ok');
+}
+async function finColaDescartar(id){
+  if(!confirm('¿Descartar este comprobante? No se registra ningún abono y sale de la cola.'))return;
+  var res=null;
+  try{res=await veoPost('/abonos-cola/descartar',{id:id});}catch(e){console.error('Descartar abono:',e);}
+  if(!res||!res.ok){toast((res&&res.error)||'Error de conexión','err');return;}
+  DB.abonosCola=(DB.abonosCola||[]).filter(function(y){return y.id!==id;});
+  if(TAB==='finanzas')renderFinanzas(document.getElementById('content'));
+  toast('Comprobante descartado','warn');
 }
 
 // ── RESUMEN ─────────────────────────────────────────────────
@@ -6255,6 +6406,7 @@ async function cargarDatos(){
     DB.fin=d.fin||{cobrar:[],pagar:[],gastos:[]};
     DB.botProductos=d.botProductos||{};DB.fotosPrecios=d.fotosPrecios||{};
     DB.cotizacionesBot=d.cotizacionesBot||[];
+    DB.abonosCola=d.abonosCola||[];
     _servidorLeido=true;
   }
   // Huella de partida: a partir de aqui solo se manda lo que cambie aqui.
@@ -6314,6 +6466,7 @@ function _aplicarSnap(d){
   });
   // Solo-lectura en la app (lo escribe el webhook): cotizaciones del bot para la estadística.
   if(d.cotizacionesBot)DB.cotizacionesBot=d.cotizacionesBot;
+  DB.abonosCola=d.abonosCola||[];   // solo-lectura aqui: la cambia el servidor
   // Pestañas con estado transitorio que no debe redibujarse en vivo.
   if(TAB==='cotizar')return;
   if(TAB==='plan'&&PLAN_MODO==='carga')return;
