@@ -274,6 +274,9 @@ table.crm{border-collapse:collapse;font-size:12px;min-width:1780px}
 <div class="sheet-head"><h2>Mi perfil</h2><button class="sheet-close" onclick="cerrarModal('modal-perfil')">&#x2715;</button></div>
 <div class="sheet-body" id="perfil-body"></div>
 <div class="sheet-foot"><button class="btn btn-red" onclick="logout()">Cerrar sesi&#xF3;n</button></div></div></div>
+<div class="overlay" id="modal-abonos"><div class="sheet"><div class="sheet-handle"></div>
+<div class="sheet-head"><h2 id="abonos-titulo">Abonos</h2><button class="sheet-close" onclick="cerrarModal('modal-abonos')">&#x2715;</button></div>
+<div class="sheet-body" id="abonos-body"></div></div></div>
 <div class="overlay" id="modal-usuario"><div class="sheet"><div class="sheet-handle"></div>
 <div class="sheet-head"><h2 id="u-titulo">Nuevo usuario</h2><button class="sheet-close" onclick="cerrarModal('modal-usuario')">&#x2715;</button></div>
 <div class="sheet-body"><input type="hidden" id="u-id">
@@ -552,6 +555,24 @@ function _sellarHuellas(){
 // Marca un solo campo, tras confirmar que se guardo.
 function _sellarCampo(k,j){_campoHuella[k]=j;}
 
+// Suma a 'local' lo que hay en el servidor y este aparato nunca vio (no esta en
+// 'base'). Lo que estaba en 'base' y ya no esta en 'local' fue borrado aqui: no vuelve.
+function _mergeCobrarBot(srv,local,base){
+  if(!Array.isArray(local.cobrar))local.cobrar=[];
+  var baseCobrar=base.cobrar||[];
+  (srv.cobrar||[]).forEach(function(rs){
+    var rb=baseCobrar.find(function(x){return x.id===rs.id;});
+    var rl=local.cobrar.find(function(x){return x.id===rs.id;});
+    if(!rl){if(!rb)local.cobrar.push(rs);return;}
+    (rs.abonos||[]).forEach(function(a){
+      if(!a.id)return;   // solo los del bot traen id
+      if(rb&&(rb.abonos||[]).some(function(x){return x.id===a.id;}))return;
+      if(!Array.isArray(rl.abonos))rl.abonos=[];
+      if(!rl.abonos.some(function(x){return x.id===a.id;}))rl.abonos.push(a);
+    });
+  });
+}
+
 async function guardarDB(){
   if(!_db)return;
   // Si ya hay un guardado en curso, en vez de descartar este (lo que borraba
@@ -591,6 +612,20 @@ async function guardarDB(){
           try{huellasNuevas['inv']=JSON.stringify(_mrg);}catch(e){}
         }
       }catch(e){console.warn('Fusión de inventario no disponible, guardo normal:',e&&e.message);}
+    }
+    // ── ANTI-PISADO DE FINANZAS ──
+    // El bot agrega abonos y cuentas por su cuenta. Si llegaron despues de que
+    // este aparato leyo Finanzas, se conservan en vez de borrarlos al guardar.
+    if(carga.fin&&getDoc){
+      try{
+        var _snapF=await getDoc(doc(_db,'veoyoca','data'));
+        var _srvFin=(_snapF&&_snapF.exists&&_snapF.exists()&&_snapF.data().fin)||null;
+        if(_srvFin){
+          var _baseFin=null;try{_baseFin=JSON.parse(_campoHuella['fin']||'null');}catch(e){_baseFin=null;}
+          _mergeCobrarBot(_srvFin,carga.fin,_baseFin||{});
+          try{huellasNuevas['fin']=JSON.stringify(carga.fin);}catch(e){}
+        }
+      }catch(e){console.warn('Fusión de finanzas no disponible, guardo normal:',e&&e.message);}
     }
     carga.updatedAt=_ua;
     await setDoc(doc(_db,'veoyoca','data'),carga,{merge:true});
@@ -2289,6 +2324,7 @@ function cardHTML(p,conEntregar){
   if(p.pdfUrl)h+='<a href="'+p.pdfUrl+'" target="_blank" class="btn btn-blue btn-sm" style="text-decoration:none">📄 Ver PDF</a>';
   if(p.planoUrl)h+='<a href="'+esc(p.planoUrl)+'" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none">📐 Ver plano</a>';
   if(dgPorNumero(p.numero))h+='<button class="btn btn-ghost btn-sm" onclick="verDesglosePedido(\''+esc((p.numero||'').toString())+'\')">🧩 Desglose</button>';
+  if(SESSION.rol==='admin'){var _crA=cuentaAbonosDePedido(p.numero);if(_crA&&(_crA.abonos||[]).length)h+='<button class="btn btn-ghost btn-sm" onclick="verAbonosPedido(\''+pid+'\')">🧾 Abonos ('+_crA.abonos.length+')</button>';}
   if(puedeAnular()){if(p.estatus==='ANULADO')h+='<button class="btn btn-ghost btn-sm" style="color:#16a34a" onclick="reactivarPedido(\''+pid+'\')">↩️ Reactivar</button>';else h+='<button class="btn btn-ghost btn-sm" style="color:#dc2626" onclick="anularPedido(\''+pid+'\')">🚫 Anular</button>';}
   if(conEntregar&&p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO'){h+='<input type="text" id="nota-'+pid+'" placeholder="Nota de entrega..."><button class="btn btn-green btn-sm" data-entregar="'+pid+'">Entregar</button>';}
   // Boton de entrega a la derecha del pie. Se muestra a todos; solo se
@@ -2298,6 +2334,36 @@ function cardHTML(p,conEntregar){
     h+='<button class="btn '+(_ok?'btn-green':'btn-ghost')+' btn-sm" style="margin-left:auto'+(_ok?'':';opacity:.55')+'" data-marcar-entregado="'+pid+'"'+(_ok?'':' title="Solo un administrador o majul pueden marcar entregado"')+'>\u2705 Entregar</button>';
   }
   h+='</div></div>';return h;
+}
+
+// Abonos del pedido con su comprobante (solo admin, igual que Finanzas).
+// Busca la cuenta igual que el bot: la del pedido o, si no hay, una manual con ese numero.
+function cuentaAbonosDePedido(num){
+  var n=String(num==null?'':num).trim().replace(/^0+/,'');
+  if(!n)return null;
+  var del=finLista('cobrar').filter(function(r){return String(r.pedidoNum==null?'':r.pedidoNum).trim().replace(/^0+/,'')===n;});
+  return del.find(function(r){return r.origen==='pedido';})||del[0]||null;
+}
+function verAbonosPedido(id){
+  if(SESSION.rol!=='admin')return;
+  var p=DB.pedidos.find(function(x){return x.id===id;});if(!p)return;
+  var cr=cuentaAbonosDePedido(p.numero);if(!cr)return;
+  document.getElementById('abonos-titulo').textContent='Abonos del pedido #'+(p.numero||'');
+  var h='<div style="font-size:13px;margin-bottom:12px">Abonado <strong>$'+fmtMoney(finAbonado(cr))+'</strong> de $'+fmtMoney(cr.monto)+' · Saldo <strong>$'+fmtMoney(Math.max(finSaldo(cr),0))+'</strong></div>';
+  (cr.abonos||[]).slice().reverse().forEach(function(a){
+    var url=/^https:\/\//.test(a.comp||'')?a.comp:'';
+    h+='<div class="card" style="padding:11px 13px;margin-bottom:8px"><div style="font-size:15px;font-weight:700">$'+fmtMoney(a.m)+' <span style="font-size:12px;font-weight:400;color:var(--muted)">el '+esc(a.f)+'</span></div>';
+    if(a.nota)h+='<div style="font-size:12px;color:#475569;margin-top:2px">'+esc(a.nota)+'</div>';
+    if(a.por)h+='<div style="font-size:11px;color:var(--muted);margin-top:2px">Reportó: '+esc(a.por)+'</div>';
+    if(url){
+      h+=/\.pdf(\?|$)/i.test(url)
+        ?'<a href="'+esc(url)+'" target="_blank" rel="noopener" class="btn btn-blue btn-sm" style="text-decoration:none;margin-top:8px;display:inline-block">📄 Ver comprobante</a>'
+        :'<a href="'+esc(url)+'" target="_blank" rel="noopener"><img src="'+esc(url)+'" alt="Comprobante del abono" loading="lazy" style="display:block;width:100%;max-height:320px;object-fit:contain;margin-top:8px;border-radius:8px;background:#f1f5f9"></a>';
+    }
+    h+='</div>';
+  });
+  document.getElementById('abonos-body').innerHTML=h;
+  abrirModal('modal-abonos');
 }
 
 // La pestana Despacho se retiro: no se usaba y su boton de entrega no
@@ -5093,7 +5159,7 @@ function finTabla(t){
     h+='<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;background:'+estado.b+';color:'+estado.c+';flex-shrink:0">'+estado.t+'</span></div>';
     h+='<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:7px"><div><div style="font-size:20px;font-weight:800;color:'+(pagado?'#166534':esC?'#166534':'#b91c1c')+'">$'+fmtMoney(saldo>0?saldo:0)+'</div><div style="font-size:11px;color:var(--muted)">de $'+fmtMoney(r.monto)+(finNum(r.base)&&finNum(r.base)!==finNum(r.monto)?' (base $'+fmtMoney(r.base)+')':'')+(ab?' \u00B7 abonado $'+fmtMoney(ab):'')+'</div></div></div>';
     if(r.nota)h+='<div style="font-size:11px;color:var(--muted);margin-top:4px">\uD83D\uDCDD '+esc(r.nota)+'</div>';
-    if((r.abonos||[]).length)h+='<div style="font-size:11px;color:#475569;margin-top:5px;border-top:1px dashed var(--border);padding-top:5px">'+r.abonos.map(function(a){return '\u2022 $'+fmtMoney(a.m)+' el '+esc(a.f)+(a.nota?' \u2014 '+esc(a.nota):'');}).join('<br>')+'</div>';
+    if((r.abonos||[]).length)h+='<div style="font-size:11px;color:#475569;margin-top:5px;border-top:1px dashed var(--border);padding-top:5px">'+r.abonos.map(function(a){return '\u2022 $'+fmtMoney(a.m)+' el '+esc(a.f)+(a.nota?' \u2014 '+esc(a.nota):'')+(a.por?' \u00b7 '+esc(a.por):'')+(/^https:\/\//.test(a.comp||'')?' \u00b7 <a href="'+esc(a.comp)+'" target="_blank" rel="noopener">\ud83e\uddfe comprobante</a>':'');}).join('<br>')+'</div>';
     h+='<div style="display:flex;gap:6px;margin-top:8px">'+(pagado?'':'<button class="btn btn-green btn-sm" onclick="finAbonoAbrir(\''+t+'\',\''+r.id+'\')">\uD83D\uDCB0 Registrar abono</button>')
       +'<button class="btn btn-ghost btn-sm" onclick="finAbrir(\''+t+'\',\''+r.id+'\')">\u270F\uFE0F</button>'
       +'<button class="btn btn-ghost btn-sm" style="color:#dc2626;margin-left:auto" onclick="finBorrar(\''+t+'\',\''+r.id+'\')">\uD83D\uDDD1</button></div>';
