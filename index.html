@@ -324,7 +324,7 @@ table.crm{border-collapse:collapse;font-size:12px;min-width:1780px}
 <div class="sheet-body" id="historial-body"></div>
 <div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal('modal-historial')">Cerrar</button></div></div></div>
 <div class="overlay" id="modal-reporte"><div class="sheet"><div class="sheet-handle"></div>
-<div class="sheet-head"><h2>&#x1F4C4; Reporte de pedidos</h2><button class="sheet-close" onclick="cerrarModal('modal-reporte')">&#x2715;</button></div>
+<div class="sheet-head"><h2 id="reporte-titulo">&#x1F4C4; Reporte de pedidos</h2><button class="sheet-close" onclick="cerrarModal('modal-reporte')">&#x2715;</button></div>
 <div class="sheet-body" id="reporte-body"></div>
 <div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal('modal-reporte')">Cerrar</button></div></div></div>
 <div class="toast" id="toast"></div>
@@ -2886,6 +2886,7 @@ async function generarReporte(){
     },
     margin:{top:26,bottom:10,left:8,right:8}
   });
+  document.getElementById('reporte-titulo').textContent='📄 Reporte de pedidos';
   REPORTE_DOC=doc;
   REPORTE_NOMBRE='Resumen_Pedidos_'+fecha().replace(/\//g,'-')+'.pdf';
   REPORTE_BLOB=doc.output('blob');
@@ -3971,6 +3972,273 @@ function repOcLimpiar(){
 function repOcFiltro(v){REP_OC_TIPO=v;repOcPintar();}
 function repOcVista(){REP_OC_VISTA=REP_OC_VISTA==='ordenes'?'pedidos':'ordenes';repOcPintar();}
 
+// ── ESTADOS DE CUENTA ───────────────────────────────────────
+// En Finanzas, solo para administradores. Es de solo lectura: no cambia ningun dato.
+var EC_MODO='general',EC_CLIENTE='',EC_PEDIDO='',EC_Q='',EC_ULTIMO=null;
+function ecNormCliente(s){return String(s||'').trim().replace(/\s+/g,' ').toUpperCase();}
+function ecAbonosOrdenados(r){
+  return (r.abonos||[]).slice().sort(function(a,b){
+    var fa=parseFechaDMY(a.f),fb=parseFechaDMY(b.f);
+    return ((fa?fa.getTime():0)-(fb?fb.getTime():0))||((a.ts||0)-(b.ts||0));
+  });
+}
+function ecCuentas(){
+  var cobrar=(DB.fin&&Array.isArray(DB.fin.cobrar))?DB.fin.cobrar:[];
+  var mapa={},vistos={},res=[];
+  (DB.pedidos||[]).forEach(function(p){var n=finNumPedido(p.numero);if(n)mapa[n]=p;});
+  cobrar.forEach(function(r){
+    var n=finNumPedido(r.pedidoNum),p=n?mapa[n]:null;
+    if(p&&p.estatus==='ANULADO')return;
+    if(n)vistos[n]=true;
+    var total=finNum(r.monto),abs=ecAbonosOrdenados(r);
+    if(!total&&!abs.length)return;
+    var ab=finAbonado(r);
+    res.push({id:'c:'+r.id,num:String(r.pedidoNum==null?'':r.pedidoNum).trim(),cliente:r.cliente||(p&&p.cliente)||'Sin nombre',total:total,abonos:abs,abonado:ab,saldo:Math.round((total-ab)*100)/100,fecha:(p&&p.fechaCreacion)||r.fecha||'',entregado:!!(p&&p.estatus==='ENTREGADO'),sinCuenta:false,nota:r.nota||''});
+  });
+  (DB.pedidos||[]).forEach(function(p){
+    var n=finNumPedido(p.numero);
+    if(!n||vistos[n]||p.estatus==='ANULADO')return;
+    var m=finNum(p.totalOperacion)||finNum(p.monto);
+    if(m<=0)return;
+    res.push({id:'p:'+p.id,num:String(p.numero).trim(),cliente:p.cliente||'Sin nombre',total:m,abonos:[],abonado:0,saldo:Math.round(m*100)/100,fecha:p.fechaCreacion||'',entregado:p.estatus==='ENTREGADO',sinCuenta:true,nota:''});
+  });
+  return res;
+}
+function ecEstado(c){
+  if(c.saldo>0.009)return {t:'POR COBRAR $'+fmtMoney(c.saldo),bg:'#fef3c7',col:'#92400e'};
+  if(c.saldo<-0.009)return {t:'EXCEDENTE $'+fmtMoney(-c.saldo),bg:'#ffedd5',col:'#9a3412'};
+  return {t:'PAGADO',bg:'#dcfce7',col:'#166534'};
+}
+// Lo que se ve y se envia: se quitan las marcas internas de la nota del abono.
+function ecDetalleAbono(a){
+  var partes=String(a.nota||'').split(' · ').filter(function(x){
+    return x&&!/^(Ref |Pedido indicado|Asignado por|Reparto:|Abono por WhatsApp$)|Bs a tasa/.test(x);
+  });
+  if(a.ref)partes.push('Ref '+a.ref);
+  return partes.join(' · ');
+}
+function ecFiltradas(){
+  var todas=ecCuentas();
+  if(EC_MODO==='cliente')return todas.filter(function(c){return ecNormCliente(c.cliente)===EC_CLIENTE;}).sort(function(a,b){return (parseFechaDMY(a.fecha)||0)-(parseFechaDMY(b.fecha)||0);});
+  if(EC_MODO==='pedido')return todas.filter(function(c){return c.id===EC_PEDIDO;});
+  return todas.filter(function(c){return c.saldo>0.009;}).sort(function(a,b){return b.saldo-a.saldo;});
+}
+function ecTotales(l){
+  var t={total:0,abonado:0,cobrar:0,excedente:0,sinCuenta:0,clientes:{}};
+  l.forEach(function(c){
+    t.total+=c.total;t.abonado+=c.abonado;
+    if(c.saldo>0.009)t.cobrar+=c.saldo;else if(c.saldo<-0.009)t.excedente-=c.saldo;
+    if(c.sinCuenta)t.sinCuenta+=c.saldo;
+    t.clientes[ecNormCliente(c.cliente)]=true;
+  });
+  t.nClientes=Object.keys(t.clientes).length;
+  return t;
+}
+function ecPintar(){var c=document.getElementById('content');if(c&&TAB==='finanzas')renderFinanzas(c);}
+function ecSetModo(m){EC_MODO=m;EC_CLIENTE='';EC_PEDIDO='';EC_Q='';ecPintar();}
+function ecElegirCliente(k){EC_MODO='cliente';EC_CLIENTE=k;EC_Q='';ecPintar();window.scrollTo(0,0);}
+function ecElegirPedido(id){EC_MODO='pedido';EC_PEDIDO=id;EC_Q='';ecPintar();window.scrollTo(0,0);}
+function ecCambiar(){EC_CLIENTE='';EC_PEDIDO='';EC_Q='';ecPintar();}
+// Solo se repinta la lista: el buscador no pierde el foco al escribir.
+function ecBuscar(v){EC_Q=v;var el=document.getElementById('ec-lista');if(el)el.innerHTML=ecListaHTML();}
+function ecListaHTML(){
+  var q=EC_Q.trim().toLowerCase(),todas=ecCuentas(),h='';
+  if(EC_MODO==='cliente'){
+    var g={};
+    todas.forEach(function(c){var k=ecNormCliente(c.cliente);if(!g[k])g[k]={k:k,nombre:c.cliente,n:0,saldo:0};g[k].n++;if(c.saldo>0.009)g[k].saldo+=c.saldo;});
+    var arr=Object.keys(g).map(function(k){return g[k];}).filter(function(x){return !q||x.nombre.toLowerCase().indexOf(q)>=0;});
+    arr.sort(function(a,b){return b.saldo-a.saldo||a.nombre.localeCompare(b.nombre);});
+    if(!arr.length)return '<div class="empty" style="padding:24px 10px">No encontré ese cliente.</div>';
+    arr.forEach(function(x){
+      h+='<button type="button" data-k="'+esc(x.k)+'" onclick="ecElegirCliente(this.getAttribute(\'data-k\'))" class="card" style="display:flex;justify-content:space-between;gap:10px;align-items:center;width:100%;text-align:left;padding:11px 13px;margin-bottom:6px;font:inherit;cursor:pointer;color:var(--text)"><span style="min-width:0;overflow-wrap:anywhere"><strong style="font-size:14px">'+esc(x.nombre)+'</strong><br><span style="font-size:11px;color:var(--muted)">'+x.n+(x.n>1?' pedidos':' pedido')+'</span></span><span style="font-size:13px;font-weight:700;flex-shrink:0;color:'+(x.saldo>0.009?'#92400e':'#166534')+'">'+(x.saldo>0.009?'$'+fmtMoney(x.saldo):'Al día')+'</span></button>';
+    });
+    return h;
+  }
+  var ped=todas.filter(function(c){return !q||finNumPedido(c.num).indexOf(q.replace(/^0+/,''))>=0||c.cliente.toLowerCase().indexOf(q)>=0;});
+  ped.sort(function(a,b){return (parseInt(finNumPedido(b.num))||0)-(parseInt(finNumPedido(a.num))||0);});
+  if(!ped.length)return '<div class="empty" style="padding:24px 10px">No encontré ese pedido.</div>';
+  ped.slice(0,60).forEach(function(c){
+    var e=ecEstado(c);
+    h+='<button type="button" onclick="ecElegirPedido(\''+esc(c.id)+'\')" class="card" style="display:flex;justify-content:space-between;gap:10px;align-items:center;width:100%;text-align:left;padding:11px 13px;margin-bottom:6px;font:inherit;cursor:pointer;color:var(--text)"><span style="min-width:0;overflow-wrap:anywhere"><strong style="font-size:14px">'+(c.num?'#'+esc(c.num):'Sin pedido')+'</strong> <span style="font-size:12px">'+esc(c.cliente)+'</span></span><span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;flex-shrink:0;background:'+e.bg+';color:'+e.col+'">'+e.t+'</span></button>';
+  });
+  if(ped.length>60)h+='<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px">Se muestran 60. Escribe para acotar.</div>';
+  return h;
+}
+function ecCajas(t){
+  var caja=function(tit,v,col){return '<div style="flex:1;min-width:95px;background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px"><div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase">'+tit+'</div><div style="font-size:17px;font-weight:800;color:'+col+';overflow-wrap:anywhere">$'+fmtMoney(v)+'</div></div>';};
+  var h='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'+caja('Total',t.total,'var(--text)')+caja('Abonado',t.abonado,'#166534')+caja('Por cobrar',t.cobrar,'#b91c1c')+'</div>';
+  if(t.excedente>0.009)h+='<div style="font-size:12px;font-weight:700;color:#b45309;margin-bottom:8px">⚠️ Excedente a favor: $'+fmtMoney(t.excedente)+'</div>';
+  return h;
+}
+function ecCardHTML(c){
+  var e=ecEstado(c),corrido=c.total;
+  var h='<div class="card" style="padding:12px 14px;margin-bottom:10px">';
+  h+='<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div style="min-width:0;overflow-wrap:anywhere"><div style="font-size:16px;font-weight:800">'+(c.num?'Pedido #'+esc(c.num):'Cuenta sin pedido')+'</div><div style="font-size:12px;color:var(--muted)">'+esc(c.cliente)+(c.fecha?' · '+esc(c.fecha):'')+(c.entregado?' · 🚚 Entregado':'')+'</div></div><span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;flex-shrink:0;background:'+e.bg+';color:'+e.col+'">'+e.t+'</span></div>';
+  h+='<div style="font-size:13px;margin-top:8px">Total <strong>$'+fmtMoney(c.total)+'</strong> · Abonado <strong style="color:#166534">$'+fmtMoney(c.abonado)+'</strong></div>';
+  if(c.sinCuenta)h+='<div style="font-size:11px;color:#b45309;margin-top:3px">Sin cuenta en Finanzas: se toma el monto del pedido.</div>';
+  if(!c.abonos.length)h+='<div style="font-size:12px;color:var(--muted);margin-top:8px">Sin abonos registrados.</div>';
+  c.abonos.forEach(function(a){
+    corrido=Math.round((corrido-finNum(a.m))*100)/100;
+    var det=[];
+    if(finNum(a.tasa)>0)det.push(fmtMoney(a.bs||0)+' Bs · tasa '+fmtTasa(a.tasa));
+    var d=ecDetalleAbono(a);if(d)det.push(d);
+    var url=/^https:\/\//.test(a.comp||'')?a.comp:'';
+    h+='<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px"><div style="display:flex;justify-content:space-between;gap:8px;font-size:13px"><span>'+esc(a.f||'Sin fecha')+'</span><strong style="color:#166534">$'+fmtMoney(a.m)+'</strong></div>';
+    h+='<div style="display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--muted);margin-top:2px"><span style="min-width:0;overflow-wrap:anywhere">'+esc(det.join(' · '))+(url?(det.length?' · ':'')+'<a href="'+esc(url)+'" target="_blank" rel="noopener" style="color:var(--info)">📄 Comprobante</a>':'')+'</span><span style="flex-shrink:0">'+(corrido<-0.009?'a favor $'+fmtMoney(-corrido):'queda $'+fmtMoney(corrido))+'</span></div></div>';
+  });
+  return h+'</div>';
+}
+function ecHTML(){
+  var chip=function(m,t){return '<button type="button" class="btn '+(EC_MODO===m?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:95px" onclick="ecSetModo(\''+m+'\')">'+t+'</button>';};
+  var h='<div class="section-pad"><div style="font-size:16px;font-weight:800;margin-bottom:10px">Estados de cuenta</div>';
+  h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'+chip('general','💵 General')+chip('cliente','👤 Por cliente')+chip('pedido','🧾 Por pedido')+'</div>';
+  var sinElegir=(EC_MODO==='cliente'&&!EC_CLIENTE)||(EC_MODO==='pedido'&&!EC_PEDIDO);
+  if(sinElegir){
+    h+='<input type="text" id="ec-q" autocomplete="off" placeholder="'+(EC_MODO==='cliente'?'🔍 Buscar cliente':'🔍 Buscar número de pedido o cliente')+'" value="'+esc(EC_Q)+'" oninput="ecBuscar(this.value)" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--border);border-radius:9px;font:inherit;font-size:14px;margin-bottom:8px">';
+    return h+'<div id="ec-lista">'+ecListaHTML()+'</div></div>';
+  }
+  var l=ecFiltradas(),t=ecTotales(l);
+  if(EC_MODO!=='general'){
+    if(!l.length)return h+'<div class="empty">Ese estado de cuenta ya no está disponible. <button type="button" class="btn btn-ghost btn-sm" onclick="ecCambiar()">Elegir otro</button></div></div>';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px"><div style="font-size:14px;font-weight:700;min-width:0;overflow-wrap:anywhere">'+esc(l[0].cliente)+'</div><button type="button" class="btn btn-ghost btn-sm" onclick="ecCambiar()">Cambiar</button></div>';
+  }
+  h+=ecCajas(t);
+  h+='<button type="button" class="btn btn-dark" style="width:100%;padding:12px;margin-bottom:12px" onclick="ecGenerarPDF()">📄 Generar PDF / Enviar por WhatsApp</button>';
+  if(EC_MODO==='general'){
+    h+='<div style="font-size:12px;color:var(--muted);margin-bottom:8px">'+l.length+(l.length===1?' pedido':' pedidos')+' de '+t.nClientes+(t.nClientes===1?' cliente':' clientes')+'. Toca uno para ver sus abonos.</div>';
+    if(t.sinCuenta>0.009)h+='<div style="background:var(--wbg);border:1px solid #fde68a;border-radius:9px;padding:8px 10px;font-size:12px;color:#92400e;margin-bottom:8px">De este total, $'+fmtMoney(t.sinCuenta)+' son de pedidos sin cuenta en Finanzas: se toma el monto del pedido y puede que ya estén cobrados. Conviene revisarlos.</div>';
+    if(!l.length)h+='<div class="empty"><div class="empty-icon">🎉</div>No hay pedidos por cobrar.</div>';
+    l.forEach(function(c){
+      h+='<button type="button" onclick="ecElegirPedido(\''+esc(c.id)+'\')" class="card" style="display:flex;justify-content:space-between;gap:10px;align-items:center;width:100%;text-align:left;padding:11px 13px;margin-bottom:6px;font:inherit;cursor:pointer;color:var(--text)"><span style="min-width:0;overflow-wrap:anywhere"><strong style="font-size:14px">'+(c.num?'#'+esc(c.num):'Sin pedido')+'</strong> <span style="font-size:12px">'+esc(c.cliente)+'</span><br><span style="font-size:11px;color:var(--muted)">Total $'+fmtMoney(c.total)+' · Abonado $'+fmtMoney(c.abonado)+(c.entregado?' · 🚚 Entregado':'')+(c.sinCuenta?' · sin cuenta':'')+'</span></span><strong style="font-size:15px;color:#b91c1c;flex-shrink:0">$'+fmtMoney(c.saldo)+'</strong></button>';
+    });
+  }else{
+    l.forEach(function(c){h+=ecCardHTML(c);});
+  }
+  return h+'</div>';
+}
+// Numero para WhatsApp: 0412... o 412... se toman como Venezuela; el resto, tal como viene.
+function ecTelWA(v){
+  var d=String(v||'').replace(/[^0-9]/g,'');
+  if(d.indexOf('00')===0)d=d.substring(2);
+  if(d.charAt(0)==='0')d='58'+d.substring(1);
+  else if(d.length===10&&d.charAt(0)==='4')d='58'+d;
+  return d.length>=10&&d.length<=15?d:'';
+}
+function ecTelCliente(nombre){
+  var k=ecNormCliente(nombre);
+  var cl=(typeof getClientes==='function'?getClientes():[]).find(function(x){return ecNormCliente(x.nombre)===k&&x.telefono;});
+  return cl?String(cl.telefono):'';
+}
+function ecArmarPDF(l,t){
+  var jsPDF=window.jspdf.jsPDF,doc=new jsPDF({unit:'mm',format:'a4'});
+  var general=EC_MODO==='general';
+  var sub=general?'General: pedidos pendientes por cobrar':EC_MODO==='cliente'?'Cliente: '+l[0].cliente:(l[0].num?'Pedido #'+l[0].num+' - ':'')+l[0].cliente;
+  var M=12,Y0=32,y=Y0,ANCHO=186;
+  var caja=function(x,tit,v,rgb){
+    doc.setDrawColor(229,231,235);doc.setFillColor(248,248,251);doc.roundedRect(x,y,60,16,1.5,1.5,'FD');
+    doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.setTextColor(107,114,128);doc.text(tit,x+3,y+5.5);
+    doc.setFontSize(12);doc.setTextColor(rgb[0],rgb[1],rgb[2]);doc.text('$'+fmtMoney(v),x+3,y+12);
+  };
+  caja(M,'TOTAL',t.total,[17,24,39]);caja(M+63,'ABONADO',t.abonado,[22,101,52]);caja(M+126,'TOTAL POR COBRAR',t.cobrar,[185,28,28]);
+  y+=20;
+  if(t.excedente>0.009){doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(180,83,9);doc.text('Excedente a favor: $'+fmtMoney(t.excedente),M,y+2);y+=6;}
+  var opc=function(extra){return Object.assign({margin:{top:Y0,bottom:14,left:M,right:M},styles:{fontSize:8,cellPadding:1.8,overflow:'linebreak',textColor:[17,24,39],valign:'middle'},headStyles:{fillColor:[26,26,46],textColor:255,fontSize:7.5,fontStyle:'bold'},alternateRowStyles:{fillColor:[244,244,248]}},extra);};
+  if(general){
+    if(t.sinCuenta>0.009){doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(146,64,14);doc.text('Incluye $'+fmtMoney(t.sinCuenta)+' de pedidos sin cuenta en Finanzas (marcados con *): se toma el monto del pedido.',M,y+1);y+=5;}
+    doc.autoTable(opc({startY:y,
+      head:[['PEDIDO','CLIENTE','FECHA','ESTADO','TOTAL $','ABONADO $','POR COBRAR $']],
+      body:l.map(function(c){return [(c.num?'#'+c.num:'-')+(c.sinCuenta?' *':''),c.cliente,c.fecha,c.entregado?'Entregado':'Pendiente',fmtMoney(c.total),fmtMoney(c.abonado),fmtMoney(c.saldo)];}),
+      foot:[[{content:'TOTAL POR COBRAR ('+l.length+(l.length===1?' pedido)':' pedidos)'),colSpan:6,styles:{halign:'right'}},fmtMoney(t.cobrar)]],
+      footStyles:{fillColor:[26,26,46],textColor:255,fontStyle:'bold',halign:'right',fontSize:9},
+      columnStyles:{0:{cellWidth:16,fontStyle:'bold'},2:{cellWidth:20,halign:'center'},3:{cellWidth:18,halign:'center'},4:{cellWidth:23,halign:'right'},5:{cellWidth:23,halign:'right'},6:{cellWidth:25,halign:'right',fontStyle:'bold'}}
+    }));
+  }else{
+    l.forEach(function(c){
+      if(y>250){doc.addPage();y=Y0;}
+      doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(17,24,39);
+      doc.text(c.num?'Pedido #'+c.num:'Cuenta sin pedido',M,y+4);
+      doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(107,114,128);
+      doc.text(doc.splitTextToSize(c.cliente+(c.fecha?' - '+c.fecha:'')+(c.entregado?' - Entregado':''),ANCHO)[0],M,y+8.5);
+      var corrido=c.total;
+      var filas=c.abonos.map(function(a){
+        corrido=Math.round((corrido-finNum(a.m))*100)/100;
+        return [a.f||'',ecDetalleAbono(a),finNum(a.tasa)>0?fmtMoney(a.bs||0):'',finNum(a.tasa)>0?fmtTasa(a.tasa):'',fmtMoney(a.m),fmtMoney(corrido)];
+      });
+      if(!filas.length)filas=[[{content:'Sin abonos registrados',colSpan:6,styles:{halign:'center',textColor:[107,114,128]}}]];
+      var est=c.saldo>0.009?'POR COBRAR: $'+fmtMoney(c.saldo):c.saldo<-0.009?'EXCEDENTE A FAVOR: $'+fmtMoney(-c.saldo):'PAGADO';
+      doc.autoTable(opc({startY:y+11,
+        head:[['FECHA','DETALLE','BS','TASA','ABONO $','SALDO $']],
+        body:filas,
+        foot:[[{content:'Total $'+fmtMoney(c.total)+'   |   Abonado $'+fmtMoney(c.abonado),colSpan:3,styles:{halign:'left'}},{content:est,colSpan:3,styles:{halign:'right'}}]],
+        footStyles:{fillColor:c.saldo>0.009?[254,243,199]:c.saldo<-0.009?[255,237,213]:[220,252,231],textColor:[17,24,39],fontStyle:'bold',fontSize:8.5},
+        columnStyles:{0:{cellWidth:20,halign:'center'},2:{cellWidth:26,halign:'right'},3:{cellWidth:18,halign:'right'},4:{cellWidth:23,halign:'right',fontStyle:'bold'},5:{cellWidth:23,halign:'right'}}
+      }));
+      y=doc.lastAutoTable.finalY+8;
+    });
+  }
+  var n=doc.internal.getNumberOfPages(),gen=fecha()+' '+hora();
+  for(var i=1;i<=n;i++){
+    doc.setPage(i);
+    doc.setFillColor(26,26,46);doc.rect(0,0,210,26,'F');
+    doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(15);doc.text('ESTADO DE CUENTA',105,10,{align:'center'});
+    doc.setFont('helvetica','normal');doc.setFontSize(8);doc.text('VEOYOCA — Vitrinas Estantes de Occidente y Oriente C.A.',105,15,{align:'center'});
+    doc.text(doc.splitTextToSize(sub,180)[0],105,19,{align:'center'});
+    doc.text('Generado: '+gen,105,23,{align:'center'});
+    doc.setFontSize(7);doc.setTextColor(107,114,128);doc.text('Montos en dolares (USD) - Pagina '+i+' de '+n,105,291,{align:'center'});
+  }
+  return doc;
+}
+async function ecGenerarPDF(){
+  var l=ecFiltradas();
+  if(!l.length){toast('No hay nada para generar','warn');return;}
+  toast('Generando PDF...','');
+  try{await cargarLibsPDF();}catch(e){toast('Error cargando librerías PDF: '+e.message,'err');return;}
+  var t=ecTotales(l),doc;
+  try{doc=ecArmarPDF(l,t);}catch(e){console.error('Estado de cuenta PDF:',e);toast('No se pudo generar el PDF','err');return;}
+  var parte=EC_MODO==='general'?'General':EC_MODO==='cliente'?l[0].cliente:'Pedido_'+(l[0].num||'cuenta');
+  REPORTE_DOC=doc;
+  REPORTE_NOMBRE='Estado_de_Cuenta_'+String(parte).normalize('NFD').replace(/[^A-Za-z0-9]+/g,'_').replace(/^_|_$/g,'').substring(0,40)+'_'+fecha().replace(/\//g,'-')+'.pdf';
+  REPORTE_BLOB=doc.output('blob');
+  EC_ULTIMO={caption:'Estado de cuenta'+(EC_MODO==='general'?' general':' de '+l[0].cliente)+' — '+fecha()};
+  var tel=EC_MODO==='general'?'':ecTelCliente(l[0].cliente);
+  document.getElementById('reporte-titulo').textContent='📄 Estado de cuenta';
+  document.getElementById('reporte-body').innerHTML=
+    '<div style="text-align:center;padding:4px 0 14px"><div style="font-size:40px">📄</div><div style="font-weight:700;font-size:16px;margin-top:6px">PDF generado</div><div style="font-size:13px;color:var(--muted);margin-top:4px">'+l.length+(l.length===1?' pedido':' pedidos')+' · Por cobrar: <strong style="color:#b91c1c">$'+fmtMoney(t.cobrar)+'</strong></div></div>'
+    +'<button class="btn btn-dark" style="width:100%;padding:13px;font-size:14px;margin-bottom:8px" onclick="descargarReporte()">📥 Descargar PDF</button>'
+    +(navigator.share?'<button class="btn btn-blue" style="width:100%;padding:13px;font-size:14px;margin-bottom:12px" onclick="ecCompartir()">📤 Compartir (elige WhatsApp y el contacto)</button>':'')
+    +'<div style="border-top:1px solid var(--border);padding-top:12px"><div class="sfield"><label>Enviar por WhatsApp desde la línea de VeoYoca</label><input type="tel" id="ec-tel" placeholder="Ej: 04121234567 o +57 300 1234567" value="'+esc(tel)+'"></div>'
+    +'<button class="btn btn-green" style="width:100%;padding:13px;font-size:14px" id="ec-enviar" onclick="ecEnviarWA()">💬 Enviar a este número</button></div>';
+  abrirModal('modal-reporte');
+}
+function ecCompartir(){
+  if(!REPORTE_BLOB)return;
+  try{
+    var file=new File([REPORTE_BLOB],REPORTE_NOMBRE,{type:'application/pdf'});
+    if(navigator.canShare&&navigator.canShare({files:[file]}))navigator.share({files:[file],title:'Estado de cuenta VEOYOCA'}).catch(function(){});
+    else toast('Este aparato no permite compartir archivos. Usa Descargar o escribe el número.','warn');
+  }catch(e){toast('No se pudo compartir: '+e.message,'err');}
+}
+function ecEnviarWA(){
+  if(!REPORTE_BLOB)return;
+  var tel=ecTelWA((document.getElementById('ec-tel')||{}).value);
+  if(!tel){toast('Escribe un número válido, con su código de país si no es de Venezuela','err');return;}
+  var btn=document.getElementById('ec-enviar');
+  if(btn){btn.disabled=true;btn.textContent='Enviando...';}
+  function listo(){if(btn){btn.disabled=false;btn.textContent='💬 Enviar a este número';}}
+  var reader=new FileReader();
+  reader.onload=function(){
+    veoPost('/enviar-wa-doc',{to:'+'+tel,filename:REPORTE_NOMBRE,document:reader.result,caption:(EC_ULTIMO&&EC_ULTIMO.caption)||'Estado de cuenta'})
+      .then(function(r){
+        if(r&&r.ok){toast('Estado de cuenta enviado a +'+tel+' ✓','ok');cerrarModal('modal-reporte');}
+        else toast((r&&r.error)||'No se confirmó el envío. Revisa el número.','err');
+        listo();
+      }).catch(function(e){console.error('Enviar estado de cuenta:',e);toast('Error de conexión. No se envió.','err');listo();});
+  };
+  reader.onerror=function(){toast('No se pudo leer el PDF','err');listo();};
+  reader.readAsDataURL(REPORTE_BLOB);
+}
+
+var REP_OTROS_ABIERTO=false;
 function renderReportes(c){
   var total=DB.pedidos.length,ent=DB.pedidos.filter(function(p){return p.estatus==='ENTREGADO';}).length;
   var pend=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO';}).length;
@@ -3984,10 +4252,11 @@ function renderReportes(c){
   var html='<div style="padding:14px 14px 0"><button class="btn btn-dark" style="width:100%;padding:13px;font-size:15px" onclick="generarReporte()">\uD83D\uDCC4 Generar Reporte PDF de pedidos pendientes</button></div>';
   html+='<div class="report-grid"><div class="report-card"><div class="report-val" style="color:var(--accent)">'+total+'</div><div class="report-label">Total</div></div><div class="report-card"><div class="report-val" style="color:var(--success)">'+ent+'</div><div class="report-label">Entregados</div></div><div class="report-card"><div class="report-val" style="color:var(--warning)">'+pend+'</div><div class="report-label">Pendientes</div></div><div class="report-card"><div class="report-val" style="color:var(--danger)">'+venc+'</div><div class="report-label">Vencidos</div></div><div class="report-card"><div class="report-val" style="color:var(--info)">'+listos+'</div><div class="report-label">Listos</div></div><div class="report-card"><div class="report-val" style="color:var(--success)">'+entHoy+'</div><div class="report-label">Entregados hoy</div></div><div class="report-card"><div class="report-val">'+pct+'%</div><div class="report-label">Completados</div></div><div class="report-card"><div class="report-val">'+DB.bitacora.length+'</div><div class="report-label">Acciones</div></div></div>';
   // Órdenes pendientes por proveedor (vista transversal)
-  html+='<div id="rep-oc">'+repOcHTML()+'</div>';
   if(va.length){html+='<div class="chart-wrap"><div class="chart-title">Por vendedor</div>';va.slice(0,8).forEach(function(item){html+='<div class="bar-row"><div class="bar-label">'+item.v.split(' ')[0]+'</div><div class="bar-track"><div class="bar-fill" style="width:'+Math.round((item.t/maxT)*100)+'%;background:var(--accent)"></div></div><div class="bar-val">'+item.t+'</div></div>';});html+='</div>';}
   if(bit.length){html+='<div class="chart-wrap"><div class="chart-title">Actividad reciente</div>';bit.forEach(function(b){html+='<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:12px"><div style="font-weight:600">'+(b.accion||'').substring(0,60)+'</div><div style="color:var(--muted)">'+b.fecha+' '+b.hora+'</div></div>';});html+='</div>';}
-  c.innerHTML=html;
+  // Reportes es de ordenes de compra. Lo demas queda plegado al final, sin perderse.
+  c.innerHTML='<div style="padding-top:14px"><div id="rep-oc">'+(repOcHTML()||'<div class="empty">No hay órdenes registradas.</div>')+'</div></div>'
+    +'<details'+(REP_OTROS_ABIERTO?' open':'')+' ontoggle="REP_OTROS_ABIERTO=this.open" style="margin:0 14px 14px"><summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);padding:8px 0">Otros: reporte de pedidos y actividad</summary><div style="margin:0 -14px">'+html+'</div></details>';
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -5426,13 +5695,14 @@ function renderFinanzas(c){
   if(!SESSION||SESSION.rol!=='admin'){c.innerHTML='<div class="empty">Acceso denegado</div>';return;}
   finDB();
   var _nCola=(DB.abonosCola||[]).length;
-  var modos=[['resumen','\uD83D\uDCCA Resumen'],['cola','\uD83D\uDCE5 Por asignar'+(_nCola?' ('+_nCola+')':'')],['cobrar','\uD83D\uDCB5 Por cobrar'],['pagar','\uD83E\uDDFE Por pagar'],['gastos','\uD83D\uDCB8 Gastos'],['rentab','\uD83D\uDCC8 Rentabilidad'],['terra','\uD83E\uDD1D Terramoda']];
+  var modos=[['resumen','\uD83D\uDCCA Resumen'],['cola','\uD83D\uDCE5 Por asignar'+(_nCola?' ('+_nCola+')':'')],['cobrar','\uD83D\uDCB5 Por cobrar'],['cuenta','\uD83D\uDCC4 Estados de cuenta'],['pagar','\uD83E\uDDFE Por pagar'],['gastos','\uD83D\uDCB8 Gastos'],['rentab','\uD83D\uDCC8 Rentabilidad'],['terra','\uD83E\uDD1D Terramoda']];
   var h='<div class="section-pad" style="padding-bottom:0"><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">'
-    +modos.map(function(m){return '<button class="btn '+(FIN_MODO===m[0]?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:'+(m[0]==='cola'?140:92)+'px" onclick="finSetModo(\''+m[0]+'\')">'+m[1]+'</button>';}).join('')
+    +modos.map(function(m){return '<button class="btn '+(FIN_MODO===m[0]?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:'+(m[0]==='cola'||m[0]==='cuenta'?140:92)+'px" onclick="finSetModo(\''+m[0]+'\')">'+m[1]+'</button>';}).join('')
     +'</div></div>';
   if(FIN_MODO==='resumen')h+=finResumen();
   else if(FIN_MODO==='cola')h+=finCola();
   else if(FIN_MODO==='cobrar')h+=finTabla('cobrar');
+  else if(FIN_MODO==='cuenta')h+=ecHTML();
   else if(FIN_MODO==='pagar')h+=finTabla('pagar');
   else if(FIN_MODO==='gastos')h+=finGastos();
   else if(FIN_MODO==='rentab')h+=finRentabilidad();
