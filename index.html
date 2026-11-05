@@ -2453,7 +2453,7 @@ async function marcarEntregado(id){
 
 function renderNuevo(c){
   var vends=DB.usuarios.map(function(u){return '<option value="'+u.nombre+'">'+u.nombre+'</option>';}).join('');
-  c.innerHTML='<div class="section-pad"><div class="card" style="padding:16px"><div class="sfield-row"><div class="sfield"><label># Pedido</label><input type="text" id="n-numero" placeholder="Ej: 432"></div><div class="sfield"><label>Cliente *</label><input type="text" id="n-cliente" placeholder="Nombre del cliente"></div></div><div class="sfield-row"><div class="sfield"><label>Ciudad</label><input type="text" id="n-ciudad" placeholder="Ciudad"></div><div class="sfield"><label>Vendedor</label><select id="n-vendedor"><option value="">Seleccionar</option>'+vends+'</select></div></div><div class="sec-label" style="margin-top:4px">Primera orden (opcional \u2014 puedes agregar m\u00E1s luego)</div><div class="sfield-row"><div class="sfield"><label>Tipo de orden</label><select id="n-tipo-orden"><option value="OC">Orden de compra</option><option value="OF">Orden de fabricaci\u00F3n</option><option value="INVENTARIO">Inventario</option></select></div><div class="sfield"><label>Proveedor / Subcontratado</label><input type="text" id="n-proveedor" placeholder="Ej: ORION, ZAVATTY..."></div></div><div class="sfield-row"><div class="sfield"><label># Orden</label><input type="text" id="n-oc" placeholder="Ej: OC-2026-045"></div><div class="sfield"><label>Fecha entrega proveedor</label><input type="date" id="n-fecha-prov"></div></div><div class="sfield-row"><div class="sfield"><label>Base imponible (USD)</label><input type="number" step="0.01" id="n-monto" placeholder="0.00" oninput="calcTotalIva(\'n\')"></div><div class="sfield"><label>Total con IVA (USD)</label><input type="number" step="0.01" id="n-total" placeholder="0.00"></div></div><div style="font-size:11px;color:var(--muted);margin:-6px 0 12px">La base imponible manda el margen; el total con IVA es lo que se le cobra al cliente. El total se calcula solo al 16%, pero puedes cambiarlo si el pedido es exento.</div><div class="sfield-row"><div class="sfield"><label>Fecha limite</label><input type="date" id="n-fecha"></div><div class="sfield-row"><div class="sfield"><label>Estado</label><select id="n-estado"><option value="PENDIENTE">Pendiente</option><option value="EN PROCESO">En proceso</option><option value="LISTO">Listo</option></select></div></div><div class="sfield"><label>Descripcion *</label><textarea id="n-desc" placeholder="Productos, medidas, colores, cantidades..."></textarea></div><button class="btn btn-dark" style="width:100%;padding:13px;font-size:15px;margin-top:4px" onclick="crearPedido()">Crear pedido</button></div></div>';
+  c.innerHTML='<div class="section-pad"><div class="card" style="padding:16px"><div class="sfield-row"><div class="sfield"><label># Pedido</label><input type="text" id="n-numero" placeholder="Ej: 432"></div><div class="sfield"><label>Cliente *</label><input type="text" id="n-cliente" placeholder="Nombre del cliente"></div></div><div class="sfield-row"><div class="sfield"><label>Ciudad</label><input type="text" id="n-ciudad" placeholder="Ciudad"></div><div class="sfield"><label>Vendedor</label><select id="n-vendedor"><option value="">Seleccionar</option>'+vends+'</select></div></div><div class="sec-label" style="margin-top:4px">Primera orden (opcional \u2014 puedes agregar m\u00E1s luego)</div><div class="sfield-row"><div class="sfield"><label>Tipo de orden</label><select id="n-tipo-orden"><option value="OC">Orden de compra</option><option value="OF">Orden de fabricaci\u00F3n</option><option value="INVENTARIO">Inventario</option></select></div><div class="sfield"><label>Proveedor / Subcontratado</label><input type="text" id="n-proveedor" placeholder="Ej: ORION, ZAVATTY..."></div></div><div class="sfield-row"><div class="sfield"><label># Orden</label><input type="text" id="n-oc" placeholder="Ej: OC-2026-045"></div><div class="sfield"><label>Fecha entrega proveedor</label><input type="date" id="n-fecha-prov"></div></div><div class="sfield-row"><div class="sfield"><label>Base imponible (USD)</label><input type="number" step="0.01" id="n-monto" placeholder="0.00" oninput="calcTotalIva(\'n\')"></div><div class="sfield"><label>Total con IVA (USD)</label><input type="number" step="0.01" id="n-total" placeholder="0.00"></div></div><div style="font-size:11px;color:var(--muted);margin:-6px 0 12px">La cuenta por cobrar se lleva sobre la base imponible. El total se calcula solo al 16%, pero puedes cambiarlo si el pedido es exento.</div><div class="sfield-row"><div class="sfield"><label>Fecha limite</label><input type="date" id="n-fecha"></div><div class="sfield-row"><div class="sfield"><label>Estado</label><select id="n-estado"><option value="PENDIENTE">Pendiente</option><option value="EN PROCESO">En proceso</option><option value="LISTO">Listo</option></select></div></div><div class="sfield"><label>Descripcion *</label><textarea id="n-desc" placeholder="Productos, medidas, colores, cantidades..."></textarea></div><button class="btn btn-dark" style="width:100%;padding:13px;font-size:15px;margin-top:4px" onclick="crearPedido()">Crear pedido</button></div></div>';
 }
 async function crearPedido(){
   var cliente=document.getElementById('n-cliente').value.trim();
@@ -2511,7 +2511,7 @@ async function guardarEdicion(){
   if(_t>0&&_t!==parseFloat(p.totalOperacion||0)){p.totalOperacion=_t;cambios.push('total');}
   if(_m>0&&_m!==parseFloat(p.monto||0)){p.monto=_m;cambios.push('base imponible');}
   if(_m>0&&_t>_m)p.iva=Math.round((_t-_m)*100)/100;
-  if((_m>0&&_m!==parseFloat(p.monto||0))||_t>0)cobrarDesdePedido(p);
+  if(_m>0||_t>0)cobrarDesdePedido(p);
   var llevaInst=document.getElementById('e-instalacion').checked;var it=instObj(p);
   if(!!it.lleva!==llevaInst){it.lleva=llevaInst;cambios.push(llevaInst?'instalación activada':'instalación desactivada');}
   if(!cambios.length){cerrarModal('modal-edit');toast('Sin cambios','warn');return;}
@@ -3998,7 +3998,8 @@ function ecCuentas(){
   (DB.pedidos||[]).forEach(function(p){
     var n=finNumPedido(p.numero);
     if(!n||vistos[n]||p.estatus==='ANULADO')return;
-    var m=finNum(p.totalOperacion)||finNum(p.monto);
+    if(p.lecturaPdf&&p.estatus==='ENTREGADO')return;   // viejo llenado desde su PDF: no se sabe si se debe
+    var m=pedidoACobrar(p);
     if(m<=0)return;
     res.push({id:'p:'+p.id,num:String(p.numero).trim(),cliente:p.cliente||'Sin nombre',total:m,abonos:[],abonado:0,saldo:Math.round(m*100)/100,fecha:p.fechaCreacion||'',entregado:p.estatus==='ENTREGADO',sinCuenta:true,nota:''});
   });
@@ -5662,6 +5663,8 @@ function finDB(){
   return DB.fin;
 }
 function finNum(v){var n=parseFloat(String(v==null?'':v).replace(',','.'));return isNaN(n)?0:n;}
+// Lo que se le cobra al cliente: la base imponible. El total con IVA, solo si no hay base.
+function pedidoACobrar(p){return finNum(p.monto)||finNum(p.totalOperacion);}
 function finAbonado(r){return (r.abonos||[]).reduce(function(t,a){return t+finNum(a.m);},0);}
 function finSaldo(r){return Math.round((finNum(r.monto)-finAbonado(r))*100)/100;}
 function finPagado(r){return finSaldo(r)<=0.009;}
@@ -5800,7 +5803,7 @@ function finColaInfo(){
     if(!p){inf.textContent='⚠️ No encuentro ese pedido';return;}
     if(p.estatus==='ANULADO'){inf.textContent='⚠️ '+(p.cliente||'')+' · pedido anulado';return;}
     var cr=cuentaAbonosDePedido(p.numero);
-    var sal=cr?finSaldo(cr):(finNum(p.totalOperacion)||finNum(p.monto));
+    var sal=cr?finSaldo(cr):pedidoACobrar(p);
     inf.textContent=(p.cliente||'')+' · saldo $'+fmtMoney(sal)+(m?(m>sal+0.009?' → ⚠️ excedente $'+fmtMoney(m-sal):' → quedaría $'+fmtMoney(sal-m)):'');
   });
   var t=document.getElementById('fc-total');
@@ -5896,8 +5899,8 @@ function finEntregadosPorCobrar(){
   var cuentas=finLista('cobrar').filter(function(r){return entregados[finNumPedido(r.pedidoNum)]&&finSaldo(r)>0.009;});
   var conCuenta={};
   finLista('cobrar').forEach(function(r){conCuenta[finNumPedido(r.pedidoNum)]=true;});
-  var sinCuenta=Object.keys(entregados).filter(function(n){return !conCuenta[n]&&(finNum(entregados[n].totalOperacion)||finNum(entregados[n].monto))>0;}).map(function(n){return entregados[n];});
-  var total=cuentas.reduce(function(s,r){return s+finSaldo(r);},0)+sinCuenta.reduce(function(s,p){return s+(finNum(p.totalOperacion)||finNum(p.monto));},0);
+  var sinCuenta=Object.keys(entregados).filter(function(n){return !conCuenta[n]&&!entregados[n].lecturaPdf&&pedidoACobrar(entregados[n])>0;}).map(function(n){return entregados[n];});
+  var total=cuentas.reduce(function(s,r){return s+finSaldo(r);},0)+sinCuenta.reduce(function(s,p){return s+pedidoACobrar(p);},0);
   return {entregados:entregados,cuentas:cuentas,sinCuenta:sinCuenta,total:total,n:cuentas.length+sinCuenta.length};
 }
 function finTabla(t){
@@ -5920,7 +5923,7 @@ function finTabla(t){
   h+='<input type="text" id="fin-busca" placeholder="Buscar..." value="'+esc(FIN_BUSCA)+'" oninput="finBuscar(this)" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;margin-bottom:8px">';
   if(!arr.length&&!huerfanos.length){h+='<div class="empty"><div class="empty-icon">'+(esC?'\uD83D\uDCB5':'\uD83E\uDDFE')+'</div>'+(filtroEnt?'No hay pedidos entregados por cobrar.':FIN_SOLO_PEND?'Nada pendiente aqu\u00ED.':'Sin registros.')+'</div></div>';return h;}
   huerfanos.forEach(function(p){
-    var m=finNum(p.totalOperacion)||finNum(p.monto);
+    var m=pedidoACobrar(p);
     h+='<div class="card" style="margin-bottom:6px;padding:11px 13px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700">'+esc(p.cliente||'?')+'</div><div style="font-size:11px;color:var(--muted)">Pedido #'+esc(p.numero)+' \u00B7 sin cuenta por cobrar</div></div><span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;background:#dbeafe;color:#1d4ed8;flex-shrink:0">\uD83D\uDE9A ENTREGADO</span></div>'
       +'<div style="font-size:20px;font-weight:800;color:#166534;margin-top:7px">$'+fmtMoney(m)+'</div>'
       +'<div style="margin-top:8px"><button class="btn btn-green btn-sm" onclick="pedidoAbonoAbrir(\''+esc(p.id)+'\')">\uD83D\uDCB0 Registrar abono</button></div></div>';
@@ -6107,9 +6110,9 @@ function cobrarDesdePedido(p){
   if(!p)return;
   var base=parseFloat(p.monto||0)||0;
   var total=parseFloat(p.totalOperacion||0)||0;
-  // Se cobra el total con IVA (lo que el cliente transfiere). Si no hay
-  // total, se cobra la base: mejor eso que no llevar la cuenta.
-  var cobrar=total>0?total:base;
+  // Se cobra la base imponible; el IVA queda guardado aparte. Si no hay base,
+  // se cobra el total: mejor eso que no llevar la cuenta.
+  var cobrar=base>0?base:total;
   if(cobrar<=0)return;
   var num=String(p.numero||'').trim();
   if(!num){toast('El pedido necesita número para llevarle la cuenta por cobrar','warn');return;}
