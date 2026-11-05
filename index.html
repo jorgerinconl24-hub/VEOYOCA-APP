@@ -302,7 +302,9 @@ table.crm{border-collapse:collapse;font-size:12px;min-width:1780px}
 <div class="sfield-row"><div class="sfield"><label>Red social/Recomendado</label><input type="text" id="c-red" list="dl-red" placeholder="Ej: INSTAGRAM"></div>
 <div class="sfield"><label>Tipo de negocio</label><input type="text" id="c-tipo" list="dl-tipo" placeholder="Ej: CONCESIONARIO"></div></div>
 <div class="sfield-row"><div class="sfield"><label>Estado 1</label><select id="c-est1"><option value="SIN CONTACTAR">Sin contactar</option><option value="CONTACTADO">Contactado</option><option value="NO CONTESTA">No contesta</option><option value="A COTIZAR">A cotizar</option><option value="CERRADO">Cerrado</option><option value="NO INTERESADO">No interesado</option></select></div>
-<div class="sfield"><label>Estado 2</label><select id="c-est2"><option value="">Sin estado</option><option value="POTENCIAL">Potencial</option><option value="INTERESADO">Interesado</option><option value="PRESUPUESTO ENVIADO">Presupuesto enviado</option><option value="EN NEGOCIACION">En negociaci&#xF3;n</option><option value="COMPRO">Compr&#xF3;</option><option value="NO COMPRO">No compr&#xF3;</option></select></div></div>
+<div class="sfield"><label>Estado 2</label><select id="c-est2" onchange="potMotivoVer()"><option value="">Sin estado</option><option value="POTENCIAL">Potencial</option><option value="INTERESADO">Interesado</option><option value="PRESUPUESTO ENVIADO">Presupuesto enviado</option><option value="EN NEGOCIACION">En negociaci&#xF3;n</option><option value="COMPRO">Compr&#xF3;</option><option value="NO COMPRO">No compr&#xF3;</option></select></div></div>
+<div class="sfield-row" id="c-pot-bloque" style="display:none"><div class="sfield"><label>&#xBF;Por qu&#xE9; es potencial? *</label><select id="c-pot-motivo" onchange="potMotivoVer()"><option value="">Elige el motivo</option><option value="PLANO">Me enviar&#xE1; un plano</option><option value="PRESUPUESTO">Le enviar&#xE9; presupuesto de sistema</option><option value="INTERESADO">Me pregunta, se ve interesado</option><option value="CITA">Me dio cita para visitarlo</option></select></div>
+<div class="sfield" id="c-pot-cita-box" style="display:none"><label>Fecha de la cita *</label><input type="date" id="c-pot-cita"></div></div>
 <div class="sfield-row"><div class="sfield"><label>&#xDA;ltimo contacto</label><input type="date" id="c-ultimo"></div>
 <div class="sfield"><label>Pr&#xF3;ximo contacto</label><input type="date" id="c-proximo"></div></div>
 <div class="sfield"><label>Estatus/Objeci&#xF3;n</label><input type="text" id="c-objecion" placeholder="Ej: Esperando aprobaci&#xF3;n del due&#xF1;o"></div>
@@ -311,6 +313,8 @@ table.crm{border-collapse:collapse;font-size:12px;min-width:1780px}
 <div class="sfield"><label>Porqu&#xE9; NO compr&#xF3;</label><input type="text" id="c-porque-no"></div></div>
 <div class="sfield"><label>Notas</label><textarea id="c-notas" placeholder="Lead capturado por promoci&#xF3;n semanal..."></textarea></div>
 <div id="c-seg-bloque" style="display:none"><div class="sec-label">Seguimientos</div>
+<button type="button" class="btn btn-ghost" style="width:100%;margin-bottom:8px;color:#9a3412" onclick="fichaNoContesta()">&#x1F4F5; No contesta (lo vuelve a recordar m&#xE1;s adelante)</button>
+<button type="button" class="btn btn-ghost" style="width:100%;margin-bottom:8px;color:#b45309" onclick="fichaPotencial()">&#x1F525; Respondi&#xF3; y se volvi&#xF3; potencial</button>
 <div id="c-seguimientos"></div>
 <div style="display:flex;gap:8px"><input type="text" id="c-seg-texto" placeholder="Ej: Llam&#xE9;, pidi&#xF3; fotos del rack..." style="flex:1;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:14px"><button class="btn btn-dark" onclick="agregarSeguimiento()">+ Agregar</button></div></div>
 </div>
@@ -1444,13 +1448,14 @@ function presuGuardarCliente(cli,vendSel){
     if(vend)ex.vendedor=vend;                 // el cliente queda asignado al vendedor que cotizó
     if(!ex.estado2)ex.estado2='PRESUPUESTO ENVIADO';
     ex.ultimoContacto=fecha();
+    agendarPorPresupuesto(ex);
     try{guardarCliente1(ex);}catch(e){}
     return ex;
   }
   var nuevo={id:uid(),nombre:cli.nombre||('Cliente '+tel),telefono:tel,correo:'',rif:cli.rif||'',direccion:cli.direccion||'',
     vendedor:vend,redSocial:'PRESUPUESTO',tipoNegocio:'',
     estado1:'A COTIZAR',estado2:'PRESUPUESTO ENVIADO',estatusObjecion:'',planAccion:'',porqueCompro:'',porqueNoCompro:'',cantidadMuebles:'',
-    ultimoContacto:fecha(),proximoContacto:fecha(),notas:'Registrado desde un presupuesto',seguimientos:[],presupuestos:[],
+    ultimoContacto:fecha(),proximoContacto:fechaMasDias(1),notas:'Registrado desde un presupuesto',seguimientos:[],presupuestos:[],
     creadoPor:SESSION?SESSION.nombre:'App',fechaCreacion:fecha(),creadoTS:Date.now()};
   DB.clientes.push(nuevo);
   try{guardarCliente1(nuevo);}catch(e){}
@@ -2944,14 +2949,17 @@ function enviarReporteGrupo(){
 // ═══════════════════════════════════════════════════════════
 var VENTAS_VISTA=localStorage.getItem('veo_ventas_vista')||'tabla';
 var CLIENTE_EDIT_ID=null;
-var EST1_OPCIONES=['SIN CONTACTAR','CONTACTADO','NO CONTESTA','CERRADO','NO INTERESADO'];
+var EST1_OPCIONES=['SIN CONTACTAR','CONTACTADO','NO CONTESTA','DEJO DE CONTESTAR','FRIO','CERRADO','NO INTERESADO'];
+// DEJO DE CONTESTAR y FRIO no se eligen a mano: se llega a ellos solo con los intentos registrados.
+var EST1_MANUAL=EST1_OPCIONES.filter(function(e){return e!=='DEJO DE CONTESTAR'&&e!=='FRIO';});
 // Menu rapido "Resultado" [valor interno, etiqueta]. Alimenta el cierre del dia
 // y el resumen semanal (atendidos / presupuestos / ventas).
 var RESULTADO_MENU=[['CONTACTADO','Contactado'],['NO CONTESTA','No contesta'],['PRESUPUESTO ENVIADO','Presupuesto enviado'],['VENTA','Venta cerrada'],['NO INTERESADO','No interesado']];
 function getClientes(){if(!Array.isArray(DB.clientes))DB.clientes=[];return DB.clientes;}
 function est1De(cl){return ((cl.estado1||'').trim()||'SIN CONTACTAR').toUpperCase();}
 // Cliente finalizado: ya compro (CERRADO) o no interesado. El sistema no lo recuerda mas.
-function estaFinalizado(cl){var e=est1De(cl);return e==='CERRADO'||e==='NO INTERESADO';}
+function estaFinalizado(cl){var e=est1De(cl);return e==='CERRADO'||e==='NO INTERESADO'||e==='FRIO';}
+function estaEnfriado(cl){var e=est1De(cl);return e==='DEJO DE CONTESTAR'||e==='FRIO';}
 function proxVencido(cl){if(estaFinalizado(cl))return false;var d=diasRestantes(cl.proximoContacto);return d!==null&&d<0;}
 function telWA(t){var n=String(t||'').replace(/[^0-9]/g,'');return n?('https://wa.me/'+n):'';}
 function usuarioPorNombre(n){return DB.usuarios.find(function(u){return u.nombre===n;});}
@@ -3155,7 +3163,7 @@ function proxContactoHTML(cl){
   var txt=d<0?('vencido '+Math.abs(d)+'d'):d===0?'HOY':('en '+d+'d');
   return '<div style="font-size:11px;color:'+col+';font-weight:'+(d<=0?'700':'400')+';margin-top:3px">\uD83D\uDCC5 Pr\u00F3ximo contacto: '+esc(cl.proximoContacto)+' \u00B7 '+txt+'</div>';
 }
-var EST1_COLOR={'CONTACTADO':['#dcfce7','#166534'],'A COTIZAR':['#dbeafe','#1d4ed8'],'CERRADO':['#fef9c3','#854d0e'],'NO CONTESTA':['#ffedd5','#9a3412'],'NO INTERESADO':['#fee2e2','#991b1b'],'SIN CONTACTAR':['#f3f4f6','#6b7280']};
+var EST1_COLOR={'CONTACTADO':['#dcfce7','#166534'],'A COTIZAR':['#dbeafe','#1d4ed8'],'CERRADO':['#fef9c3','#854d0e'],'NO CONTESTA':['#ffedd5','#9a3412'],'DEJO DE CONTESTAR':['#fde68a','#78350f'],'FRIO':['#e0f2fe','#075985'],'NO INTERESADO':['#fee2e2','#991b1b'],'SIN CONTACTAR':['#f3f4f6','#6b7280']};
 function badgeEst1(cl){
   var e=est1De(cl);
   var c=EST1_COLOR[e]||['#e0e7ff','#3730a3'];
@@ -3164,22 +3172,118 @@ function badgeEst1(cl){
 // Fecha de hoy + n días, en formato DD/MM/YYYY (igual que proximoContacto)
 function fechaMasDias(n){var d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()+n);return d.toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'});}
 // Auto-programa el próximo contacto según el resultado (ayuda a los vendedores).
-// Contactado→+2 días, No contesta→+1, Presupuesto enviado→+3.
+// Contactado→+2 días; con presupuesto, el cliente mas potencial, +1 (casi diario).
+// No contesta: ver registrarNoContesta.
 // Venta / No interesado: cliente cerrado, se limpia el próximo contacto (no más recordatorios).
 function autoAgendarProximo(cl,res){
+  if(res==='NO CONTESTA')return registrarNoContesta(cl);
+  var eraEnfriado=estaEnfriado(cl);
+  limpiarSinRespuesta(cl);
+  if(eraEnfriado)cl.estado1='CONTACTADO';
   if(res==='VENTA'||res==='NO INTERESADO'){cl.proximoContacto='';return '';}
-  var dias={'CONTACTADO':2,'NO CONTESTA':1,'PRESUPUESTO ENVIADO':3}[res];
-  if(dias==null)return null;
+  var dias={'CONTACTADO':esPresupuestado(cl)?1:2,'PRESUPUESTO ENVIADO':1}[res];
+  if(dias==null){
+    if(eraEnfriado&&!cl.proximoContacto)cl.proximoContacto=fechaMasDias(2);
+    return null;
+  }
   cl.proximoContacto=fechaMasDias(dias);
   return cl.proximoContacto;
 }
-// POTENCIAL: programa un recordatorio para MAÑANA. El webhook manda un WhatsApp
-// dedicado (solo de ese cliente) a su vendedor cuando llega el día.
-function aplicarPotencial(cl){
-  cl.proximoContacto=fechaMasDias(3); // en 3 dias
+// El presupuesto es la señal mas fuerte: va por encima de todos los potenciales.
+function esPresupuestado(cl){
+  var e2=(cl.estado2||'').toString().trim().toUpperCase();
+  if(e2==='COMPRO'||e2==='NO COMPRO')return false;
+  return e2==='PRESUPUESTO ENVIADO'||cl.potencialMotivo==='PRESUPUESTO'||!!cl.presupuestoUrl||(Array.isArray(cl.presupuestos)&&cl.presupuestos.length>0);
+}
+// Enviar un presupuesto programa el seguimiento para mañana y retoma al cliente.
+function agendarPorPresupuesto(cl){
+  cl.proximoContacto=fechaMasDias(1);
+  if(est1De(cl)==='SIN CONTACTAR'||estaEnfriado(cl))cl.estado1='CONTACTADO';
+  limpiarSinRespuesta(cl);
+}
+// Intentos seguidos sin respuesta: cada uno aleja mas el siguiente recordatorio.
+// Normal: 1, 3 y 7 dias. Con presupuesto se insiste mas: 1, 1, 2, 2, 3, 3 y 7.
+// Despues, DEJO DE CONTESTAR a 30 dias, y luego FRIO sin recordatorios.
+// Solo cuenta uno por dia: marcar varias veces seguidas no enfria a nadie.
+function registrarNoContesta(cl){
+  var hoy=fecha();
+  if(cl.sinRespuestaFecha!==hoy){cl.sinRespuesta=(cl.sinRespuesta||0)+1;cl.sinRespuestaFecha=hoy;}
+  var n=cl.sinRespuesta;
+  var plazos=esPresupuestado(cl)?[1,1,2,2,3,3,7]:[1,3,7];
+  if(n<=plazos.length){
+    cl.estado1='NO CONTESTA';
+    cl.proximoContacto=fechaMasDias(plazos[n-1]);
+    return cl.proximoContacto;
+  }
+  var dejo=n===plazos.length+1;
+  var nuevo=dejo?'DEJO DE CONTESTAR':'FRIO';
+  if(est1De(cl)!==nuevo){
+    cl.estado1=nuevo;
+    cl.proximoContacto=dejo?fechaMasDias(30):'';
+    cl.enfriadoFecha=hoy;cl.enfriadoPor=SESSION?SESSION.nombre:'';cl.enfriadoAuto=false;
+    if(!Array.isArray(cl.seguimientos))cl.seguimientos=[];
+    cl.seguimientos.push({texto:'Pasó a '+nuevo+' tras '+n+' intentos sin respuesta',fecha:hoy,hora:hora(),usuario:SESSION?SESSION.nombre:''});
+  }
+  return cl.proximoContacto||'';
+}
+function limpiarSinRespuesta(cl){
+  if(!cl.sinRespuesta&&!cl.enfriadoFecha)return;
+  cl.sinRespuesta=0;cl.sinRespuestaFecha='';cl.enfriadoFecha='';cl.enfriadoPor='';cl.enfriadoAuto=false;
+}
+// "No contesta" desde la ficha que abre el enlace del recordatorio.
+function fichaNoContesta(){
+  if(!CLIENTE_EDIT_ID)return;
+  marcarResultado(CLIENTE_EDIT_ID,'NO CONTESTA');
+  cerrarModal('modal-cliente');
+}
+// Un cliente se vuelve potencial dias despues, cuando responde. El sistema no ve el
+// WhatsApp del vendedor, asi que se le pregunta en el momento en que lo actualiza.
+function fichaPotencial(){
+  document.getElementById('c-est2').value='POTENCIAL';
+  potMotivoVer();
+  var m=document.getElementById('c-pot-motivo');
+  if(m){m.scrollIntoView({block:'center'});m.focus();}
+  toast('Elige por qué es potencial y guarda','warn');
+}
+function potAbrirFicha(id){abrirCliente(id);fichaPotencial();}
+// Lo que se escribio en el seguimiento parece una de las señales de potencial.
+function potPareceTexto(cl,texto){
+  if(cl.estado2==='POTENCIAL'||estaFinalizado(cl))return false;
+  var t=String(texto||'');
+  if(/\bno\b.{0,15}interesad/i.test(t))return false;
+  return /plano|cita|visit|presupuest|cotiz|interesad|pregunt/i.test(t);
+}
+function potPreguntaVolvio(cl){
+  return confirm((cl.nombre||'Este cliente')+' no contestaba y ahora respondió.\n\n¿Se volvió POTENCIAL? (enviará plano, le enviarás presupuesto de sistema, pregunta o se ve interesado, o te dio cita)');
+}
+// POTENCIAL: el vendedor dice por que. El seguimiento es para MAÑANA, antes que el de
+// un simple contactado; si hay cita, para el dia de la cita.
+var POT_MOTIVOS={PLANO:'Enviará un plano',PRESUPUESTO:'Presupuesto de sistema',INTERESADO:'Pregunta, se ve interesado',CITA:'Cita para visitarlo'};
+function potMotivoTxt(cl){
+  var t=POT_MOTIVOS[cl.potencialMotivo]||'';
+  return t&&cl.potencialMotivo==='CITA'&&cl.potencialCita?t+' el '+cl.potencialCita:t;
+}
+function potMotivoVer(){
+  var pot=document.getElementById('c-est2').value==='POTENCIAL';
+  document.getElementById('c-pot-bloque').style.display=pot?'':'none';
+  document.getElementById('c-pot-cita-box').style.display=pot&&document.getElementById('c-pot-motivo').value==='CITA'?'':'none';
+}
+// Devuelve el error de la ficha, o '' si esta bien.
+function potValidarFicha(est2,est2Antes,motivo,cita){
+  if(est2!=='POTENCIAL')return '';
+  if(!motivo&&est2Antes!=='POTENCIAL')return 'Elige por qué es potencial';
+  if(motivo==='CITA'&&!cita)return 'Escribe la fecha de la cita';
+  return '';
+}
+function aplicarPotencial(cl,fechaAMano){
+  // Si es potencial ya hubo conversacion: sin esto no entraria en la cola de seguimientos.
+  if(est1De(cl)==='SIN CONTACTAR')cl.estado1='CONTACTADO';
+  if(estaEnfriado(cl)){cl.estado1='CONTACTADO';limpiarSinRespuesta(cl);}
+  cl.proximoContacto=(cl.potencialMotivo==='CITA'&&cl.potencialCita)||fechaAMano||fechaMasDias(1);
   cl.recordatorioPotencial={fecha:cl.proximoContacto,hecho:false,creado:fecha(),creadoPor:SESSION?SESSION.nombre:'App'};
   if(!Array.isArray(cl.seguimientos))cl.seguimientos=[];
-  cl.seguimientos.push({texto:'Marcado como POTENCIAL — seguimiento programado para el '+cl.proximoContacto+' (3 días)',fecha:fecha(),hora:hora(),usuario:SESSION?SESSION.nombre:'App'});
+  var motTxt=potMotivoTxt(cl);
+  cl.seguimientos.push({texto:'Marcado como POTENCIAL'+(motTxt?' ('+motTxt+')':'')+' — seguimiento programado para el '+cl.proximoContacto,fecha:fecha(),hora:hora(),usuario:SESSION?SESSION.nombre:'App'});
   cl.ultimoContacto=fecha();
   notificarPotencial(cl);
   toast('Marcado POTENCIAL — seguimiento el '+cl.proximoContacto+' ✓','ok');
@@ -3196,7 +3300,7 @@ function notificarPotencial(cl){
     fetch('https://veoyoca-webhook.onrender.com/potencial-crm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
       nombre:cl.nombre,telefono:cl.telefono||'',producto:cl.producto||'',ciudad:cl.ciudad||'',
       notas:cl.notas||'',vendedor:cl.vendedor||'',marcadoPor:SESSION?SESSION.nombre:'',
-      fechaSeguimiento:cl.proximoContacto||''
+      fechaSeguimiento:cl.proximoContacto||'',motivo:potMotivoTxt(cl)
     })}).then(function(r){return r.json();})
       .then(function(d){if(d&&d.ok)toast('Potencial avisado al vendedor, admins y grupo','ok');})
       .catch(function(e){console.log('potencial-crm err',e);});
@@ -3283,6 +3387,7 @@ function _logRes(cl,res){
 function marcarResultado(id,res){
   if(!res)return;
   var cl=getClientes().find(function(x){return x.id===id;});if(!cl)return;
+  var volvio=res==='CONTACTADO'&&(cl.sinRespuesta||0)>0&&cl.estado2!=='POTENCIAL';
   if(res==='CONTACTADO')cl.estado1='CONTACTADO';
   else if(res==='NO CONTESTA')cl.estado1='NO CONTESTA';
   else if(res==='PRESUPUESTO ENVIADO'){cl.estado2='PRESUPUESTO ENVIADO';if(est1De(cl)==='SIN CONTACTAR')cl.estado1='CONTACTADO';}
@@ -3291,9 +3396,11 @@ function marcarResultado(id,res){
   _logRes(cl,res);
   var prox=autoAgendarProximo(cl,res);
   registrarBitacora(cl.id,'Resultado: '+res+' por '+(SESSION?SESSION.nombre:''));
-  guardarDB();
-  toast('Marcado: '+res+(prox?' · próx. contacto '+prox:''),'ok');
+  guardarCliente1(cl);   // los clientes van en su propia coleccion: guardarDB() no los guarda
+  var enf=res==='NO CONTESTA'&&estaEnfriado(cl);
+  toast(enf?('Sin respuesta: pasó a '+est1De(cl)+(prox?' · próx. contacto '+prox:'')):('Marcado: '+res+(prox?' · próx. contacto '+prox:'')),'ok');
   filtrarVentas();
+  if(volvio&&potPreguntaVolvio(cl))potAbrirFicha(id);
 }
 // Detecta automáticamente si el nombre parece de EMPRESA (más potencial que una persona).
 function esEmpresa(nombre){
@@ -3316,6 +3423,8 @@ function clienteCardHTML(cl){
   if(cl.tipoNegocio)h+=chipCliente(cl.tipoNegocio,'#f3e8ff','#7e22ce');
   if(cl.redSocial)h+=chipCliente(cl.redSocial,'#f3f4f6','#374151');
   if(cl.estado2)h+=chipCliente(cl.estado2,'var(--ibg)','var(--info)');
+  if(esPresupuestado(cl)&&!estaFinalizado(cl))h+=chipCliente('🔥🔥 Con presupuesto: el más potencial','#fee2e2','#991b1b');
+  else if(cl.estado2==='POTENCIAL'&&potMotivoTxt(cl))h+=chipCliente('🔥 '+potMotivoTxt(cl),'#ffedd5','#9a3412');
   if(cl.visitoOficina)h+=chipCliente('🏢 Visitó oficina'+(cl.fechaVisita?' '+esc(cl.fechaVisita):''),'#dcfce7','#166534');
   var _plC=presuListaCliente(cl);_plC.forEach(function(p,i){h+='<a href="'+esc(p.url)+'" target="_blank" class="card-vend" style="background:#dbeafe;color:#1d4ed8;margin-right:4px;text-decoration:none">📄 '+(p.numero?('Nº'+esc(p.numero)):('Presup. '+(i+1)))+'</a>';});
   var _pedC=pedidoListaCliente(cl);_pedC.forEach(function(p,i){h+='<a href="'+esc(p.url)+'" target="_blank" class="card-vend" style="background:#dcfce7;color:#166534;margin-right:4px;text-decoration:none">🛒 '+(p.numero?('Pedido Nº'+esc(p.numero)):('Pedido '+(i+1)))+'</a>';});
@@ -3348,7 +3457,7 @@ function filtrarVentas(){
     lista.forEach(function(cl){var e=est1De(cl);if(!grupos[e])grupos[e]=[];grupos[e].push(cl);});
     var h='<div class="kb-wrap">';
     Object.keys(grupos).forEach(function(e){
-      var col=(e==='CONTACTADO'||e==='CERRADO')?'#16a34a':e==='SIN CONTACTAR'?'#6b7280':e==='NO INTERESADO'?'#dc2626':e==='NO CONTESTA'?'#ea580c':'#1d4ed8';
+      var col=(e==='CONTACTADO'||e==='CERRADO')?'#16a34a':e==='SIN CONTACTAR'?'#6b7280':e==='NO INTERESADO'?'#dc2626':e==='NO CONTESTA'?'#ea580c':e==='DEJO DE CONTESTAR'?'#92400e':e==='FRIO'?'#0369a1':'#1d4ed8';
       h+='<div class="kb-col"><div class="kb-head" style="color:'+col+'">'+esc(e)+'<span class="kb-count">'+grupos[e].length+'</span></div>';
       grupos[e].forEach(function(cl){
         h+='<div class="kb-card" onclick="abrirCliente(\''+cl.id+'\')">';
@@ -3376,6 +3485,15 @@ var CRM_SAVE_TIMER=null;
 function crmCampo(id,campo,valor){
   var cl=getClientes().find(function(x){return x.id===id;});if(!cl)return;
   var prev=cl[campo];
+  // Potencial necesita un motivo: se pide en la ficha, no se marca desde la casilla.
+  if(campo==='estado2'&&valor==='POTENCIAL'){
+    filtrarVentas();
+    abrirCliente(id);
+    document.getElementById('c-est2').value='POTENCIAL';
+    potMotivoVer();
+    toast('Elige por qué es potencial y guarda','warn');
+    return;
+  }
   // No permitir teléfonos duplicados al editar en la tabla.
   if(campo==='telefono'){
     var _tn=(valor||'').replace(/[^0-9]/g,'');
@@ -3388,15 +3506,17 @@ function crmCampo(id,campo,valor){
   if(campo==='cantidadMuebles')valor=valor?parseInt(valor):'';
   cl[campo]=valor;
   cl.ultimaEdicion=fecha()+' '+hora();cl.editadoPor=SESSION.nombre;
+  // Ponerle fecha a un cliente frio es retomarlo.
+  if(campo==='proximoContacto'&&valor&&est1De(cl)==='FRIO'){cl.estado1='CONTACTADO';limpiarSinRespuesta(cl);}
   // Registrar en Estado 1 o Estado 2 cuenta como atendido hoy y alimenta el resumen semanal
   var logueado=false;
+  var volvioCrm=campo==='estado1'&&valor==='CONTACTADO'&&(cl.sinRespuesta||0)>0&&cl.estado2!=='POTENCIAL';
   if(campo==='estado1'&&valor&&valor!=='SIN CONTACTAR'&&valor!==prev){
     var r1=valor==='CERRADO'?'VENTA':valor;_logRes(cl,r1);autoAgendarProximo(cl,r1);logueado=true;
   }
   if(campo==='estado2'&&valor&&valor!==prev){
     if(valor==='PRESUPUESTO ENVIADO'){_logRes(cl,'PRESUPUESTO ENVIADO');autoAgendarProximo(cl,'PRESUPUESTO ENVIADO');logueado=true;}
     else if(valor==='COMPRO'){_logRes(cl,'VENTA');autoAgendarProximo(cl,'VENTA');logueado=true;}
-    else if(valor==='POTENCIAL'){aplicarPotencial(cl);logueado=true;}
   }
   // Al marcar la visita a la oficina a mano, se registra la fecha automaticamente
   if(campo==='visitoOficina'){ if(valor==='SÍ'){ if(!cl.fechaVisita)cl.fechaVisita=fecha(); } else { cl.fechaVisita=''; } }
@@ -3409,6 +3529,7 @@ function crmCampo(id,campo,valor){
   // Si se registró un resultado, refresca la lista para que se vea la fecha de
   // "último contacto" marcada de una (y el badge/orden actualizado).
   if(logueado)filtrarVentas();
+  if(volvioCrm&&potPreguntaVolvio(cl))potAbrirFicha(id);
 }
 async function crmQuickAdd(inp){
   var nombre=(inp.value||'').trim();if(!nombre)return;
@@ -3458,7 +3579,7 @@ function renderTablaCRM(el,lista){
     h+='<td class="colfija"><div style="display:flex;align-items:center"><button onclick="abrirCliente(\''+id+'\')" title="Abrir ficha completa y seguimientos" style="border:none;background:none;font-size:13px;cursor:pointer;padding:0 2px 0 8px">\uD83D\uDCC2</button>'+starEmp(cl)+celdaInput(id,'nombre',cl.nombre)+'</div></td>';
     h+='<td>'+celdaInput(id,'telefono',cl.telefono,'tel')+'</td>';
     h+='<td>'+celdaSelect(id,'vendedor',cl.vendedor||'',vendArr,'\u2014')+'</td>';
-    h+='<td>'+celdaSelect(id,'estado1',est1De(cl),EST1_OPCIONES)+'</td>';
+    h+='<td>'+celdaSelect(id,'estado1',est1De(cl),EST1_MANUAL)+'</td>';
     h+='<td style="min-width:170px">'+celdaSelect(id,'estado2',cl.estado2||'',EST2,'\u2014')+'</td>';
     h+='<td style="min-width:250px">'+celdaSeguimiento(cl)+'</td>';
     h+='<td>'+celdaInput(id,'producto',cl.producto)+'</td>';
@@ -3534,6 +3655,7 @@ async function crmSegAgregar(id){
   registrarBitacora(cl.id,'SEGUIMIENTO (tabla) a '+(cl.nombre||'')+': '+texto.substring(0,60));
   await guardarCliente1(cl);
   toast('Seguimiento registrado \u2713','ok');
+  if(potPareceTexto(cl,texto)&&confirm('Por lo que escribiste, '+(cl.nombre||'este cliente')+' parece POTENCIAL. \u00bfMarcarlo?'))potAbrirFicha(id);
 }
 
 function renderSeguimientosCliente(cl){
@@ -3565,6 +3687,9 @@ function abrirCliente(id,focoSeguimiento){
   document.getElementById('c-tipo').value=cl?(cl.tipoNegocio||''):'';
   document.getElementById('c-est1').value=cl?(cl.estado1||'SIN CONTACTAR'):'SIN CONTACTAR';
   document.getElementById('c-est2').value=cl?(cl.estado2||''):'';
+  document.getElementById('c-pot-motivo').value=cl?(cl.potencialMotivo||''):'';
+  document.getElementById('c-pot-cita').value=cl?fechaInput(cl.potencialCita):'';
+  potMotivoVer();
   document.getElementById('c-ultimo').value=cl?fechaInput(cl.ultimoContacto):'';
   document.getElementById('c-proximo').value=cl?fechaInput(cl.proximoContacto):'';
   document.getElementById('c-objecion').value=cl?(cl.estatusObjecion||''):'';
@@ -3579,6 +3704,26 @@ function abrirCliente(id,focoSeguimiento){
   abrirModal('modal-cliente');
   if(cl&&focoSeguimiento)setTimeout(function(){var i=document.getElementById('c-seg-texto');if(i)i.focus();},250);
 }
+// Cambios de estado hechos desde la ficha, con las mismas reglas que el menu de resultado.
+function aplicarEstadoFicha(cl,esNuevo,est1Antes,proxAntes){
+  if(esNuevo)return;
+  var nuevo=cl.estado1;
+  // Estos dos solo se alcanzan con los intentos, aunque la opcion aparezca en la lista.
+  if(nuevo!==est1Antes&&(nuevo==='DEJO DE CONTESTAR'||nuevo==='FRIO')){cl.estado1=est1Antes;nuevo=est1Antes;}
+  if(nuevo===est1Antes){
+    if(nuevo==='FRIO'&&cl.proximoContacto){cl.estado1='CONTACTADO';limpiarSinRespuesta(cl);}
+    return;
+  }
+  if(nuevo==='NO CONTESTA'){
+    var aMano=cl.proximoContacto!==proxAntes?cl.proximoContacto:'';
+    registrarNoContesta(cl);
+    if(aMano&&est1De(cl)!=='FRIO')cl.proximoContacto=aMano;
+    return;
+  }
+  var eraEnfriado=est1Antes==='DEJO DE CONTESTAR'||est1Antes==='FRIO';
+  limpiarSinRespuesta(cl);
+  if(eraEnfriado&&!estaFinalizado(cl)&&!cl.proximoContacto)cl.proximoContacto=fechaMasDias(2);
+}
 async function guardarCliente(){
   var nombre=document.getElementById('c-nombre').value.trim();
   if(!nombre){toast('El nombre es obligatorio','err');return;}
@@ -3587,6 +3732,10 @@ async function guardarCliente(){
   if(!cl)return;
   var proxAntes=esNuevo?'':(cl.proximoContacto||'');
   var est2Antes=esNuevo?'':(cl.estado2||'');
+  var est1Antes=esNuevo?'':(cl.estado1||'');
+  var potMot=document.getElementById('c-pot-motivo').value,potCita=inputFecha(document.getElementById('c-pot-cita').value);
+  var errPot=potValidarFicha(document.getElementById('c-est2').value,est2Antes,potMot,potCita);
+  if(errPot){toast(errPot,'err');return;}
   cl.nombre=nombre;
   cl.telefono=document.getElementById('c-telefono').value.trim();
   // No permitir teléfonos duplicados: si ese número ya está en otro cliente, avisa y no guarda.
@@ -3610,7 +3759,19 @@ async function guardarCliente(){
   cl.porqueCompro=document.getElementById('c-porque-si').value.trim();
   cl.porqueNoCompro=document.getElementById('c-porque-no').value.trim();
   cl.notas=document.getElementById('c-notas').value.trim();
-  if(cl.estado2==='POTENCIAL'&&est2Antes!=='POTENCIAL')aplicarPotencial(cl); // seguimiento a 3 dias + aviso
+  aplicarEstadoFicha(cl,esNuevo,est1Antes,proxAntes);
+  if(cl.estado2==='POTENCIAL'){
+    var citaAntes=cl.potencialCita||'';
+    cl.potencialMotivo=potMot;
+    cl.potencialCita=potMot==='CITA'?potCita:'';
+    if(est2Antes!=='POTENCIAL')aplicarPotencial(cl,cl.proximoContacto!==proxAntes?cl.proximoContacto:''); // seguimiento + aviso
+    else if(cl.potencialCita&&cl.potencialCita!==citaAntes)cl.proximoContacto=cl.potencialCita;
+  }
+  if(cl.estado2==='PRESUPUESTO ENVIADO'&&est2Antes!=='PRESUPUESTO ENVIADO'){
+    var fechaManoP=cl.proximoContacto!==proxAntes?cl.proximoContacto:'';
+    agendarPorPresupuesto(cl);
+    if(fechaManoP)cl.proximoContacto=fechaManoP;
+  }
   cl.ultimaEdicion=fecha()+' '+hora();cl.editadoPor=SESSION.nombre;
   if(esNuevo)getClientes().push(cl);
   registrarBitacora(cl.id,(esNuevo?'CLIENTE CRM creado: ':'CLIENTE CRM editado: ')+nombre+' por '+SESSION.nombre);
@@ -3649,6 +3810,7 @@ async function agregarSeguimiento(){
   registrarBitacora(cl.id,'SEGUIMIENTO a '+(cl.nombre||'')+': '+texto.substring(0,60));
   await guardarCliente1(cl);
   toast('Seguimiento registrado','ok');
+  if(potPareceTexto(cl,texto))fichaPotencial();   // la ficha ya esta abierta: solo queda elegir el motivo
 }
 function exportarClientesCSV(){
   var rows=[['Nombre','Telefono','Vendedor','Producto/Servicio','Ciudad','Red social','Tipo de negocio','Estado 1','Estado 2','Estatus/Objecion','Plan de accion','Cant. muebles','Porque compro','Porque no compro','Ultimo contacto','Proximo contacto','Notas','Seguimientos']];
