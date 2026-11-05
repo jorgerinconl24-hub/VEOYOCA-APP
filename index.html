@@ -2769,6 +2769,7 @@ function toggleProv(i){
   var el=document.getElementById('prov-peds-'+i);if(!el)return;
   var abierto=el.style.display!=='none';
   el.style.display=abierto?'none':'block';
+  REP_OC_ABIERTOS[el.getAttribute('data-prov')]=!abierto;   // sigue abierto al refrescar la pantalla
   var fl=document.getElementById('prov-arrow-'+i);
   if(fl)fl.textContent=abierto?'\u25B6':'\u25BC';
 }
@@ -3659,6 +3660,155 @@ function exportarClientesCSV(){
   var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download='clientes_veoyoca_'+fecha().replace(/\//g,'-')+'.csv';a.click();
 }
 
+// ── ÓRDENES PENDIENTES POR PROVEEDOR ────────────────────────
+// La orden es la ficha principal; dentro va el pedido o pedidos a los que pertenece.
+var REP_OC_TIPO='OC',REP_OC_VISTA='ordenes',REP_OC_ABIERTOS={},REP_OC_Q='';
+function repOcTipoDe(o){return o.tipo==='OF'||o.tipo==='INVENTARIO'?o.tipo:'OC';}
+function repOcNum(o){return String(o.numeroOC==null?'':o.numeroOC).trim().replace(/^0+/,'');}
+function repOcPendientes(){
+  var res=[];
+  DB.pedidos.forEach(function(p){
+    if(p.estatus==='ENTREGADO'||p.estatus==='ANULADO')return;
+    getOrdenes(p).forEach(function(o){
+      if(ordenRecibida(o)||o.estado==='ENTREGADA')return;
+      res.push({p:p,o:o});
+    });
+  });
+  return res;
+}
+// Una orden con su numero puede servir a varios pedidos: es una sola ficha.
+function repOcAtraso(ref){
+  if(ref.p.estatus==='ENTREGADO'||ref.p.estatus==='ANULADO'||ref.o.estado==='ENTREGADA')return 0;
+  return ordenRetrasada(ref.o)?Math.abs(diasRestantes(ref.o.fechaEstimadaEntrega)):0;
+}
+function repOcProv(o){return (o.proveedor||'').trim()||tipoLabel(o.tipo)||'Sin proveedor';}
+function repOcClave(ref){
+  var num=repOcNum(ref.o);
+  return num?repOcTipoDe(ref.o)+'|'+num:'id|'+ref.p.id+'|'+ref.o.id;
+}
+function repOcFicha(ref,fichas,orden){
+  var tipo=repOcTipoDe(ref.o),k=repOcClave(ref);
+  if(!fichas[k]){fichas[k]={tipo:tipo,num:String(ref.o.numeroOC==null?'':ref.o.numeroOC).trim(),refs:[],atraso:0,pdf:'',items:0};orden.push(fichas[k]);}
+  var f=fichas[k];
+  f.refs.push(ref);
+  f.atraso=Math.max(f.atraso,repOcAtraso(ref));
+  if(!f.pdf&&/^https?:\/\//.test(ref.o.pdfUrl||''))f.pdf=ref.o.pdfUrl;
+  if(ref.o.items&&ref.o.items.length>f.items)f.items=ref.o.items.length;
+}
+function repOcBadge(f){
+  if(f.atraso)return '<span class="badge b-danger">Retrasada '+f.atraso+'d</span>';
+  var o=f.refs[0].o;
+  if(o.estado==='ENTREGADA')return '<span class="badge b-success">Entregada</span>';
+  if(ordenRecibida(o))return '<span class="badge b-success">Recibida en almacén</span>';
+  if(ordenListaPlanta(o))return '<span class="badge b-info">Lista en planta</span>';
+  if(o.estado==='CARGADA')return '<span class="badge b-info">Orden cargada</span>';
+  if(o.estado==='EN PROCESO')return '<span class="badge b-info">En proceso</span>';
+  return '<span class="badge b-warning">Pendiente</span>';
+}
+function repOcFichaHTML(f,prov){
+  var cerrada=f.refs[0].o.estado==='ENTREGADA'||ordenRecibida(f.refs[0].o);
+  var h='<div style="background:#fff;border:1px solid var(--border);border-left:4px solid '+(f.atraso?'var(--danger)':cerrada?'var(--success)':'#d97706')+';border-radius:10px;padding:12px;min-width:0">';
+  if(prov)h+='<div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:4px;overflow-wrap:anywhere">'+esc(prov)+'</div>';
+  h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px"><div style="font-size:17px;font-weight:800;line-height:1.2;min-width:0;overflow-wrap:anywhere">'+tipoLabel(f.tipo)+(f.num?' #'+esc(f.num):' <span style="font-size:12px;font-weight:600;color:var(--warning)">sin número</span>')+'</div>'+repOcBadge(f)+'</div>';
+  var fechas=[];
+  f.refs.forEach(function(r){var x=r.o.fechaEstimadaEntrega;if(x&&fechas.indexOf(x)<0)fechas.push(x);});
+  h+='<div style="font-size:11px;color:var(--muted);margin-top:4px">'+(fechas.length?'Entrega estimada: '+esc(fechas.join(', ')):'<span style="color:var(--danger);font-weight:600">Sin fecha estimada</span>')+(f.items?' · '+f.items+' ítem'+(f.items>1?'s':''):'')+(f.pdf?' · <a href="'+esc(f.pdf)+'" target="_blank" rel="noopener" style="color:var(--info)">📄 Ver</a>':'')+'</div>';
+  h+='<div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-top:9px">'+(f.refs.length>1?'PEDIDOS':'PEDIDO')+'</div>';
+  f.refs.forEach(function(r){
+    h+='<button type="button" onclick="abrirOrdenes(\''+esc(r.p.id)+'\')" style="display:block;width:100%;text-align:left;border:0;background:var(--bg);border-radius:7px;padding:6px 8px;margin-top:4px;font:inherit;font-size:12px;color:var(--text);cursor:pointer;overflow-wrap:anywhere"><strong>#'+esc(r.p.numero||'s/n')+'</strong>'+(r.p.cliente?' · '+esc(r.p.cliente):'')+(r.p.estatus==='ANULADO'?' <span style="color:var(--danger);font-weight:700">(anulado)</span>':r.p.estatus==='ENTREGADO'?' <span style="color:var(--success);font-weight:700">(entregado)</span>':'')+'</button>';
+  });
+  return h+'</div>';
+}
+// Busqueda exacta: "1051", "#1051", "01051" y "OC-1051" son el mismo numero; "105" no.
+function repOcNormBusca(s){
+  var t=String(s==null?'':s).trim().toLowerCase();
+  return t.replace(/^[^0-9]*0*/,'')||t;
+}
+// Busca en todas las ordenes, no solo en las pendientes: una ya recibida tambien debe aparecer.
+function repOcBusquedaHTML(){
+  var q=repOcNormBusca(REP_OC_Q),fichas={},lista=[];
+  DB.pedidos.forEach(function(p){
+    getOrdenes(p).forEach(function(o){
+      if(repOcNormBusca(o.numeroOC)!==q)return;
+      var prov=repOcProv(o);
+      if(!fichas[prov])fichas[prov]={};
+      var antes=lista.length;
+      repOcFicha({p:p,o:o},fichas[prov],lista);
+      if(lista.length>antes)lista[antes].prov=prov;
+    });
+  });
+  if(!lista.length)return '<div class="empty" style="padding:24px 10px"><div class="empty-icon">🔍</div>No encontré la orden #'+esc(REP_OC_Q.trim())+'.</div>';
+  var h='<div style="font-size:12px;font-weight:700;margin-bottom:8px">'+lista.length+(lista.length>1?' órdenes':' orden')+' con ese número</div>';
+  h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr));gap:8px">';
+  lista.forEach(function(f){h+=repOcFichaHTML(f,f.prov);});
+  return h+'</div>';
+}
+function repOcHTML(){
+  if(!DB.pedidos.some(function(p){return getOrdenes(p).length;}))return '';
+  var h='<div class="chart-wrap"><div class="chart-title">Órdenes por proveedor</div>';
+  h+='<div style="position:relative;margin-bottom:10px"><input type="text" inputmode="numeric" autocomplete="off" id="rep-oc-q" placeholder="🔍 Buscar número de orden" value="'+esc(REP_OC_Q)+'" oninput="repOcBuscar(this.value)" style="width:100%;box-sizing:border-box;padding:10px 38px 10px 12px;border:1px solid var(--border);border-radius:9px;font:inherit;font-size:14px">';
+  h+='<button type="button" id="rep-oc-x" aria-label="Borrar búsqueda" onclick="repOcLimpiar()" style="display:'+(REP_OC_Q.trim()?'block':'none')+';position:absolute;right:4px;top:50%;transform:translateY(-50%);border:0;background:none;font-size:15px;color:var(--muted);cursor:pointer;padding:6px 10px">✕</button></div>';
+  return h+'<div id="rep-oc-res">'+repOcResHTML()+'</div></div>';
+}
+function repOcResHTML(){
+  if(REP_OC_Q.trim())return repOcBusquedaHTML();
+  var todas=repOcPendientes();
+  // Se cuentan fichas: una orden compartida por dos pedidos es una sola orden.
+  var cuenta={OC:0,OF:0,INVENTARIO:0},vistas={},nTodas=0;
+  todas.forEach(function(r){
+    var k=repOcProv(r.o)+'|'+repOcClave(r);
+    if(vistas[k])return;
+    vistas[k]=true;cuenta[repOcTipoDe(r.o)]++;nTodas++;
+  });
+  var filtradas=todas.filter(function(r){return REP_OC_TIPO==='TODAS'||repOcTipoDe(r.o)===REP_OC_TIPO;});
+  var prov={};
+  filtradas.forEach(function(r){
+    var k=repOcProv(r.o);
+    if(!prov[k])prov[k]={prov:k,fichas:{},lista:[],ids:[]};
+    repOcFicha(r,prov[k].fichas,prov[k].lista);
+    if(prov[k].ids.indexOf(r.p.id)<0)prov[k].ids.push(r.p.id);
+  });
+  var arr=Object.keys(prov).map(function(k){
+    var x=prov[k];
+    x.lista.sort(function(a,b){return b.atraso-a.atraso;});
+    x.retra=x.lista.filter(function(f){return f.atraso;}).length;
+    return x;
+  });
+  arr.sort(function(a,b){return b.retra-a.retra||b.lista.length-a.lista.length;});
+  var filtro=function(v,t){return '<button type="button" class="btn '+(REP_OC_TIPO===v?'btn-dark':'btn-ghost')+' btn-sm" onclick="repOcFiltro(\''+v+'\')">'+t+'</button>';};
+  var h='<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Pendientes. Toca un proveedor para ver sus órdenes.</div>';
+  h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">'+filtro('OC','🧾 Órdenes de compra ('+cuenta.OC+')')+filtro('OF','Fabricación ('+cuenta.OF+')')+filtro('INVENTARIO','Inventario ('+cuenta.INVENTARIO+')')+filtro('TODAS','Todas ('+nTodas+')')
+    +'<button type="button" class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="repOcVista()">'+(REP_OC_VISTA==='ordenes'?'📦 Ver como pedidos':'🧾 Ver como órdenes')+'</button></div>';
+  if(!arr.length)h+='<div style="font-size:13px;color:var(--muted);padding:10px 0">No hay órdenes pendientes de este tipo.</div>';
+  arr.forEach(function(item,idx){
+    var n=item.lista.length,abierto=!!REP_OC_ABIERTOS[item.prov];
+    h+='<div data-prov-toggle="'+idx+'" style="padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:13px;font-weight:600"><span id="prov-arrow-'+idx+'" style="display:inline-block;font-size:10px;color:var(--muted);margin-right:6px">'+(abierto?'▼':'▶')+'</span>'+esc(item.prov)+'</span><span style="font-size:12px"><strong>'+n+(n>1?' órdenes':' orden')+'</strong>'+(item.retra?' · <span style="color:var(--danger);font-weight:700">'+item.retra+' retrasada'+(item.retra>1?'s':'')+'</span>':'')+' · <span style="color:var(--muted)">'+item.ids.length+' pedido'+(item.ids.length>1?'s':'')+'</span></span></div></div>';
+    h+='<div id="prov-peds-'+idx+'" data-prov="'+esc(item.prov)+'" style="display:'+(abierto?'block':'none')+';padding:10px 14px;background:var(--bg);margin:0 -14px;border-bottom:1px solid var(--border)">';
+    if(REP_OC_VISTA==='ordenes'){
+      h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr));gap:8px">';
+      item.lista.forEach(function(f){h+=repOcFichaHTML(f);});
+      h+='</div>';
+    }else{
+      item.ids.forEach(function(pid){var p=DB.pedidos.find(function(x){return x.id===pid;});if(p)h+=cardHTML(p,false);});
+    }
+    h+='</div>';
+  });
+  return h;
+}
+// Solo se repintan los resultados: el buscador no se toca y no pierde el foco al escribir.
+function repOcPintar(){
+  var el=document.getElementById('rep-oc-res');if(el)el.innerHTML=repOcResHTML();
+  var x=document.getElementById('rep-oc-x');if(x)x.style.display=REP_OC_Q.trim()?'block':'none';
+}
+function repOcBuscar(v){REP_OC_Q=v;repOcPintar();}
+function repOcLimpiar(){
+  REP_OC_Q='';
+  var i=document.getElementById('rep-oc-q');if(i){i.value='';i.focus();}
+  repOcPintar();
+}
+function repOcFiltro(v){REP_OC_TIPO=v;repOcPintar();}
+function repOcVista(){REP_OC_VISTA=REP_OC_VISTA==='ordenes'?'pedidos':'ordenes';repOcPintar();}
+
 function renderReportes(c){
   var total=DB.pedidos.length,ent=DB.pedidos.filter(function(p){return p.estatus==='ENTREGADO';}).length;
   var pend=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO';}).length;
@@ -3672,33 +3822,7 @@ function renderReportes(c){
   var html='<div style="padding:14px 14px 0"><button class="btn btn-dark" style="width:100%;padding:13px;font-size:15px" onclick="generarReporte()">\uD83D\uDCC4 Generar Reporte PDF de pedidos pendientes</button></div>';
   html+='<div class="report-grid"><div class="report-card"><div class="report-val" style="color:var(--accent)">'+total+'</div><div class="report-label">Total</div></div><div class="report-card"><div class="report-val" style="color:var(--success)">'+ent+'</div><div class="report-label">Entregados</div></div><div class="report-card"><div class="report-val" style="color:var(--warning)">'+pend+'</div><div class="report-label">Pendientes</div></div><div class="report-card"><div class="report-val" style="color:var(--danger)">'+venc+'</div><div class="report-label">Vencidos</div></div><div class="report-card"><div class="report-val" style="color:var(--info)">'+listos+'</div><div class="report-label">Listos</div></div><div class="report-card"><div class="report-val" style="color:var(--success)">'+entHoy+'</div><div class="report-label">Entregados hoy</div></div><div class="report-card"><div class="report-val">'+pct+'%</div><div class="report-label">Completados</div></div><div class="report-card"><div class="report-val">'+DB.bitacora.length+'</div><div class="report-label">Acciones</div></div></div>';
   // Órdenes pendientes por proveedor (vista transversal)
-  var provMap={};
-  DB.pedidos.forEach(function(p){
-    if(p.estatus==='ENTREGADO')return;
-    getOrdenes(p).forEach(function(o){
-      if(ordenRecibida(o))return;
-      var k=(o.proveedor||'').trim()||tipoLabel(o.tipo)||'Sin proveedor';
-      if(!provMap[k])provMap[k]={n:0,retra:0,ids:[]};
-      provMap[k].n++;
-      if(ordenRetrasada(o))provMap[k].retra++;
-      if(provMap[k].ids.indexOf(p.id)<0)provMap[k].ids.push(p.id);
-    });
-  });
-  var provArr=Object.keys(provMap).map(function(k){return {prov:k,n:provMap[k].n,retra:provMap[k].retra,ids:provMap[k].ids};});
-  provArr.sort(function(a,b){return b.retra-a.retra||b.n-a.n;});
-  if(provArr.length){
-    html+='<div class="chart-wrap"><div class="chart-title">\u00D3rdenes pendientes por proveedor <span style="font-weight:400;color:var(--muted);font-size:11px">(toca un proveedor para ver sus pedidos)</span></div>';
-    provArr.forEach(function(item,idx){
-      html+='<div data-prov-toggle="'+idx+'" style="padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="font-size:13px;font-weight:600"><span id="prov-arrow-'+idx+'" style="display:inline-block;font-size:10px;color:var(--muted);margin-right:6px">\u25B6</span>'+esc(item.prov)+'</span><span style="font-size:12px">'+item.n+' pendiente'+(item.n>1?'s':'')+(item.retra?' \u00B7 <span style="color:var(--danger);font-weight:700">'+item.retra+' retrasada'+(item.retra>1?'s':'')+'</span>':'')+' \u00B7 <span style="color:var(--muted)">'+item.ids.length+' pedido'+(item.ids.length>1?'s':'')+'</span></span></div></div>';
-      html+='<div id="prov-peds-'+idx+'" style="display:none;padding:10px 0 4px;background:var(--bg);margin:0 -14px;padding-left:14px;padding-right:14px;border-bottom:1px solid var(--border)">';
-      item.ids.forEach(function(pid){
-        var p=DB.pedidos.find(function(x){return x.id===pid;});
-        if(p)html+=cardHTML(p,false);
-      });
-      html+='</div>';
-    });
-    html+='</div>';
-  }
+  html+='<div id="rep-oc">'+repOcHTML()+'</div>';
   if(va.length){html+='<div class="chart-wrap"><div class="chart-title">Por vendedor</div>';va.slice(0,8).forEach(function(item){html+='<div class="bar-row"><div class="bar-label">'+item.v.split(' ')[0]+'</div><div class="bar-track"><div class="bar-fill" style="width:'+Math.round((item.t/maxT)*100)+'%;background:var(--accent)"></div></div><div class="bar-val">'+item.t+'</div></div>';});html+='</div>';}
   if(bit.length){html+='<div class="chart-wrap"><div class="chart-title">Actividad reciente</div>';bit.forEach(function(b){html+='<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:12px"><div style="font-weight:600">'+(b.accion||'').substring(0,60)+'</div><div style="color:var(--muted)">'+b.fecha+' '+b.hora+'</div></div>';});html+='</div>';}
   c.innerHTML=html;
