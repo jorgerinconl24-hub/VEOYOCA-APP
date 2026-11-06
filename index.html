@@ -534,7 +534,7 @@ var _campoHuella={};
 // base valida contra la cual comparar. Mandar 'inv' o 'cargaPlan' en ese
 // estado equivale a borrarlos. Se bloquean hasta tener datos reales.
 var _servidorLeido=false;
-var _CAMPOS_PROTEGIDOS=['inv','cargaPlan','pedidos','ofertasPrecios','instaladores','fin'];
+var _CAMPOS_PROTEGIDOS=['inv','cargaPlan','pedidos','ofertasPrecios','instaladores','fin','ordenesPendientes'];
 function _campoValor(k){
   if(k==='bitacora')return DB.bitacora.slice(-500);
   if(k==='usuarios')return DB.usuarios||[];
@@ -549,9 +549,10 @@ function _campoValor(k){
   if(k==='fin')return DB.fin||{cobrar:[],pagar:[],gastos:[]};
   if(k==='botProductos')return DB.botProductos||{};
   if(k==='fotosPrecios')return DB.fotosPrecios||{};
+  if(k==='ordenesPendientes')return DB.ordenesPendientes||[];
   return null;
 }
-var _CAMPOS=['usuarios','pedidos','bitacora','presupuestosDoc','pedidosDoc','ofertasPrecios','instaladores','cargaPlan','desgloses','inv','fin','botProductos','fotosPrecios'];
+var _CAMPOS=['usuarios','pedidos','bitacora','presupuestosDoc','pedidosDoc','ofertasPrecios','instaladores','cargaPlan','desgloses','inv','fin','botProductos','fotosPrecios','ordenesPendientes'];
 // Marca todos los campos como "iguales al servidor" (al cargar o al recibir cambios).
 function _sellarHuellas(){
   _CAMPOS.forEach(function(k){try{_campoHuella[k]=JSON.stringify(_campoValor(k));}catch(e){_campoHuella[k]='';}});
@@ -559,6 +560,15 @@ function _sellarHuellas(){
 // Marca un solo campo, tras confirmar que se guardo.
 function _sellarCampo(k,j){_campoHuella[k]=j;}
 
+// Ordenes en espera que el bot agrego mientras este aparato guardaba: se conservan.
+// Las que estaban en 'base' y ya no estan en 'local' se enlazaron o borraron aqui: no vuelven.
+function _mergeOrdenesPend(srv,local,base){
+  var enBase={},enLocal={};
+  (base||[]).forEach(function(x){enBase[x.id]=true;});
+  (local||[]).forEach(function(x){enLocal[x.id]=true;});
+  (srv||[]).forEach(function(x){if(!enBase[x.id]&&!enLocal[x.id])local.push(x);});
+  return local;
+}
 // Suma a 'local' lo que hay en el servidor y este aparato nunca vio (no esta en
 // 'base'). Lo que estaba en 'base' y ya no esta en 'local' fue borrado aqui: no vuelve.
 function _mergeCobrarBot(srv,local,base){
@@ -630,6 +640,15 @@ async function guardarDB(){
           try{huellasNuevas['fin']=JSON.stringify(carga.fin);}catch(e){}
         }
       }catch(e){console.warn('Fusión de finanzas no disponible, guardo normal:',e&&e.message);}
+    }
+    if(carga.ordenesPendientes&&getDoc){
+      try{
+        var _snapO=await getDoc(doc(_db,'veoyoca','data'));
+        var _srvO=(_snapO&&_snapO.exists&&_snapO.exists()&&_snapO.data().ordenesPendientes)||[];
+        var _baseO=[];try{_baseO=JSON.parse(_campoHuella['ordenesPendientes']||'[]');}catch(e){_baseO=[];}
+        _mergeOrdenesPend(_srvO,carga.ordenesPendientes,_baseO);
+        try{huellasNuevas['ordenesPendientes']=JSON.stringify(carga.ordenesPendientes);}catch(e){}
+      }catch(e){console.warn('Fusión de órdenes en espera no disponible, guardo normal:',e&&e.message);}
     }
     carga.updatedAt=_ua;
     await setDoc(doc(_db,'veoyoca','data'),carga,{merge:true});
@@ -7079,6 +7098,7 @@ async function cargarDatos(){
     DB.botProductos=d.botProductos||{};DB.fotosPrecios=d.fotosPrecios||{};
     DB.cotizacionesBot=d.cotizacionesBot||[];
     DB.abonosCola=d.abonosCola||[];
+    DB.ordenesPendientes=d.ordenesPendientes||[];
     _servidorLeido=true;
   }
   // Huella de partida: a partir de aqui solo se manda lo que cambie aqui.
@@ -7134,6 +7154,7 @@ function _aplicarSnap(d){
     else if(k==='fin')DB.fin=d.fin||{cobrar:[],pagar:[],gastos:[]};
     else if(k==='botProductos')DB.botProductos=d.botProductos||{};
     else if(k==='fotosPrecios')DB.fotosPrecios=d.fotosPrecios||{};
+    else if(k==='ordenesPendientes')DB.ordenesPendientes=d.ordenesPendientes||[];
     _campoHuella[k]=(k==='bitacora')?JSON.stringify(DB.bitacora.slice(-500)):JSON.stringify(_campoValor(k));
   });
   // Solo-lectura en la app (lo escribe el webhook): cotizaciones del bot para la estadística.
