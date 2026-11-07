@@ -2114,7 +2114,7 @@ function renderHome(c){
   var op=(DB.ordenesPendientes||[]);
   var opSinPed=op.filter(function(x){return !((x.numeroPedido||'').toString().trim());}).length;
   var bannerOP=op.length?'<div onclick="abrirOrdenesPendientes()" style="background:#7c3aed;color:#fff;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px"><span>\u23F3 '+op.length+' orden'+(op.length>1?'es':'')+' a la espera de pedido'+(opSinPed?' \u00B7 '+opSinPed+' sin # de pedido':'')+'</span><span style="font-size:11px;opacity:.85;white-space:nowrap">Toca para ver \u2192</span></div>':'';
-  c.innerHTML=statsBar+bannerOP+bannerSF+'<div class="prog-wrap"><div class="prog-bar"><div class="prog-fill" style="width:'+pct+'%"></div></div><div class="prog-label">'+ent+' de '+total+' entregados ('+pct+'%)</div></div><div class="toolbar"><input type="text" id="h-buscar" placeholder="Buscar cliente o numero..." oninput="filtrarHome()"><select id="h-est" onchange="filtrarHome()"><option value="">Todos</option><option value="vencido">Vencidos</option><option value="urgente">Urgentes</option><option value="sf">Sin fecha</option><option value="ok">Con tiempo</option><option value="LISTO">Listos</option><option value="ORDENES">Con \u00F3rdenes pendientes</option><option value="SINFECHA">\u00D3rdenes sin fecha estimada</option><option value="ENTREGADOS">\u2705 Historial de entregados</option></select><button class="btn btn-dark btn-sm" onclick="generarReporte()" style="align-self:center">\uD83D\uDCC4 Generar Reporte</button></div><div class="section-pad" id="home-lista"></div>';
+  c.innerHTML=statsBar+bannerOP+bannerSF+'<div class="prog-wrap"><div class="prog-bar"><div class="prog-fill" style="width:'+pct+'%"></div></div><div class="prog-label">'+ent+' de '+total+' entregados ('+pct+'%)</div></div><div class="toolbar"><input type="text" id="h-buscar" placeholder="Buscar cliente o numero..." oninput="filtrarHome()"><select id="h-est" onchange="filtrarHome()"><option value="">Todos</option><option value="vencido">Vencidos</option><option value="urgente">Urgentes</option><option value="sf">Sin fecha</option><option value="ok">Con tiempo</option><option value="LISTO">Listos</option><option value="ORDENES">Con \u00F3rdenes pendientes</option><option value="SINFECHA">\u00D3rdenes sin fecha estimada</option><option value="ENTREGADOS">\u2705 Historial de entregados</option></select>'+selCiudadHTML()+'<button class="btn btn-dark btn-sm" onclick="generarReporte()" style="align-self:center">\uD83D\uDCC4 Generar Reporte</button></div><div class="section-pad" id="home-lista"></div>';
   filtrarHome();
 }
 function aplicarFiltro(valor){
@@ -2283,23 +2283,56 @@ function abrirHistorial(id){
   document.getElementById('historial-body').innerHTML=h;
   abrirModal('modal-historial');
 }
+// ── FILTRO POR CIUDAD ───────────────────────────────────────
+// La ciudad viene escrita de muchas formas ("CARACAS DISTRITO CAPITAL", "Caracas").
+// Se agrupa por la ciudad conocida que aparece en el texto; si no hay ninguna,
+// por el texto limpio. Los barrios de Maracaibo no cuentan: "CENTRO" podria ser de otra.
+var HOME_CIUDAD='';
+var BARRIOS_NO_CIUDAD=['NORTE','SUR','CENTRO','AMPARO','COROMOTO','HATICOS','DELICIAS','SANTA LUCIA','SIERRA MAESTRA','ZONA INDUSTRIAL','BELLA VISTA'];
+var _ciudadesConocidas=null;
+function ciudadesConocidas(){
+  if(_ciudadesConocidas)return _ciudadesConocidas;
+  var l=[];
+  ZONAS.forEach(function(z){z.ciudades.forEach(function(c){if(BARRIOS_NO_CIUDAD.indexOf(c)<0&&l.indexOf(c)<0)l.push(c);});});
+  _ciudadesConocidas=l.sort(function(a,b){return b.length-a.length;});   // "CIUDAD OJEDA" antes que "OJEDA"
+  return _ciudadesConocidas;
+}
+function ciudadNorm(s){return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[^A-Z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();}
+function ciudadDe(p){
+  var t=ciudadNorm(p&&p.ciudad);
+  if(!t)return 'SIN CIUDAD';
+  var conocidas=ciudadesConocidas();
+  for(var i=0;i<conocidas.length;i++){if((' '+t+' ').indexOf(' '+conocidas[i]+' ')>=0)return conocidas[i];}
+  return t.replace(/ (ESTADO|EDO|DISTRITO CAPITAL|MUNICIPIO)( .*)?$/,'').trim()||t;
+}
+function ciudadTitulo(c){return c==='SIN CIUDAD'?'Sin ciudad':c.toLowerCase().replace(/(^| )([a-z])/g,function(m,a,b){return a+b.toUpperCase();});}
+function selCiudadHTML(){
+  var cuenta={};
+  // Se cuenta lo mismo que muestra la lista de Pedidos: todo lo que no esta entregado.
+  DB.pedidos.forEach(function(p){if(p.estatus==='ENTREGADO')return;var c=ciudadDe(p);cuenta[c]=(cuenta[c]||0)+1;});
+  if(HOME_CIUDAD&&!cuenta[HOME_CIUDAD])cuenta[HOME_CIUDAD]=0;
+  var lista=Object.keys(cuenta).sort(function(a,b){return a==='SIN CIUDAD'?1:b==='SIN CIUDAD'?-1:a.localeCompare(b);});
+  return '<select id="h-ciudad" onchange="HOME_CIUDAD=this.value;filtrarHome()"><option value="">Todas las ciudades</option>'
+    +lista.map(function(c){return '<option value="'+esc(c)+'"'+(c===HOME_CIUDAD?' selected':'')+'>'+esc(ciudadTitulo(c))+' ('+cuenta[c]+')</option>';}).join('')+'</select>';
+}
 function filtrarHome(){
   var b=(document.getElementById('h-buscar')||{value:''}).value.toLowerCase();
   var fe=(document.getElementById('h-est')||{value:''}).value;
   if(fe==='ENTREGADOS'){aplicarFiltroEntregados();return;}
-  var lista=DB.pedidos.filter(function(p){if(p.estatus==='ENTREGADO')return false;var mb=!b||((p.cliente||'').toLowerCase().indexOf(b)>=0||(p.numero||'').indexOf(b)>=0);var mfe=!fe||clasif(p)===fe||(fe==='LISTO'&&p.estatus==='LISTO')||(fe==='ORDENES'&&(function(){var r=resumenOrdenes(p);return r.total>0&&r.listas<r.total;})())||(fe==='SINFECHA'&&getOrdenes(p).some(function(o){return !ordenRecibida(o)&&!o.fechaEstimadaEntrega;}));return mb&&mfe;});
+  var lista=DB.pedidos.filter(function(p){if(p.estatus==='ENTREGADO')return false;if(HOME_CIUDAD&&ciudadDe(p)!==HOME_CIUDAD)return false;var mb=!b||((p.cliente||'').toLowerCase().indexOf(b)>=0||(p.numero||'').indexOf(b)>=0);var mfe=!fe||clasif(p)===fe||(fe==='LISTO'&&p.estatus==='LISTO')||(fe==='ORDENES'&&(function(){var r=resumenOrdenes(p);return r.total>0&&r.listas<r.total;})())||(fe==='SINFECHA'&&getOrdenes(p).some(function(o){return !ordenRecibida(o)&&!o.fechaEstimadaEntrega;}));return mb&&mfe;});
   lista.sort(function(a,b){var da=diasRestantes(a.fechaLimite),db=diasRestantes(b.fechaLimite);if(da===null&&db===null)return 0;if(da===null)return 1;if(db===null)return -1;return da-db;});
   var el=document.getElementById('home-lista');if(!el)return;
-  if(!lista.length){el.innerHTML='<div class="empty"><div class="empty-icon">OK</div>No hay pedidos pendientes</div>';return;}
+  var avisoCiudad=HOME_CIUDAD?'<div style="font-size:13px;font-weight:700;margin-bottom:8px">📍 '+esc(ciudadTitulo(HOME_CIUDAD))+': '+lista.length+(lista.length===1?' pedido pendiente':' pedidos pendientes')+' <button type="button" class="btn btn-ghost btn-sm" onclick="HOME_CIUDAD=\'\';var s=document.getElementById(\'h-ciudad\');if(s)s.value=\'\';filtrarHome()">Quitar filtro</button></div>':'';
+  if(!lista.length){el.innerHTML=avisoCiudad+'<div class="empty"><div class="empty-icon">OK</div>No hay pedidos pendientes</div>';return;}
   if(fe==='ORDENES'||fe==='SINFECHA'){
-    var h2='<div class="sec-label">'+(fe==='SINFECHA'?'Con \u00F3rdenes sin fecha estimada':'Con \u00F3rdenes pendientes')+' ('+lista.length+')</div>';
+    var h2=avisoCiudad+'<div class="sec-label">'+(fe==='SINFECHA'?'Con \u00F3rdenes sin fecha estimada':'Con \u00F3rdenes pendientes')+' ('+lista.length+')</div>';
     lista.forEach(function(p){h2+=cardHTML(p,false);});
     el.innerHTML=h2;return;
   }
   var g={vencido:[],urgente:[],sf:[],ok:[],LISTO:[]};
   lista.forEach(function(p){var cc=p.estatus==='LISTO'?'LISTO':clasif(p);if(g[cc])g[cc].push(p);else g.ok.push(p);});
   var etq={vencido:'Vencidos',urgente:'Urgentes',sf:'Sin fecha',ok:'Con tiempo',LISTO:'Listos para entregar'};
-  var h='';['vencido','urgente','LISTO','sf','ok'].forEach(function(t){if(!g[t]||!g[t].length)return;h+='<div class="sec-label">'+etq[t]+' ('+g[t].length+')</div>';g[t].forEach(function(p){h+=cardHTML(p,false);});});
+  var h=avisoCiudad;['vencido','urgente','LISTO','sf','ok'].forEach(function(t){if(!g[t]||!g[t].length)return;h+='<div class="sec-label">'+etq[t]+' ('+g[t].length+')</div>';g[t].forEach(function(p){h+=cardHTML(p,false);});});
   el.innerHTML=h;
 }
 // Marcar un pedido como ENTREGADO solo lo puede hacer un administrador
