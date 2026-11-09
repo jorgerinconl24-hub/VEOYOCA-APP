@@ -571,18 +571,21 @@ function _mergeOrdenesPend(srv,local,base){
 }
 // Suma a 'local' lo que hay en el servidor y este aparato nunca vio (no esta en
 // 'base'). Lo que estaba en 'base' y ya no esta en 'local' fue borrado aqui: no vuelve.
+// Vale para las cuentas por cobrar y por pagar: el bot abre ambas.
 function _mergeCobrarBot(srv,local,base){
-  if(!Array.isArray(local.cobrar))local.cobrar=[];
-  var baseCobrar=base.cobrar||[];
-  (srv.cobrar||[]).forEach(function(rs){
-    var rb=baseCobrar.find(function(x){return x.id===rs.id;});
-    var rl=local.cobrar.find(function(x){return x.id===rs.id;});
-    if(!rl){if(!rb)local.cobrar.push(rs);return;}
-    (rs.abonos||[]).forEach(function(a){
-      if(!a.id)return;   // solo los del bot traen id
-      if(rb&&(rb.abonos||[]).some(function(x){return x.id===a.id;}))return;
-      if(!Array.isArray(rl.abonos))rl.abonos=[];
-      if(!rl.abonos.some(function(x){return x.id===a.id;}))rl.abonos.push(a);
+  ['cobrar','pagar'].forEach(function(k){
+    if(!Array.isArray(local[k]))local[k]=[];
+    var baseL=base[k]||[];
+    (srv[k]||[]).forEach(function(rs){
+      var rb=baseL.find(function(x){return x.id===rs.id;});
+      var rl=local[k].find(function(x){return x.id===rs.id;});
+      if(!rl){if(!rb)local[k].push(rs);return;}
+      (rs.abonos||[]).forEach(function(a){
+        if(!a.id)return;   // solo los del bot traen id
+        if(rb&&(rb.abonos||[]).some(function(x){return x.id===a.id;}))return;
+        if(!Array.isArray(rl.abonos))rl.abonos=[];
+        if(!rl.abonos.some(function(x){return x.id===a.id;}))rl.abonos.push(a);
+      });
     });
   });
 }
@@ -2166,6 +2169,12 @@ async function asignarOrdenPendiente(id){
   orden.tipo=o.tipo;orden.proveedor=o.proveedor||(o.tipo==='INVENTARIO'?'Inventario':'');orden.numeroOC=o.numeroOC||'';
   orden.pdfUrl=o.pdfUrl||orden.pdfUrl||'';orden.fechaEstimadaEntrega=o.fechaEstimadaEntrega||orden.fechaEstimadaEntrega||'';
   if(o.items&&o.items.length)orden.items=o.items;
+  // Los montos y la cotizacion viajan con la orden; su cuenta por pagar pasa a este pedido.
+  ['montoBase','montoIva','montoTotal','montoMotivo','montoDe','cotizacion','montosLeidos'].forEach(function(k){if(o[k]!==undefined)orden[k]=o[k];});
+  var nOrdKey=String(o.numeroOC==null?'':o.numeroOC).replace(/\D/g,'').replace(/^0+/,'');
+  var claveOrd=nOrdKey?(o.tipo||'OC')+'|'+nOrdKey:'id|'+o.id;
+  var cp=finLista('pagar').find(function(r){return r.ordenKey===claveOrd;});
+  if(cp)cp.pedidoNum=String(p.numero||'');
   if(!ex)p.ordenes.push(orden);
   DB.ordenesPendientes=(DB.ordenesPendientes||[]).filter(function(x){return x.id!==id;});
   if(!Array.isArray(DB.bitacora))DB.bitacora=[];
@@ -5783,6 +5792,8 @@ function pedidoACobrar(p){return finNum(p.monto)||finNum(p.totalOperacion);}
 function finAbonado(r){return (r.abonos||[]).reduce(function(t,a){return t+finNum(a.m);},0);}
 function finSaldo(r){return Math.round((finNum(r.monto)-finAbonado(r))*100)/100;}
 function finPagado(r){return finSaldo(r)<=0.009;}
+// Cuenta de una orden que aun no tiene monto (espera la cotizacion): no esta pagada, esta incompleta.
+function finSinMonto(r){return !!(r&&r.sinMonto&&!(finNum(r.monto)>0));}
 // Lo transferido de mas sobre el total de la cuenta. No se rechaza: queda a la vista.
 function finExcedente(r){var s=finSaldo(r);return s<-0.009?Math.round(-s*100)/100:0;}
 function finTotalExcedente(t){return finLista(t).reduce(function(s,r){return s+finExcedente(r);},0);}
@@ -6026,7 +6037,7 @@ function finTabla(t){
   var q=FIN_BUSCA.toLowerCase().trim();
   if(q)arr=arr.filter(function(r){return ((esC?r.cliente:r.proveedor)+' '+(r.pedidoNum||'')+' '+(r.nota||'')).toLowerCase().indexOf(q)>=0;});
   var huerfanos=filtroEnt?ent.sinCuenta.filter(function(p){return !q||((p.cliente||'')+' '+(p.numero||'')).toLowerCase().indexOf(q)>=0;}):[];
-  if(FIN_SOLO_PEND&&!filtroEnt)arr=arr.filter(function(r){return !finPagado(r)||finExcedente(r);});
+  if(FIN_SOLO_PEND&&!filtroEnt)arr=arr.filter(function(r){return !finPagado(r)||finExcedente(r)||finSinMonto(r);});
   arr.sort(function(a,b){if(filtroEnt)return finSaldo(b)-finSaldo(a);var da=diasRestantes(a.vence),db=diasRestantes(b.vence);if(da===null&&db===null)return 0;if(da===null)return 1;if(db===null)return -1;return da-db;});
   var pend=finTotalPend(t);
   var h='<div class="section-pad" style="padding-top:0">';
@@ -6034,6 +6045,7 @@ function finTabla(t){
   h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"><button class="btn btn-dark btn-sm" onclick="finAbrir(\''+t+'\')">+ Agregar</button>'
     +'<button class="btn '+(FIN_SOLO_PEND?'btn-dark':'btn-ghost')+' btn-sm" onclick="FIN_SOLO_PEND=!FIN_SOLO_PEND;renderFinanzas(document.getElementById(\'content\'))">'+(FIN_SOLO_PEND?'Solo pendientes':'Todas')+'</button>'
     +(esC?'<button class="btn '+(FIN_ENTREG?'btn-dark':'btn-ghost')+' btn-sm" onclick="FIN_ENTREG=!FIN_ENTREG;renderFinanzas(document.getElementById(\'content\'))">🚚 Entregados por cobrar ('+ent.n+')</button>':'')+'</div>';
+  if(!esC)h+='<div style="display:flex;gap:6px;margin-bottom:8px"><button class="btn '+(FIN_PAGAR_PROV?'btn-ghost':'btn-dark')+' btn-sm" onclick="FIN_PAGAR_PROV=false;renderFinanzas(document.getElementById(\'content\'))">Lista</button><button class="btn '+(FIN_PAGAR_PROV?'btn-dark':'btn-ghost')+' btn-sm" onclick="FIN_PAGAR_PROV=true;renderFinanzas(document.getElementById(\'content\'))">🏭 Estado de cuenta por proveedor</button></div>';
   if(filtroEnt)h+='<div style="font-size:13px;font-weight:700;color:#b45309;margin-bottom:8px">🚚 Entregados por cobrar: $'+fmtMoney(ent.total)+'</div>';
   h+='<input type="text" id="fin-busca" placeholder="Buscar..." value="'+esc(FIN_BUSCA)+'" oninput="finBuscar(this)" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;margin-bottom:8px">';
   if(!arr.length&&!huerfanos.length){h+='<div class="empty"><div class="empty-icon">'+(esC?'\uD83D\uDCB5':'\uD83E\uDDFE')+'</div>'+(filtroEnt?'No hay pedidos entregados por cobrar.':FIN_SOLO_PEND?'Nada pendiente aqu\u00ED.':'Sin registros.')+'</div></div>';return h;}
@@ -6043,24 +6055,73 @@ function finTabla(t){
       +'<div style="font-size:20px;font-weight:800;color:#166534;margin-top:7px">$'+fmtMoney(m)+'</div>'
       +'<div style="margin-top:8px"><button class="btn btn-green btn-sm" onclick="pedidoAbonoAbrir(\''+esc(p.id)+'\')">\uD83D\uDCB0 Registrar abono</button></div></div>';
   });
-  arr.forEach(function(r){
-    var saldo=finSaldo(r),ab=finAbonado(r),pagado=finPagado(r),venc=finVencido(r),exc=finExcedente(r);
+  var tarjeta=function(r){
+    var h='';
+    var sinM=finSinMonto(r);
+    var saldo=finSaldo(r),ab=finAbonado(r),pagado=finPagado(r)&&!sinM,venc=finVencido(r),exc=finExcedente(r);
     var d=diasRestantes(r.vence);
-    var estado=exc?{t:'EXCEDENTE $'+fmtMoney(exc),c:'#b45309',b:'#fef3c7'}:pagado?{t:'PAGADO',c:'#166534',b:'#dcfce7'}:venc?{t:'VENCIDO '+Math.abs(d)+'d',c:'#b91c1c',b:'#fee2e2'}:(d!==null&&d<=7?{t:'vence en '+d+'d',c:'#d97706',b:'#fef3c7'}:{t:'pendiente',c:'#64748b',b:'#f1f5f9'});
+    var estado=sinM?{t:'SIN MONTO',c:'#b45309',b:'#fef3c7'}:exc?{t:'EXCEDENTE $'+fmtMoney(exc),c:'#b45309',b:'#fef3c7'}:pagado?{t:'PAGADO',c:'#166534',b:'#dcfce7'}:venc?{t:'VENCIDO '+Math.abs(d)+'d',c:'#b91c1c',b:'#fee2e2'}:(d!==null&&d<=7?{t:'vence en '+d+'d',c:'#d97706',b:'#fef3c7'}:{t:'pendiente',c:'#64748b',b:'#f1f5f9'});
     h+='<div class="card" style="margin-bottom:6px;padding:11px 13px'+(pagado&&!exc?';opacity:.65':'')+'">';
     h+='<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700">'+esc((esC?r.cliente:r.proveedor)||'?')+'</div><div style="font-size:11px;color:var(--muted)">'+(r.pedidoNum?'Pedido #'+esc(r.pedidoNum)+(r.origen==='pedido'?' \uD83D\uDD17':'')+' \u00B7 ':'')+'emitido '+esc(r.fecha||'')+(r.vence?' \u00B7 vence '+esc(r.vence):'')+'</div></div>';
     h+=(esC&&ent.entregados[finNumPedido(r.pedidoNum)]?'<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;background:#dbeafe;color:#1d4ed8;flex-shrink:0">🚚 ENTREGADO</span>':'');
     h+='<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;background:'+estado.b+';color:'+estado.c+';flex-shrink:0">'+estado.t+'</span></div>';
     h+='<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:7px"><div><div style="font-size:20px;font-weight:800;color:'+(pagado?'#166534':esC?'#166534':'#b91c1c')+'">$'+fmtMoney(saldo>0?saldo:0)+'</div><div style="font-size:11px;color:var(--muted)">de $'+fmtMoney(r.monto)+(finNum(r.base)&&finNum(r.base)!==finNum(r.monto)?' (base $'+fmtMoney(r.base)+')':'')+(ab?' \u00B7 abonado $'+fmtMoney(ab):'')+'</div>'+(exc?'<div style="font-size:12px;font-weight:700;color:#b45309;margin-top:2px">\u26A0\uFE0F '+(esC?'El cliente transfiri\u00F3 de m\u00E1s':'Se pag\u00F3 de m\u00E1s')+': $'+fmtMoney(exc)+'</div>':'')+'</div></div>';
+    if(!esC)h+=finOrdenInfoHTML(r);
     if(r.nota)h+='<div style="font-size:11px;color:var(--muted);margin-top:4px">\uD83D\uDCDD '+esc(r.nota)+'</div>';
     if((r.abonos||[]).length)h+='<div style="font-size:11px;color:#475569;margin-top:5px;border-top:1px dashed var(--border);padding-top:5px">'+r.abonos.map(function(a,i){return '\u2022 $'+fmtMoney(a.m)+' el '+esc(a.f)+(abonoTasaTxt(a)?' ('+abonoTasaTxt(a)+')':'')+(a.nota?' \u2014 '+esc(a.nota):'')+(a.por?' \u00b7 '+esc(a.por):'')+(/^https:\/\//.test(a.comp||'')?' \u00b7 <a href="'+esc(a.comp)+'" target="_blank" rel="noopener">\ud83e\uddfe comprobante</a>':'')+' <a href="#" style="color:#dc2626" onclick="finAbonoBorrar(\''+t+'\',\''+r.id+'\','+i+');return false">borrar</a>';}).join('<br>')+'</div>';
     h+='<div style="display:flex;gap:6px;margin-top:8px">'+(pagado?'':'<button class="btn btn-green btn-sm" onclick="finAbonoAbrir(\''+t+'\',\''+r.id+'\')">\uD83D\uDCB0 Registrar abono</button>')
       +'<button class="btn btn-ghost btn-sm" onclick="finAbrir(\''+t+'\',\''+r.id+'\')">\u270F\uFE0F</button>'
       +'<button class="btn btn-ghost btn-sm" style="color:#dc2626;margin-left:auto" onclick="finBorrar(\''+t+'\',\''+r.id+'\')">\uD83D\uDDD1</button></div>';
     h+='</div>';
-  });
+    return h;
+  };
+  if(!esC&&FIN_PAGAR_PROV)return h+finPagarPorProveedorHTML(arr,tarjeta)+'</div>';
+  arr.forEach(function(r){h+=tarjeta(r);});
   return h+'</div>';
 }
+// \u2500\u2500 POR PAGAR: estado de cuenta por proveedor \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+var FIN_PAGAR_PROV=false,FIN_PROV_ABIERTOS={};
+function finProvNorm(v){return String(v||'').normalize('NFD').replace(/[\u0300-\u036F]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim()||'SIN PROVEEDOR';}
+// La orden de la cuenta, su archivo y lo que dijo la cotizacion del proveedor.
+function finOrdenInfoHTML(r){
+  if(!r.ordenNum&&!r.ordenTipo&&!r.sinMonto&&!r.cotEstado)return '';
+  var h='<div style="font-size:12px;margin-top:5px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">';
+  if(r.ordenTipo||r.ordenNum)h+='<strong>'+esc(tipoLabel(r.ordenTipo))+' #'+esc(r.ordenNum||'?')+'</strong>';
+  if(/^https?:\/\//.test(r.pdfUrl||''))h+='<a href="'+esc(r.pdfUrl)+'" target="_blank" rel="noopener" style="color:var(--info)">\uD83D\uDCC4 Ver orden</a>';
+  if(/^https?:\/\//.test(r.cotPdf||''))h+='<a href="'+esc(r.cotPdf)+'" target="_blank" rel="noopener" style="color:var(--info)">\uD83D\uDCC4 Ver cotizaci\u00F3n</a>';
+  h+='</div>';
+  if(r.sinMonto&&!(finNum(r.monto)>0))h+='<div style="font-size:12px;color:#b45309;font-weight:700;margin-top:3px">\u26A0\uFE0F La orden no trae precios: espera la cotizaci\u00F3n o carga el monto con \u270F\uFE0F</div>';
+  if(r.cotEstado==='no cuadra')h+='<div style="font-size:12px;color:#b91c1c;font-weight:700;margin-top:3px">\uD83D\uDEA8 La cotizaci\u00F3n no cuadra'+(r.cotDetalle?': '+esc(r.cotDetalle):'')+'</div>';
+  else if(r.cotEstado==='cuadra')h+='<div style="font-size:12px;color:#166534;font-weight:600;margin-top:3px">\u2705 La cotizaci\u00F3n cuadra con la orden</div>';
+  else if(r.cotEstado==='tomada')h+='<div style="font-size:12px;color:#1d4ed8;font-weight:600;margin-top:3px">El monto se tom\u00F3 de la cotizaci\u00F3n</div>';
+  return h;
+}
+function finPagarPorProveedorHTML(arr,tarjeta){
+  var g={};
+  arr.forEach(function(r){
+    var k=finProvNorm(r.proveedor);
+    if(!g[k])g[k]={k:k,nombre:r.proveedor||'Sin proveedor',lista:[],saldo:0,sinMonto:0,noCuadra:0};
+    g[k].lista.push(r);
+    var s=finSaldo(r);if(s>0)g[k].saldo+=s;
+    if(r.sinMonto&&!(finNum(r.monto)>0))g[k].sinMonto++;
+    if(r.cotEstado==='no cuadra')g[k].noCuadra++;
+  });
+  var provs=Object.keys(g).map(function(k){return g[k];}).sort(function(a,b){return b.saldo-a.saldo||a.nombre.localeCompare(b.nombre);});
+  if(!provs.length)return '';
+  var h='';
+  provs.forEach(function(p){
+    var abierto=!!FIN_PROV_ABIERTOS[p.k];
+    h+='<div class="card" style="margin-bottom:8px;padding:0;overflow:hidden">';
+    h+='<button type="button" data-k="'+esc(p.k)+'" onclick="finProvToggle(this.getAttribute(\'data-k\'))" style="display:flex;justify-content:space-between;gap:10px;align-items:center;width:100%;text-align:left;border:0;background:#fff;padding:12px 13px;font:inherit;cursor:pointer;color:var(--text)"><span style="min-width:0;overflow-wrap:anywhere"><span style="font-size:10px;color:var(--muted);margin-right:5px">'+(abierto?'\u25BC':'\u25B6')+'</span><strong style="font-size:14px">'+esc(p.nombre)+'</strong><br><span style="font-size:11px;color:var(--muted)">'+p.lista.length+(p.lista.length===1?' cuenta':' cuentas')+'</span>'
+      +(p.sinMonto?' <span style="font-size:11px;color:#b45309;font-weight:700">\u00B7 '+p.sinMonto+' sin monto</span>':'')
+      +(p.noCuadra?' <span style="font-size:11px;color:#b91c1c;font-weight:700">\u00B7 '+p.noCuadra+' no cuadra'+(p.noCuadra>1?'n':'')+'</span>':'')
+      +'</span><span style="text-align:right;flex-shrink:0"><span style="font-size:10px;color:var(--muted);display:block">Saldo</span><strong style="font-size:16px;color:#b91c1c">$'+fmtMoney(p.saldo)+'</strong></span></button>';
+    if(abierto){h+='<div style="padding:8px 10px;background:var(--bg)">';p.lista.forEach(function(r){h+=tarjeta(r);});h+='</div>';}
+    h+='</div>';
+  });
+  return h;
+}
+function finProvToggle(k){FIN_PROV_ABIERTOS[k]=!FIN_PROV_ABIERTOS[k];renderFinanzas(document.getElementById('content'));}
 
 // ── GASTOS ──────────────────────────────────────────────────
 function finGastos(){
@@ -6268,7 +6329,7 @@ function finAbonoAbrir(t,id){
   h+='<div style="margin:-4px 0 10px"><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById(\'fa-monto\').value=\''+saldo.toFixed(2)+'\'">Usar todo el saldo ($'+fmtMoney(saldo)+')</button></div>';
   h+='<div class="sfield"><label>Nota</label><input type="text" id="fa-nota" placeholder="Ej: transferencia Banesco, ref 4471"></div>';
   if(esC)h+='<div class="sfield"><label>Monto en Bs, si pagó en Bs (opcional)</label><input type="number" step="0.01" id="fa-bs" placeholder="La tasa se calcula sola" oninput="finAbonoTasaVer()"><div id="fa-bs-tasa" style="font-size:11px;color:var(--muted);margin-top:3px"></div></div>';
-  if(esC)h+='<div class="sfield"><label>Comprobante (foto o PDF, opcional)</label><input type="file" id="fa-comp" accept="image/*,application/pdf"></div>';
+  h+='<div class="sfield"><label>Comprobante (foto o PDF, opcional)</label><input type="file" id="fa-comp" accept="image/*,application/pdf"></div>';
   h+='</div><div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal(\'modal-fin\')">Cancelar</button><button class="btn btn-green" id="fa-guardar" onclick="finAbonoGuardar()">Registrar</button></div>';
   finModal(h);
   var fm=document.getElementById('fa-monto');if(fm)fm.focus();
@@ -6317,7 +6378,7 @@ async function finAbonoGuardar(){
     if(file.size>20*1024*1024){toast('El archivo es muy grande (m\u00E1x 20MB)','err');return;}
     var btn=document.getElementById('fa-guardar');
     if(btn){btn.disabled=true;btn.textContent='Subiendo...';}
-    try{comp=await finSubirComprobante(file,'abono_'+(r.pedidoNum||id));}
+    try{comp=await finSubirComprobante(file,(t==='pagar'?'pago_':'abono_')+(r.ordenNum||r.pedidoNum||id));}
     catch(e){
       console.error('Comprobante del abono:',e);
       if(btn){btn.disabled=false;btn.textContent='Registrar';}
