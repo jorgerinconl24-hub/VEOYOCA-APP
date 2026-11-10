@@ -5974,13 +5974,56 @@ async function finColaDescartar(id){
 }
 
 // ── RESUMEN ─────────────────────────────────────────────────
+// ── RESPALDO: para una caida o un hackeo masivo ──
+// El servidor arma los reportes (cobrar, pagar, clientes, ordenes) y la copia completa.
+// Aqui se bajan en un ZIP; el mismo respaldo llega por correo cada manana.
+function respaldoHTML(){
+  return '<div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:12px;padding:12px 14px;margin-bottom:12px">'
+    +'<div style="font-size:14px;font-weight:800;color:#1a1a2e">🛡️ Respaldo</div>'
+    +'<div style="font-size:12px;color:#475569;margin:3px 0 9px">Cuentas por cobrar y por pagar, clientes del CRM, órdenes y la copia completa para restaurar. Llega a tu correo cada mañana.</div>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn btn-dark btn-sm" id="resp-bajar" onclick="respaldoDescargar()">📥 Descargar respaldo</button>'
+    +'<button type="button" class="btn btn-ghost btn-sm" id="resp-enviar" onclick="respaldoEnviar()">📧 Enviarlo a mi correo ahora</button></div></div>';
+}
+function cargarJSZip(){
+  return new Promise(function(ok,mal){
+    if(window.JSZip){ok();return;}
+    var s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+    s.onload=function(){ok();};s.onerror=function(){mal(new Error('No se pudo cargar JSZip'));};document.head.appendChild(s);
+  });
+}
+async function respaldoDescargar(){
+  var b=document.getElementById('resp-bajar');if(b){b.disabled=true;b.textContent='Armando respaldo...';}
+  function listo(){if(b){b.disabled=false;b.textContent='📥 Descargar respaldo';}}
+  var r=null;
+  try{r=await veoPost('/respaldo',{});}catch(e){console.error('Respaldo:',e);}
+  if(!r||!r.ok||!Array.isArray(r.archivos)){listo();toast((r&&r.error)||'No se pudo armar el respaldo. Revisa la conexión.','err');return;}
+  try{
+    await cargarJSZip();
+    var zip=new JSZip();
+    r.archivos.forEach(function(a){zip.file(a.nombre,a.texto);});
+    var blob=await zip.generateAsync({type:'blob',compression:'DEFLATE'});
+    var url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download='VeoYoca_respaldo_'+(r.fecha||'')+'.zip';document.body.appendChild(a);a.click();a.remove();
+    setTimeout(function(){URL.revokeObjectURL(url);},60000);
+    toast('Respaldo descargado ✓','ok');
+  }catch(e){console.error('Respaldo ZIP:',e);toast('No se pudo crear el ZIP: '+e.message,'err');}
+  listo();
+}
+async function respaldoEnviar(){
+  var b=document.getElementById('resp-enviar');if(b){b.disabled=true;b.textContent='Enviando...';}
+  var r=null;
+  try{r=await veoPost('/respaldo/enviar',{});}catch(e){console.error('Respaldo correo:',e);}
+  if(b){b.disabled=false;b.textContent='📧 Enviarlo a mi correo ahora';}
+  if(r&&r.ok)toast('Respaldo enviado a '+(r.destinos||[]).join(', ')+' ✓','ok');
+  else toast((r&&r.error)||'No se pudo enviar. Revisa la conexión.','err');
+}
 function finResumen(){
   var porCobrar=finTotalPend('cobrar'), porPagar=finTotalPend('pagar');
   var vencC=finLista('cobrar').filter(finVencido), vencP=finLista('pagar').filter(finVencido);
   var neto=porCobrar-porPagar;
   var invVal=(typeof invValorTotal==='function')?invValorTotal():0;
   function tarjeta(v,l,col,sub){return '<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px"><div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em">'+l+'</div><div style="font-size:24px;font-weight:800;color:'+col+';margin-top:3px">$'+fmtMoney(v)+'</div>'+(sub?'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+sub+'</div>':'')+'</div>';}
-  var h='<div class="section-pad" style="padding-top:0">';
+  var h='<div class="section-pad" style="padding-top:0">'+respaldoHTML();
   h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px">';
   h+=tarjeta(porCobrar,'Por cobrar','#166534',vencC.length?('\u26A0\uFE0F '+vencC.length+' vencida(s)'):'al d\u00EDa');
   h+=tarjeta(porPagar,'Por pagar','#b91c1c',vencP.length?('\u26A0\uFE0F '+vencP.length+' vencida(s)'):'al d\u00EDa');
