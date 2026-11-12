@@ -210,7 +210,7 @@ table.crm{border-collapse:collapse;font-size:12px;min-width:1780px}
 <div class="sfield"><label>Vendedor</label><select id="e-vendedor"><option value="">Sin cambio</option></select></div></div>
 <div class="sfield"><label>Direcci&#xF3;n de entrega</label><input type="text" id="e-direccion" placeholder="Direcci&#xF3;n del cliente para la entrega"></div>
 <div class="sfield-row"><div class="sfield"><label>Fecha l&#xED;mite</label><input type="date" id="e-fecha"></div>
-<div class="sfield"><label>Estado</label><select id="e-estado"><option value="">Sin cambio</option><option value="PENDIENTE">Pendiente</option><option value="EN PROCESO">En proceso</option><option value="LISTO">Listo para entregar</option></select></div></div>
+<div class="sfield"><label>Estado</label><select id="e-estado"><option value="">Sin cambio</option><option value="PENDIENTE">Pendiente</option><option value="EN PROCESO">En proceso</option><option value="RECIBIDO_COMPLETO">Recibido completo (sin preparar)</option><option value="LISTO_ALMACEN">Listo en almacén (todo embalado)</option><option value="LISTO_OFICINA">Listo en oficina</option><option value="LISTO">Listo para entregar</option></select></div></div>
 <div class="sfield"><label>Descripci&#xF3;n</label><textarea id="e-desc" placeholder="Productos, medidas, colores..."></textarea></div>
 <div class="sfield-row"><div class="sfield"><label>Base imponible (USD)</label><input type="number" step="0.01" id="e-monto" placeholder="0.00" oninput="calcTotalIva('e')"></div><div class="sfield"><label>Total con IVA (USD)</label><input type="number" step="0.01" id="e-total" placeholder="0.00"></div></div><div class="sfield"><label>Nota / Observaci&#xF3;n</label><input type="text" id="e-nota" placeholder="Observaci&#xF3;n adicional"></div>
 <div class="sfield" style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0"><input type="checkbox" id="e-instalacion" style="width:18px;height:18px"> &#x1F527; Este pedido lleva instalaci&#xF3;n</label><div style="font-size:11px;color:var(--muted);margin-top:4px">Al activarlo, aparece el bot&#xF3;n <strong>Instalaci&#xF3;n</strong> en la tarjeta para planificarla.</div></div>
@@ -433,8 +433,15 @@ function confirmarEnServidor(){
    .catch(function(){mostrarBadge('pend');});
 }
 function diasRestantes(f){if(!f)return null;var p=f.split('/');if(p.length!==3)return null;var d=parseInt(p[0]),m=parseInt(p[1])-1,y=parseInt(p[2]);if(y<100)y+=2000;var dt=new Date(y,m,d);dt.setHours(0,0,0,0);var hoy=new Date();hoy.setHours(0,0,0,0);return isNaN(dt.getTime())?null:Math.round((dt-hoy)/86400000);}
+// Estado del PEDIDO completo (distinto al de cada orden): que cada orden haya
+// llegado no significa que el pedido esté consolidado, embalado y en picking.
+var ESTADOS_PEDIDO=[['PENDIENTE','Pendiente'],['EN PROCESO','En proceso'],['RECIBIDO_COMPLETO','Recibido completo (sin preparar)'],['LISTO_ALMACEN','Listo en almacén (todo embalado)'],['LISTO_OFICINA','Listo en oficina'],['LISTO','Listo para entregar']];
+function estadoPedidoLabel(v){var e=ESTADOS_PEDIDO.find(function(x){return x[0]===v;});return e?e[1]:(v==='ENTREGADO'?'Entregado':v==='ANULADO'?'Anulado':(v||'Pendiente'));}
+// Se pueden despachar: van en la sección "Listos para entregar".
+function pedidoListo(p){return p.estatus==='LISTO'||p.estatus==='LISTO_ALMACEN'||p.estatus==='LISTO_OFICINA';}
+function opcionesEstadoPedido(actual){return ESTADOS_PEDIDO.map(function(e){return '<option value="'+e[0]+'"'+(e[0]===actual?' selected':'')+'>'+e[1]+'</option>';}).join('');}
 function clasif(p){if(p.estatus==='ENTREGADO')return 'done';var d=diasRestantes(p.fechaLimite);if(d===null)return 'sf';if(d<0)return 'vencido';if(d<=7)return 'urgente';return 'ok';}
-function badgeHTML(p){var d=diasRestantes(p.fechaLimite);if(p.estatus==='ANULADO')return '<span class="badge b-danger">ANULADO</span>';if(p.estatus==='LISTO')return '<span class="badge b-success">Listo</span>';if(p.estatus==='EN PROCESO')return '<span class="badge b-info">En proceso</span>';if(d===null)return '<span class="badge b-muted">Sin fecha</span>';if(d<0)return '<span class="badge b-danger">Vencido '+Math.abs(d)+'d</span>';if(d<=7)return '<span class="badge b-warning">En '+d+'d</span>';return '<span class="badge b-muted">En '+d+'d</span>';}
+function badgeHTML(p){var d=diasRestantes(p.fechaLimite);if(p.estatus==='ANULADO')return '<span class="badge b-danger">ANULADO</span>';if(p.estatus==='LISTO')return '<span class="badge b-success">Listo</span>';if(p.estatus==='LISTO_ALMACEN')return '<span class="badge b-success">Listo en almacén</span>';if(p.estatus==='LISTO_OFICINA')return '<span class="badge b-success">Listo en oficina</span>';if(p.estatus==='RECIBIDO_COMPLETO')return '<span class="badge b-info">Recibido completo</span>';if(p.estatus==='EN PROCESO')return '<span class="badge b-info">En proceso</span>';if(d===null)return '<span class="badge b-muted">Sin fecha</span>';if(d<0)return '<span class="badge b-danger">Vencido '+Math.abs(d)+'d</span>';if(d<=7)return '<span class="badge b-warning">En '+d+'d</span>';return '<span class="badge b-muted">En '+d+'d</span>';}
 function fechaInput(f){if(!f)return '';var p=f.split('/');if(p.length!==3)return '';var y=p[2];if(y.length===2)y='20'+y;return y+'-'+('0'+p[1]).slice(-2)+'-'+('0'+p[0]).slice(-2);}
 function inputFecha(f){if(!f)return '';var p=f.split('-');if(p.length!==3)return '';return p[2]+'/'+p[1]+'/'+p[0];}
 function registrarBitacora(id,accion){DB.bitacora.push({pedidoId:id,accion:accion,usuario:SESSION.nombre,fecha:fecha(),hora:hora()});if(DB.bitacora.length>500)DB.bitacora=DB.bitacora.slice(-500);}
@@ -447,7 +454,13 @@ function registrarBitacora(id,accion){DB.bitacora.push({pedidoId:id,accion:accio
 //   estado:'PENDIENTE'|'EN PROCESO'|'RECIBIDA', pdfUrl }
 // ═══════════════════════════════════════════════════════════
 function tipoLabel(t){return t==='OF'?'Fabricaci\u00F3n':t==='INVENTARIO'?'Inventario':'OC';}
-function ordenRecibida(o){return o.estado==='RECIBIDA';}
+// Ya llegó, en tres pasos distintos:
+//   RECIBIDA      llegó al almacén, todavía sin preparar
+//   LISTO_ALMACEN preparada: envuelta, en paleta, en la zona de picking
+//   LISTO_OFICINA lista en la oficina
+var ESTADOS_LLEGADA={RECIBIDA:'Recibida en almacén',LISTO_ALMACEN:'Listo en almacén',LISTO_OFICINA:'Listo en oficina'};
+function ordenRecibida(o){return !!(o&&ESTADOS_LLEGADA[o.estado]);}
+function ordenLlegadaLabel(o){return ESTADOS_LLEGADA[o&&o.estado]||'';}
 function ordenListaPlanta(o){return o.estado==='LISTA_PROVEEDOR';}
 function ordenRetrasada(o){if(ordenRecibida(o)||ordenListaPlanta(o))return false;var d=diasRestantes(o.fechaEstimadaEntrega);return d!==null&&d<0;}
 // Lectura: devuelve las ordenes del pedido; si solo tiene los campos viejos
@@ -2345,7 +2358,7 @@ function filtrarHome(){
   var b=(document.getElementById('h-buscar')||{value:''}).value.toLowerCase();
   var fe=(document.getElementById('h-est')||{value:''}).value;
   if(fe==='ENTREGADOS'){aplicarFiltroEntregados();return;}
-  var lista=DB.pedidos.filter(function(p){if(p.estatus==='ENTREGADO')return false;if(HOME_CIUDAD&&ciudadDe(p)!==HOME_CIUDAD)return false;var mb=!b||((p.cliente||'').toLowerCase().indexOf(b)>=0||(p.numero||'').indexOf(b)>=0);var mfe=!fe||clasif(p)===fe||(fe==='LISTO'&&p.estatus==='LISTO')||(fe==='ORDENES'&&(function(){var r=resumenOrdenes(p);return r.total>0&&r.listas<r.total;})())||(fe==='SINFECHA'&&getOrdenes(p).some(function(o){return !ordenRecibida(o)&&!o.fechaEstimadaEntrega;}));return mb&&mfe;});
+  var lista=DB.pedidos.filter(function(p){if(p.estatus==='ENTREGADO')return false;if(HOME_CIUDAD&&ciudadDe(p)!==HOME_CIUDAD)return false;var mb=!b||((p.cliente||'').toLowerCase().indexOf(b)>=0||(p.numero||'').indexOf(b)>=0);var mfe=!fe||clasif(p)===fe||(fe==='LISTO'&&pedidoListo(p))||(fe==='ORDENES'&&(function(){var r=resumenOrdenes(p);return r.total>0&&r.listas<r.total;})())||(fe==='SINFECHA'&&getOrdenes(p).some(function(o){return !ordenRecibida(o)&&!o.fechaEstimadaEntrega;}));return mb&&mfe;});
   lista.sort(function(a,b){var da=diasRestantes(a.fechaLimite),db=diasRestantes(b.fechaLimite);if(da===null&&db===null)return 0;if(da===null)return 1;if(db===null)return -1;return da-db;});
   var el=document.getElementById('home-lista');if(!el)return;
   var avisoCiudad=HOME_CIUDAD?'<div style="font-size:13px;font-weight:700;margin-bottom:8px">📍 '+esc(ciudadTitulo(HOME_CIUDAD))+': '+lista.length+(lista.length===1?' pedido pendiente':' pedidos pendientes')+' <button type="button" class="btn btn-ghost btn-sm" onclick="HOME_CIUDAD=\'\';var s=document.getElementById(\'h-ciudad\');if(s)s.value=\'\';filtrarHome()">Quitar filtro</button></div>':'';
@@ -2362,7 +2375,7 @@ function filtrarHome(){
     el.innerHTML=h2;return;
   }
   var g={vencido:[],urgente:[],sf:[],ok:[],LISTO:[]};
-  lista.forEach(function(p){var cc=p.estatus==='LISTO'?'LISTO':clasif(p);if(g[cc])g[cc].push(p);else g.ok.push(p);});
+  lista.forEach(function(p){var cc=pedidoListo(p)?'LISTO':clasif(p);if(g[cc])g[cc].push(p);else g.ok.push(p);});
   var etq={vencido:'Vencidos',urgente:'Urgentes',sf:'Sin fecha',ok:'Con tiempo',LISTO:'Listos para entregar'};
   var h=avisoCiudad;['vencido','urgente','LISTO','sf','ok'].forEach(function(t){if(!g[t]||!g[t].length)return;h+='<div class="sec-label">'+etq[t]+' ('+g[t].length+')</div>';g[t].forEach(function(p){h+=cardHTML(p,false);});});
   el.innerHTML=h;
@@ -2381,10 +2394,18 @@ function cardHTML(p,conEntregar){
   var os=getOrdenes(p);var r=resumenOrdenes(p);
   var anulEstilo=(p.estatus==='ANULADO')?' style="opacity:.6;border:1px dashed #dc2626"':'';
   var h='<div class="card" id="card-'+pid+'"'+anulEstilo+'><div class="card-head"><div class="card-num">#'+num+'</div><div class="card-body"><div class="card-cliente">'+(p.cliente||'Sin nombre')+'</div><div class="card-meta">'+(p.ciudad||'sin ciudad')+(p.vendedor?' - '+p.vendedor:'')+'</div>';
+  // Estado del pedido completo, a la vista para cambiarlo rápido.
+  if(p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO')h+='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px"><span style="font-size:11px;font-weight:700;color:var(--muted)">Pedido:</span>'+selEstadoPedidoHTML(p)+'</div>';
+  h+=ubicacionChipHTML(p);
   if(os.length){
-    h+='<div style="margin-top:2px">';
-    os.forEach(function(o){h+=chipOrden(o);});
-    h+='</div>';
+    // Pedido activo: cada orden con su estado al lado, para cambiarlo sin abrir nada.
+    if(p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO'){
+      os.forEach(function(o){h+='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px">'+chipOrden(o)+selEstadoRapidoHTML(p,o)+'</div>';});
+    }else{
+      h+='<div style="margin-top:2px">';
+      os.forEach(function(o){h+=chipOrden(o);});
+      h+='</div>';
+    }
     var cb=cuelloBotella(p);
     h+='<div style="font-size:11px;color:var(--muted);margin-top:3px">\u00D3rdenes: '+r.listas+'/'+r.total+' recibidas'+(cb?' \u00B7 entrega m\u00E1s lejana: '+cb.fechaEstimadaEntrega:'')+'</div>';
     var rg=riesgoLimite(p);
@@ -2537,7 +2558,7 @@ async function marcarEntregado(id){
 
 function renderNuevo(c){
   var vends=DB.usuarios.map(function(u){return '<option value="'+u.nombre+'">'+u.nombre+'</option>';}).join('');
-  c.innerHTML='<div class="section-pad"><div class="card" style="padding:16px"><div class="sfield-row"><div class="sfield"><label># Pedido</label><input type="text" id="n-numero" placeholder="Ej: 432"></div><div class="sfield"><label>Cliente *</label><input type="text" id="n-cliente" placeholder="Nombre del cliente"></div></div><div class="sfield-row"><div class="sfield"><label>Ciudad</label><input type="text" id="n-ciudad" placeholder="Ciudad"></div><div class="sfield"><label>Vendedor</label><select id="n-vendedor"><option value="">Seleccionar</option>'+vends+'</select></div></div><div class="sec-label" style="margin-top:4px">Primera orden (opcional \u2014 puedes agregar m\u00E1s luego)</div><div class="sfield-row"><div class="sfield"><label>Tipo de orden</label><select id="n-tipo-orden"><option value="OC">Orden de compra</option><option value="OF">Orden de fabricaci\u00F3n</option><option value="INVENTARIO">Inventario</option></select></div><div class="sfield"><label>Proveedor / Subcontratado</label><input type="text" id="n-proveedor" placeholder="Ej: ORION, ZAVATTY..."></div></div><div class="sfield-row"><div class="sfield"><label># Orden</label><input type="text" id="n-oc" placeholder="Ej: OC-2026-045"></div><div class="sfield"><label>Fecha entrega proveedor</label><input type="date" id="n-fecha-prov"></div></div><div class="sfield-row"><div class="sfield"><label>Base imponible (USD)</label><input type="number" step="0.01" id="n-monto" placeholder="0.00" oninput="calcTotalIva(\'n\')"></div><div class="sfield"><label>Total con IVA (USD)</label><input type="number" step="0.01" id="n-total" placeholder="0.00"></div></div><div style="font-size:11px;color:var(--muted);margin:-6px 0 12px">La cuenta por cobrar se lleva sobre la base imponible. El total se calcula solo al 16%, pero puedes cambiarlo si el pedido es exento.</div><div class="sfield-row"><div class="sfield"><label>Fecha limite</label><input type="date" id="n-fecha"></div><div class="sfield-row"><div class="sfield"><label>Estado</label><select id="n-estado"><option value="PENDIENTE">Pendiente</option><option value="EN PROCESO">En proceso</option><option value="LISTO">Listo</option></select></div></div><div class="sfield"><label>Descripcion *</label><textarea id="n-desc" placeholder="Productos, medidas, colores, cantidades..."></textarea></div><button class="btn btn-dark" style="width:100%;padding:13px;font-size:15px;margin-top:4px" onclick="crearPedido()">Crear pedido</button></div></div>';
+  c.innerHTML='<div class="section-pad"><div class="card" style="padding:16px"><div class="sfield-row"><div class="sfield"><label># Pedido</label><input type="text" id="n-numero" placeholder="Ej: 432"></div><div class="sfield"><label>Cliente *</label><input type="text" id="n-cliente" placeholder="Nombre del cliente"></div></div><div class="sfield-row"><div class="sfield"><label>Ciudad</label><input type="text" id="n-ciudad" placeholder="Ciudad"></div><div class="sfield"><label>Vendedor</label><select id="n-vendedor"><option value="">Seleccionar</option>'+vends+'</select></div></div><div class="sec-label" style="margin-top:4px">Primera orden (opcional \u2014 puedes agregar m\u00E1s luego)</div><div class="sfield-row"><div class="sfield"><label>Tipo de orden</label><select id="n-tipo-orden"><option value="OC">Orden de compra</option><option value="OF">Orden de fabricaci\u00F3n</option><option value="INVENTARIO">Inventario</option></select></div><div class="sfield"><label>Proveedor / Subcontratado</label><input type="text" id="n-proveedor" placeholder="Ej: ORION, ZAVATTY..."></div></div><div class="sfield-row"><div class="sfield"><label># Orden</label><input type="text" id="n-oc" placeholder="Ej: OC-2026-045"></div><div class="sfield"><label>Fecha entrega proveedor</label><input type="date" id="n-fecha-prov"></div></div><div class="sfield-row"><div class="sfield"><label>Base imponible (USD)</label><input type="number" step="0.01" id="n-monto" placeholder="0.00" oninput="calcTotalIva(\'n\')"></div><div class="sfield"><label>Total con IVA (USD)</label><input type="number" step="0.01" id="n-total" placeholder="0.00"></div></div><div style="font-size:11px;color:var(--muted);margin:-6px 0 12px">La cuenta por cobrar se lleva sobre la base imponible. El total se calcula solo al 16%, pero puedes cambiarlo si el pedido es exento.</div><div class="sfield-row"><div class="sfield"><label>Fecha limite</label><input type="date" id="n-fecha"></div><div class="sfield-row"><div class="sfield"><label>Estado</label><select id="n-estado">'+opcionesEstadoPedido('PENDIENTE')+'</select></div></div><div class="sfield"><label>Descripcion *</label><textarea id="n-desc" placeholder="Productos, medidas, colores, cantidades..."></textarea></div><button class="btn btn-dark" style="width:100%;padding:13px;font-size:15px;margin-top:4px" onclick="crearPedido()">Crear pedido</button></div></div>';
 }
 async function crearPedido(){
   var cliente=document.getElementById('n-cliente').value.trim();
@@ -2588,6 +2609,8 @@ async function guardarEdicion(){
   var cambios=[];
   var vals={cliente:document.getElementById('e-cliente').value.trim(),ciudad:document.getElementById('e-ciudad').value.trim(),direccion:document.getElementById('e-direccion').value.trim(),vendedor:document.getElementById('e-vendedor').value,fechaLimite:inputFecha(document.getElementById('e-fecha').value),estatus:document.getElementById('e-estado').value,descripcion:document.getElementById('e-desc').value.trim()};
   var nota=document.getElementById('e-nota').value.trim();
+  if(vals.estatus&&vals.estatus!==p.estatus&&!confirmarPedidoListo(p,vals.estatus))return;
+  if(vals.estatus&&vals.estatus!==p.estatus)p.fechaEstatus=fecha();
   for(var k in vals){if(vals[k]&&vals[k]!==p[k]){cambios.push(k);p[k]=vals[k];}}
   if(nota){cambios.push('nota');p.nota=nota;}
   var _m=parseFloat((document.getElementById('e-monto')||{value:''}).value)||0;
@@ -2602,6 +2625,7 @@ async function guardarEdicion(){
   p.ultimaEdicion=fecha()+' '+hora();p.editadoPor=SESSION.nombre;
   registrarBitacora(id,'EDICION ('+cambios.join(', ')+') por '+SESSION.nombre);
   await guardarDB();cerrarModal('modal-edit');goTab(TAB,document.getElementById('nb-'+TAB));toast('Pedido actualizado','ok');
+  if(cambios.indexOf('estatus')>=0&&pedidoListo(p))abrirUbicacion(p.id);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2630,11 +2654,11 @@ function renderOrdenesBody(){
   }
   os.forEach(function(o,i){
     var recib=ordenRecibida(o),retra=ordenRetrasada(o),lista=ordenListaPlanta(o);
-    var badge=o.estado==='ENTREGADA'?'<span class="badge b-success">Entregada</span>':recib?'<span class="badge b-success">Recibida en almacén '+(o.fechaRecepcion||'')+'</span>':o.estado==='CARGADA'?'<span class="badge b-info">Orden cargada</span>':lista?'<span class="badge b-info">Lista en planta</span>':retra?'<span class="badge b-danger">Retrasada '+Math.abs(diasRestantes(o.fechaEstimadaEntrega))+'d</span>':o.estado==='EN PROCESO'?'<span class="badge b-info">En proceso</span>':'<span class="badge b-warning">Pendiente</span>';
+    var badge=o.estado==='ENTREGADA'?'<span class="badge b-success">Entregada</span>':recib?'<span class="badge b-success">'+ordenLlegadaLabel(o)+' '+((o.estado==='RECIBIDA'?o.fechaRecepcion:o.fechaListo)||'')+'</span>':o.estado==='CARGADA'?'<span class="badge b-info">Orden cargada</span>':lista?'<span class="badge b-info">Lista en planta</span>':retra?'<span class="badge b-danger">Retrasada '+Math.abs(diasRestantes(o.fechaEstimadaEntrega))+'d</span>':o.estado==='EN PROCESO'?'<span class="badge b-info">En proceso</span>':'<span class="badge b-warning">Pendiente</span>';
     h+='<div class="orden-item'+(recib?' recibida':retra?' retrasada':'')+'">';
     h+='<div class="orden-head"><span class="orden-tipo">'+tipoLabel(o.tipo)+(o.numeroOC?' #'+esc(o.numeroOC):'')+'</span>'+badge+'</div>';
     h+='<div class="sfield-row" style="margin-bottom:8px"><div class="sfield" style="margin-bottom:0"><label>'+(o.tipo==='OF'?'Subcontratado':'Proveedor')+'</label><input type="text" value="'+esc(o.proveedor)+'" onchange="ordCampo('+i+',\'proveedor\',this.value)"></div><div class="sfield" style="margin-bottom:0"><label># Orden</label><input type="text" value="'+esc(o.numeroOC)+'" onchange="ordCampo('+i+',\'numeroOC\',this.value)"></div></div>';
-    h+='<div class="sfield-row"><div class="sfield" style="margin-bottom:0"><label>Fecha estimada entrega'+((!o.fechaEstimadaEntrega&&!recib)?' <span style="color:var(--danger)">*obligatoria</span>':'')+'</label><input type="date" value="'+fechaInput(o.fechaEstimadaEntrega)+'"'+((!o.fechaEstimadaEntrega&&!recib)?' style="border-color:var(--danger)"':'')+' onchange="ordCampo('+i+',\'fechaEstimadaEntrega\',inputFecha(this.value));renderOrdenesBody()"></div><div class="sfield" style="margin-bottom:0"><label>Estado</label><select onchange="ordCampo('+i+',\'estado\',this.value)"><option value="PENDIENTE"'+(o.estado==='PENDIENTE'||!o.estado?' selected':'')+'>Pendiente</option><option value="EN PROCESO"'+(o.estado==='EN PROCESO'?' selected':'')+'>En proceso</option><option value="LISTA_PROVEEDOR"'+(lista?' selected':'')+'>Lista en planta proveedor</option><option value="CARGADA"'+(o.estado==='CARGADA'?' selected':'')+'>Orden cargada</option><option value="RECIBIDA"'+(recib?' selected':'')+'>Recibida en almacén</option><option value="ENTREGADA"'+(o.estado==='ENTREGADA'?' selected':'')+'>Entregada</option></select></div></div>';
+    h+='<div class="sfield-row"><div class="sfield" style="margin-bottom:0"><label>Fecha estimada entrega'+((!o.fechaEstimadaEntrega&&!recib)?' <span style="color:var(--danger)">*obligatoria</span>':'')+'</label><input type="date" value="'+fechaInput(o.fechaEstimadaEntrega)+'"'+((!o.fechaEstimadaEntrega&&!recib)?' style="border-color:var(--danger)"':'')+' onchange="ordCampo('+i+',\'fechaEstimadaEntrega\',inputFecha(this.value));renderOrdenesBody()"></div><div class="sfield" style="margin-bottom:0"><label>Estado</label><select onchange="ordCampo('+i+',\'estado\',this.value)"><option value="PENDIENTE"'+(o.estado==='PENDIENTE'||!o.estado?' selected':'')+'>Pendiente</option><option value="EN PROCESO"'+(o.estado==='EN PROCESO'?' selected':'')+'>En proceso</option><option value="LISTA_PROVEEDOR"'+(lista?' selected':'')+'>Lista en planta proveedor</option><option value="CARGADA"'+(o.estado==='CARGADA'?' selected':'')+'>Orden cargada</option><option value="RECIBIDA"'+(o.estado==='RECIBIDA'?' selected':'')+'>Recibida en almacén (sin preparar)</option><option value="LISTO_ALMACEN"'+(o.estado==='LISTO_ALMACEN'?' selected':'')+'>Listo en almacén (envuelto, en paleta, en picking)</option><option value="LISTO_OFICINA"'+(o.estado==='LISTO_OFICINA'?' selected':'')+'>Listo en oficina</option><option value="ENTREGADA"'+(o.estado==='ENTREGADA'?' selected':'')+'>Entregada</option></select></div></div>';
     // Ficha de items de la orden (extraidos del PDF por la IA)
     if(o.items&&o.items.length){
       h+='<div style="margin-top:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;overflow:hidden">';
@@ -2673,6 +2697,8 @@ function renderOrdenesBody(){
     }
     h+='<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">';
     if(!recib&&o.estado!=='ENTREGADA')h+='<button class="btn btn-green btn-sm" onclick="ordRecibida('+i+')">\u2713 Recibida en almac\u00e9n</button>';
+    // Siguiente paso: recibida todav\u00eda no es lista; falta prepararla para despacho.
+    if(o.estado==='RECIBIDA')h+='<button class="btn btn-green btn-sm" onclick="ordCampo('+i+',\'estado\',\'LISTO_ALMACEN\')">\ud83d\udce6 Listo en almac\u00e9n (envuelto, en paleta)</button>';
     if(o.pdfUrl)h+='<a href="'+esc(o.pdfUrl)+'" target="_blank" class="btn btn-blue btn-sm" style="text-decoration:none">📄 Ver</a>';
     h+='<input type="file" id="ord-cam-'+i+'" accept="image/*" capture="environment" style="display:none" onchange="ordAdjuntarPDF('+i+',this)"><button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'ord-cam-'+i+'\').click()">📷 Foto</button>';
     h+='<input type="file" id="ord-file-'+i+'" accept="image/*,.pdf" style="display:none" onchange="ordAdjuntarPDF('+i+',this)"><button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'ord-file-'+i+'\').click()">🖼️ '+(o.pdfUrl?'Cambiar imagen/PDF':'Adjuntar imagen o PDF')+'</button>';
@@ -2692,14 +2718,162 @@ function toggleItems(i){
   var fl=document.getElementById('items-arrow-'+i);
   if(fl)fl.textContent=abierto?'\u25B6':'\u25BC';
 }
+// Cambia el estado de una orden y ajusta sus fechas (ventana de órdenes y ficha).
+function aplicarEstadoOrden(o,valor){
+  o.estado=valor;
+  if(ordenRecibida(o)&&!o.fechaRecepcion)o.fechaRecepcion=fecha();
+  if(!ordenRecibida(o))o.fechaRecepcion=null;
+  // Fecha propia de cada paso "listo" (la de recepción se conserva).
+  if(valor==='LISTO_ALMACEN'||valor==='LISTO_OFICINA')o.fechaListo=fecha();else o.fechaListo=null;
+}
 function ordCampo(i,campo,valor){
   var p=pedidoOrd();if(!p||!p.ordenes[i])return;
+  if(campo==='estado'){aplicarEstadoOrden(p.ordenes[i],valor);renderOrdenesBody();return;}
   p.ordenes[i][campo]=valor;
-  if(campo==='estado'){
-    if(valor==='RECIBIDA'&&!p.ordenes[i].fechaRecepcion)p.ordenes[i].fechaRecepcion=fecha();
-    if(valor!=='RECIBIDA')p.ordenes[i].fechaRecepcion=null;
-    renderOrdenesBody();
+}
+// ── Estado del pedido completo ──
+// Cuando ya llegaron todas sus órdenes, se ofrece (no se impone) marcarlo Recibido completo.
+function ofrecerRecibidoCompleto(p){
+  var r=resumenOrdenes(p);
+  if(!(r.total>0&&r.listas===r.total))return false;
+  if(p.estatus&&p.estatus!=='PENDIENTE'&&p.estatus!=='EN PROCESO')return false;
+  if(!confirm('Llegaron todas las órdenes del #'+(p.numero||'')+'. ¿Marcar el pedido como Recibido completo?'))return false;
+  var antes=p.estatus||'PENDIENTE';p.estatus='RECIBIDO_COMPLETO';p.fechaEstatus=fecha();
+  registrarBitacora(p.id,'Pedido: '+estadoPedidoLabel(antes)+' → '+estadoPedidoLabel('RECIBIDO_COMPLETO')+' por '+(SESSION?SESSION.nombre:''));
+  return true;
+}
+// Antes de dar por listo un pedido con órdenes que no han llegado, se pregunta.
+function confirmarPedidoListo(p,valor){
+  if(!(pedidoListo({estatus:valor})||valor==='RECIBIDO_COMPLETO'))return true;
+  var r=resumenOrdenes(p),faltan=r.total-r.listas;
+  if(faltan<=0)return true;
+  return confirm('Faltan '+faltan+(faltan===1?' orden':' órdenes')+' por llegar en el #'+(p.numero||'')+'. ¿Seguro que el pedido está "'+estadoPedidoLabel(valor)+'"?');
+}
+function selEstadoPedidoHTML(p){
+  return '<select class="ped-rapido" aria-label="Estado del pedido" onclick="event.stopPropagation()" onchange="pedEstadoRapido(\''+esc(p.id)+'\',this.value,this)" style="font-size:12px;font-weight:700;padding:3px 6px;border-radius:6px;border:1px solid var(--border);background:var(--card,#fff);color:inherit;max-width:100%">'+opcionesEstadoPedido(p.estatus||'PENDIENTE')+'</select>';
+}
+async function pedEstadoRapido(pid,valor,sel){
+  var p=DB.pedidos.find(function(x){return x.id===pid;});if(!p)return;
+  var antes=p.estatus||'PENDIENTE';if(antes===valor)return;
+  if(!confirmarPedidoListo(p,valor)){if(sel)sel.value=antes;return;}
+  p.estatus=valor;p.fechaEstatus=fecha();
+  registrarBitacora(p.id,'Pedido: '+estadoPedidoLabel(antes)+' → '+estadoPedidoLabel(valor)+' por '+(SESSION?SESSION.nombre:''));
+  var card=document.getElementById('card-'+pid);
+  if(card)card.outerHTML=cardHTML(p,!!document.getElementById('nota-'+pid));
+  await guardarDB();
+  toast('#'+(p.numero||'')+': '+estadoPedidoLabel(valor),'ok');
+  // Al dejarlo listo, el almacenista deja foto y lugar para que cualquiera lo encuentre.
+  if(pedidoListo(p))abrirUbicacion(pid);
+}
+// ── Foto y lugar del pedido listo (visible para todos) ──
+// p.ubicacionListo = { texto, foto, fecha, hora, por }
+function ubicacionChipHTML(p){
+  if(!pedidoListo(p)||p.estatus==='ENTREGADO'||p.estatus==='ANULADO')return '';
+  var u=p.ubicacionListo||{};
+  var h='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px;font-size:12px">';
+  if(u.texto||u.foto){
+    h+='<span style="font-weight:700;color:var(--success)">📍 '+esc(u.texto||'Ubicación con foto')+'</span>';
+    if(u.foto)h+='<a href="'+esc(u.foto)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--info);font-weight:700">📷 Ver foto</a>';
+    if(u.por||u.fecha)h+='<span style="color:var(--muted);font-size:11px">'+esc((u.por||'')+(u.fecha?' · '+u.fecha:''))+'</span>';
+    h+='<button type="button" class="btn btn-ghost btn-sm" onclick="event.stopPropagation();abrirUbicacion(\''+esc(p.id)+'\')">Cambiar</button>';
+  }else{
+    h+='<button type="button" class="btn btn-ghost btn-sm" onclick="event.stopPropagation();abrirUbicacion(\''+esc(p.id)+'\')">📷 Agregar foto de ubicación</button>';
   }
+  return h+'</div>';
+}
+var UBIC_PID=null,UBIC_FOTO=null;
+function asegurarModalUbic(){
+  if(document.getElementById('modal-ubic'))return;
+  var d=document.createElement('div');d.className='overlay';d.id='modal-ubic';
+  d.innerHTML='<div class="sheet"><div class="sheet-handle"></div><div class="sheet-head"><h2 id="ubic-titulo">📍 ¿Dónde quedó el pedido?</h2><button class="sheet-close" onclick="cerrarModal(\'modal-ubic\')">✕</button></div>'
+    +'<div class="sheet-body"><div class="sfield"><label>Lugar en el almacén</label><input type="text" id="ubic-texto" placeholder="Ej: Pasillo 2, rack B, paleta 3"></div>'
+    +'<input type="file" id="ubic-file" accept="image/*" capture="environment" style="display:none" onchange="ubicFotoElegida(this)">'
+    +'<button type="button" class="btn btn-blue" style="width:100%" onclick="document.getElementById(\'ubic-file\').click()">📷 Tomar foto</button>'
+    +'<div id="ubic-prev" style="margin-top:10px;text-align:center"></div></div>'
+    +'<div class="sheet-foot"><button class="btn btn-ghost" onclick="cerrarModal(\'modal-ubic\')">Ahora no</button><button class="btn btn-green" id="ubic-guardar" onclick="guardarUbicacion()">Guardar</button></div></div>';
+  document.body.appendChild(d);
+}
+function abrirUbicacion(pid){
+  var p=DB.pedidos.find(function(x){return x.id===pid;});if(!p)return;
+  asegurarModalUbic();UBIC_PID=pid;UBIC_FOTO=null;
+  var u=p.ubicacionListo||{};
+  document.getElementById('ubic-titulo').textContent='📍 ¿Dónde quedó el #'+(p.numero||'')+'?';
+  document.getElementById('ubic-texto').value=u.texto||'';
+  document.getElementById('ubic-file').value='';
+  document.getElementById('ubic-prev').innerHTML=u.foto?'<img src="'+esc(u.foto)+'" alt="Foto actual" style="max-width:100%;max-height:240px;border-radius:8px">':'';
+  abrirModal('modal-ubic');
+}
+// La foto del teléfono se achica antes de subirla (más rápido con poca señal).
+function achicarFoto(file,cb){
+  var url=URL.createObjectURL(file),img=new Image();
+  img.onload=function(){
+    var max=1600,w=img.width,h=img.height;
+    if(w>max||h>max){if(w>h){h=Math.round(h*max/w);w=max;}else{w=Math.round(w*max/h);h=max;}}
+    var cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img,0,0,w,h);
+    URL.revokeObjectURL(url);
+    try{cb(cv.toDataURL('image/jpeg',0.8));}catch(e){cb(null);}
+  };
+  img.onerror=function(){URL.revokeObjectURL(url);cb(null);};
+  img.src=url;
+}
+function ubicFotoElegida(inp){
+  var f=inp.files&&inp.files[0];if(!f)return;
+  achicarFoto(f,function(data){
+    if(!data){toast('No se pudo leer la foto','err');return;}
+    UBIC_FOTO=data;
+    document.getElementById('ubic-prev').innerHTML='<img src="'+data+'" alt="Foto nueva" style="max-width:100%;max-height:240px;border-radius:8px">';
+  });
+}
+async function guardarUbicacion(){
+  var p=DB.pedidos.find(function(x){return x.id===UBIC_PID;});if(!p)return;
+  var texto=document.getElementById('ubic-texto').value.trim();
+  var ant=p.ubicacionListo||{};
+  if(!texto&&!UBIC_FOTO&&!ant.foto){toast('Escribe el lugar o toma una foto','warn');return;}
+  var foto=ant.foto||'';
+  if(UBIC_FOTO){
+    var btn=document.getElementById('ubic-guardar');btn.disabled=true;btn.textContent='Subiendo foto...';
+    try{
+      var res=await veoPost('/subir-pdf-orden',{data:UBIC_FOTO,mediaType:'image/jpeg',nombre:'ubicacion_'+(p.numero||p.id)});
+      if(!res||!res.ok||!res.url)throw new Error((res&&res.error)||'error');
+      foto=res.url;
+    }catch(e){toast('No se pudo subir la foto: '+e.message,'err');btn.disabled=false;btn.textContent='Guardar';return;}
+    btn.disabled=false;btn.textContent='Guardar';
+  }
+  p.ubicacionListo={texto:texto,foto:foto,fecha:fecha(),hora:hora(),por:SESSION?SESSION.nombre:''};
+  registrarBitacora(p.id,'Ubicación del pedido listo: '+(texto||'(solo foto)')+(UBIC_FOTO?' + foto':'')+' por '+(SESSION?SESSION.nombre:''));
+  UBIC_FOTO=null;cerrarModal('modal-ubic');
+  var card=document.getElementById('card-'+p.id);
+  if(card)card.outerHTML=cardHTML(p,!!document.getElementById('nota-'+p.id));
+  await guardarDB();
+  toast('Ubicación guardada — todos pueden verla en la ficha','ok');
+}
+// ── Estado rápido desde la ficha del pedido (para el almacenista) ──
+var ESTADOS_ORDEN=[['PENDIENTE','Pendiente'],['EN PROCESO','En proceso'],['LISTA_PROVEEDOR','Lista en planta proveedor'],['CARGADA','Orden cargada'],['RECIBIDA','Recibida (sin preparar)'],['LISTO_ALMACEN','Listo en almacén (embalado)'],['LISTO_OFICINA','Listo en oficina'],['ENTREGADA','Entregada']];
+function selEstadoRapidoHTML(p,o){
+  var actual=o.estado||'PENDIENTE';
+  return '<select class="ord-rapido" aria-label="Estado de la orden" onclick="event.stopPropagation()" onchange="ordEstadoRapido(\''+esc(p.id)+'\',\''+esc(o.id)+'\',this.value)" style="font-size:12px;padding:3px 6px;border-radius:6px;border:1px solid var(--border);background:var(--card,#fff);color:inherit;max-width:100%">'
+    +ESTADOS_ORDEN.map(function(e){return '<option value="'+e[0]+'"'+(e[0]===actual?' selected':'')+'>'+e[1]+'</option>';}).join('')+'</select>';
+}
+async function ordEstadoRapido(pid,oid,valor){
+  var p=DB.pedidos.find(function(x){return x.id===pid;});if(!p)return;
+  var legado=oid.indexOf('legacy_')===0;
+  materializarOrdenes(p);
+  var o=legado?p.ordenes[0]:p.ordenes.find(function(x){return x.id===oid;});if(!o)return;
+  var antes=o.estado||'PENDIENTE';if(antes===valor)return;
+  aplicarEstadoOrden(o,valor);
+  // Orden de inventario recibida: misma pregunta que en la ventana de órdenes.
+  if(ordenRecibida(o)&&o.tipo==='INVENTARIO'&&o.items&&o.items.length&&!o._invCargada&&typeof invCargarDesdeOrden==='function'){
+    if(confirm('¿Cargar los '+o.items.length+' ítem(s) de esta orden de inventario al almacén?')){o._invCargada=true;invCargarDesdeOrden(o,p.numero);}
+  }
+  var nombre=function(v){var e=ESTADOS_ORDEN.find(function(x){return x[0]===v;});return e?e[1]:v;};
+  ofrecerRecibidoCompleto(p);
+  registrarBitacora(p.id,tipoLabel(o.tipo)+(o.numeroOC?' #'+o.numeroOC:'')+': '+nombre(antes)+' → '+nombre(valor)+' por '+(SESSION?SESSION.nombre:''));
+  // Solo se redibuja esta ficha, para no perder el lugar en la lista.
+  var card=document.getElementById('card-'+pid);
+  if(card)card.outerHTML=cardHTML(p,!!document.getElementById('nota-'+pid));
+  await guardarDB();
+  var r=resumenOrdenes(p);
+  toast(tipoLabel(o.tipo)+(o.numeroOC?' #'+o.numeroOC:'')+': '+nombre(valor)+(r.total>0&&r.listas===r.total&&p.estatus!=='LISTO'?' — todas las órdenes llegaron':''),'ok');
 }
 function ordRecibida(i){
   var p=pedidoOrd();if(!p||!p.ordenes[i])return;
@@ -2848,6 +3022,7 @@ async function guardarOrdenes(){
   }
   var r=resumenOrdenes(p);
   registrarBitacora(p.id,'ORDENES actualizadas ('+r.listas+'/'+r.total+' recibidas) por '+SESSION.nombre);
+  ofrecerRecibidoCompleto(p);
   await guardarDB();
   cerrarModal('modal-ordenes');
   goTab(TAB,document.getElementById('nb-'+TAB));
@@ -2887,7 +3062,7 @@ function diasTranscurridos(f){var d=parseFechaDMY(f);if(!d)return null;var hoy=n
 function obsPedido(p){
   if(p.nota)return p.nota;
   var partes=[];
-  if(p.estatus==='LISTO')partes.push('LISTO PARA ENTREGAR');
+  if(pedidoListo(p)||p.estatus==='RECIBIDO_COMPLETO')partes.push(estadoPedidoLabel(p.estatus).toUpperCase());
   getOrdenes(p).forEach(function(o){
     var ref=(o.proveedor||tipoLabel(o.tipo))+(o.numeroOC?' #'+o.numeroOC:'');
     if(ordenRecibida(o))partes.push(ref+' recibida');
@@ -3946,7 +4121,7 @@ function repOcBadge(f){
   if(f.atraso)return '<span class="badge b-danger">Retrasada '+f.atraso+'d</span>';
   var o=f.refs[0].o;
   if(o.estado==='ENTREGADA')return '<span class="badge b-success">Entregada</span>';
-  if(ordenRecibida(o))return '<span class="badge b-success">Recibida en almacén</span>';
+  if(ordenRecibida(o))return '<span class="badge b-success">'+ordenLlegadaLabel(o)+'</span>';
   if(ordenListaPlanta(o))return '<span class="badge b-info">Lista en planta</span>';
   if(o.estado==='CARGADA')return '<span class="badge b-info">Orden cargada</span>';
   if(o.estado==='EN PROCESO')return '<span class="badge b-info">En proceso</span>';
@@ -4391,7 +4566,7 @@ function renderReportes(c){
   var total=DB.pedidos.length,ent=DB.pedidos.filter(function(p){return p.estatus==='ENTREGADO';}).length;
   var pend=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO';}).length;
   var venc=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO'&&clasif(p)==='vencido';}).length;
-  var listos=DB.pedidos.filter(function(p){return p.estatus==='LISTO';}).length;
+  var listos=DB.pedidos.filter(pedidoListo).length;
   var entHoy=DB.pedidos.filter(function(p){return p.estatus==='ENTREGADO'&&p.fechaEntrega===fecha();}).length;
   var pct=total?Math.round((ent/total)*100):0;
   var pv={};DB.pedidos.forEach(function(p){var v=p.vendedor||'Sin vendedor';if(!pv[v])pv[v]={t:0,e:0};pv[v].t++;if(p.estatus==='ENTREGADO')pv[v].e++;});
@@ -4724,7 +4899,7 @@ function instAgendaCard(p){
 function cargaPlan(){if(!DB.cargaPlan||!Array.isArray(DB.cargaPlan.items))DB.cargaPlan={items:[]};return DB.cargaPlan;}
 function cargaTiene(pid,oid){return cargaPlan().items.some(function(x){return x.pedidoId===pid&&x.ordenId===oid;});}
 function cargaRef(it){var p=DB.pedidos.find(function(x){return x.id===it.pedidoId;});if(!p)return null;var o=getOrdenes(p).find(function(y){return y.id===it.ordenId;});if(!o)return null;return {p:p,o:o,cargado:!!it.cargado};}
-function cargaDisponibles(){var out=[];DB.pedidos.forEach(function(p){if(p.estatus==='ENTREGADO')return;getOrdenes(p).forEach(function(o){if(o.estado==='RECIBIDA'||o.estado==='ENTREGADA'||o.estado==='CARGADA')return;out.push({p:p,o:o});});});return out;}
+function cargaDisponibles(){var out=[];DB.pedidos.forEach(function(p){if(p.estatus==='ENTREGADO')return;getOrdenes(p).forEach(function(o){if(ordenRecibida(o)||o.estado==='ENTREGADA'||o.estado==='CARGADA')return;out.push({p:p,o:o});});});return out;}
 function cargaPrioridad(a,b){var da=diasRestantes(a.p.fechaLimite),db=diasRestantes(b.p.fechaLimite);if(da===null&&db===null)return 0;if(da===null)return 1;if(db===null)return -1;return da-db;}
 function cargaAgregar(pid,oid){if(cargaTiene(pid,oid))return;cargaPlan().items.push({pedidoId:pid,ordenId:oid,cargado:false});guardarDB();renderPlanificacion(document.getElementById('content'));}
 function cargaQuitar(pid,oid){var pl=cargaPlan();pl.items=pl.items.filter(function(x){return !(x.pedidoId===pid&&x.ordenId===oid);});guardarDB();renderPlanificacion(document.getElementById('content'));}
@@ -4782,7 +4957,7 @@ function entregaGuiaEstado(o){
   if(gd&&gd.cuadra===true)return {t:'✅ Guía OK · cargada',c:'#16a34a',pend:false};
   if(gd&&gd.cuadra===false)return {t:'⚠️ Guía con diferencias',c:'#d97706',pend:true};
   if(gd)return {t:'📄 Guía recibida',c:'#2563eb',pend:false};
-  if(o.estado==='RECIBIDA')return {t:'📦 Recibida en almacén',c:'#16a34a',pend:false};
+  if(ordenRecibida(o))return {t:(o.estado==='LISTO_OFICINA'?'🏢 ':'📦 ')+ordenLlegadaLabel(o),c:'#16a34a',pend:false};
   if(o.estado==='CARGADA')return {t:'🚚 Orden cargada',c:'#16a34a',pend:false};
   if(o.estado==='LISTA_PROVEEDOR')return {t:'🏭 Lista en planta',c:'#16a34a',pend:false};
   if(o.tipo==='INVENTARIO')return {t:'📦 En almacén (por entregar)',c:'#7c3aed',pend:true};
