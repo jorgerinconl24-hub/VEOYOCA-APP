@@ -2117,7 +2117,7 @@ function renderHome(c){
   var op=(DB.ordenesPendientes||[]);
   var opSinPed=op.filter(function(x){return !((x.numeroPedido||'').toString().trim());}).length;
   var bannerOP=op.length?'<div onclick="abrirOrdenesPendientes()" style="background:#7c3aed;color:#fff;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px"><span>\u23F3 '+op.length+' orden'+(op.length>1?'es':'')+' a la espera de pedido'+(opSinPed?' \u00B7 '+opSinPed+' sin # de pedido':'')+'</span><span style="font-size:11px;opacity:.85;white-space:nowrap">Toca para ver \u2192</span></div>':'';
-  c.innerHTML=statsBar+bannerOP+bannerSF+'<div class="prog-wrap"><div class="prog-bar"><div class="prog-fill" style="width:'+pct+'%"></div></div><div class="prog-label">'+ent+' de '+total+' entregados ('+pct+'%)</div></div><div class="toolbar"><input type="text" id="h-buscar" placeholder="Buscar cliente o numero..." oninput="filtrarHome()"><select id="h-est" onchange="filtrarHome()"><option value="">Todos</option><option value="vencido">Vencidos</option><option value="urgente">Urgentes</option><option value="sf">Sin fecha</option><option value="ok">Con tiempo</option><option value="LISTO">Listos</option><option value="ORDENES">Con \u00F3rdenes pendientes</option><option value="SINFECHA">\u00D3rdenes sin fecha estimada</option><option value="ENTREGADOS">\u2705 Historial de entregados</option></select>'+selCiudadHTML()+'<button class="btn btn-dark btn-sm" onclick="generarReporte()" style="align-self:center">\uD83D\uDCC4 Generar Reporte</button></div><div class="section-pad" id="home-lista"></div>';
+  c.innerHTML=statsBar+bannerOP+bannerSF+'<div class="prog-wrap"><div class="prog-bar"><div class="prog-fill" style="width:'+pct+'%"></div></div><div class="prog-label">'+ent+' de '+total+' entregados ('+pct+'%)</div></div><div class="toolbar"><input type="text" id="h-buscar" placeholder="Buscar cliente o numero..." oninput="filtrarHome()"><select id="h-est" onchange="filtrarHome()"><option value="">Todos</option><option value="vencido">Vencidos</option><option value="urgente">Urgentes</option><option value="sf">Sin fecha</option><option value="ok">Con tiempo</option><option value="LISTO">Listos</option><option value="ORDENES">Con \u00F3rdenes pendientes</option><option value="SINFECHA">\u00D3rdenes sin fecha estimada</option><option value="ENTREGADOS">\u2705 Historial de entregados</option></select>'+selCiudadHTML()+selOrdenHTML()+'<button class="btn btn-dark btn-sm" onclick="generarReporte()" style="align-self:center">\uD83D\uDCC4 Generar Reporte</button></div><div class="section-pad" id="home-lista"></div>';
   filtrarHome();
 }
 function aplicarFiltro(valor){
@@ -2324,6 +2324,23 @@ function selCiudadHTML(){
   return '<select id="h-ciudad" onchange="HOME_CIUDAD=this.value;filtrarHome()"><option value="">Todas las ciudades</option>'
     +lista.map(function(c){return '<option value="'+esc(c)+'"'+(c===HOME_CIUDAD?' selected':'')+'>'+esc(ciudadTitulo(c))+' ('+cuenta[c]+')</option>';}).join('')+'</select>';
 }
+// Orden de la lista: por urgencia (agrupada) o por antigüedad del pedido.
+// Se recuerda en este teléfono.
+var HOME_ORDEN='';
+try{HOME_ORDEN=localStorage.getItem('veo_home_orden')||'';}catch(e){}
+function selOrdenHTML(){
+  var ops=[['','Orden: por urgencia'],['NUEVOS','Más nuevos primero'],['VIEJOS','Más viejos primero']];
+  return '<select id="h-orden" onchange="HOME_ORDEN=this.value;try{localStorage.setItem(\'veo_home_orden\',HOME_ORDEN);}catch(e){}filtrarHome()">'
+    +ops.map(function(o){return '<option value="'+o[0]+'"'+(o[0]===HOME_ORDEN?' selected':'')+'>'+o[1]+'</option>';}).join('')+'</select>';
+}
+// Antigüedad: fecha del pedido; a igual fecha, el número más alto es el más nuevo.
+function pedidoEdad(p){
+  var f=String(p&&p.fechaCreacion||'').trim(),m=f.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  var d=m?new Date(+m[1],+m[2]-1,+m[3]):parseFechaDMY(f.replace(/[-.]/g,'/'));
+  var n=parseInt(String(p&&p.numero||'').replace(/\D/g,''),10);
+  return {t:d?d.getTime():(p&&p.creadoTS)||0,n:isNaN(n)?0:n};
+}
+function compararEdad(a,b){var x=pedidoEdad(a),y=pedidoEdad(b);return (y.t-x.t)||(y.n-x.n);}
 function filtrarHome(){
   var b=(document.getElementById('h-buscar')||{value:''}).value.toLowerCase();
   var fe=(document.getElementById('h-est')||{value:''}).value;
@@ -2333,6 +2350,12 @@ function filtrarHome(){
   var el=document.getElementById('home-lista');if(!el)return;
   var avisoCiudad=HOME_CIUDAD?'<div style="font-size:13px;font-weight:700;margin-bottom:8px">📍 '+esc(ciudadTitulo(HOME_CIUDAD))+': '+lista.length+(lista.length===1?' pedido pendiente':' pedidos pendientes')+' <button type="button" class="btn btn-ghost btn-sm" onclick="HOME_CIUDAD=\'\';var s=document.getElementById(\'h-ciudad\');if(s)s.value=\'\';filtrarHome()">Quitar filtro</button></div>':'';
   if(!lista.length){el.innerHTML=avisoCiudad+'<div class="empty"><div class="empty-icon">OK</div>No hay pedidos pendientes</div>';return;}
+  if(HOME_ORDEN==='NUEVOS'||HOME_ORDEN==='VIEJOS'){
+    lista.sort(compararEdad);if(HOME_ORDEN==='VIEJOS')lista.reverse();
+    var h3=avisoCiudad+'<div class="sec-label">'+(HOME_ORDEN==='NUEVOS'?'Más nuevos primero':'Más viejos primero')+' ('+lista.length+')</div>';
+    lista.forEach(function(p){h3+=cardHTML(p,false);});
+    el.innerHTML=h3;return;
+  }
   if(fe==='ORDENES'||fe==='SINFECHA'){
     var h2=avisoCiudad+'<div class="sec-label">'+(fe==='SINFECHA'?'Con \u00F3rdenes sin fecha estimada':'Con \u00F3rdenes pendientes')+' ('+lista.length+')</div>';
     lista.forEach(function(p){h2+=cardHTML(p,false);});
