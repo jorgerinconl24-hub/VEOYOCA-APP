@@ -783,7 +783,7 @@ function mostrarApp(){
   setInterval(verificarCamposIncompletosAlEntrar, 60*60*1000);
 }
 function mostrarPerfil(){
-  var mis=DB.pedidos.filter(function(p){return p.creadoPor===SESSION.username||p.vendedor===SESSION.nombre;});
+  var mis=DB.pedidos.filter(function(p){return p.creadoPor===SESSION.username||vendedorPedido(p)===SESSION.nombre;});
   var ent=mis.filter(function(p){return p.estatus==='ENTREGADO';});
   document.getElementById('perfil-body').innerHTML='<div style="text-align:center;padding:8px 0 20px"><div style="width:64px;height:64px;border-radius:50%;background:var(--accent);color:#fff;font-size:22px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 12px">'+SESSION.nombre.substring(0,2).toUpperCase()+'</div><div style="font-size:18px;font-weight:700">'+SESSION.nombre+'</div><div style="font-size:13px;color:var(--muted);margin-top:3px">@'+SESSION.username+' - '+SESSION.rol+'</div></div><div class="admin-section"><div class="admin-row"><div>Mis pedidos</div><strong>'+mis.length+'</strong></div><div class="admin-row"><div>Entregados</div><strong>'+ent.length+'</strong></div></div>';
   abrirModal('modal-perfil');
@@ -1355,7 +1355,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v101 · mini rack cubre rack light (fondo a 1.00)';
+var APP_VERSION='v102 · vendedor en la ficha del pedido';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -2214,7 +2214,7 @@ var HIST_BUSCA='';
 function histLista(){
   var q=HIST_BUSCA.toLowerCase().trim();
   var l=DB.pedidos.filter(function(p){return p.estatus==='ENTREGADO';});
-  if(q)l=l.filter(function(p){return ((p.numero||'')+' '+(p.cliente||'')+' '+(p.ciudad||'')+' '+(p.vendedor||'')+' '+(p.descripcion||'')).toLowerCase().indexOf(q)>=0;});
+  if(q)l=l.filter(function(p){return ((p.numero||'')+' '+(p.cliente||'')+' '+(p.ciudad||'')+' '+vendedorPedido(p)+' '+(p.descripcion||'')).toLowerCase().indexOf(q)>=0;});
   l.sort(function(a,b){return (b.entregadoTS||0)-(a.entregadoTS||0)||(b.fechaEntrega||'').localeCompare(a.fechaEntrega||'');});
   return l;
 }
@@ -2227,7 +2227,7 @@ function histFilasHTML(){
     var num=p.numero||p.id.substring(0,6),r=resumenOrdenes(p);
     h+='<div class="card" style="margin-bottom:8px"><div class="card-head" style="cursor:pointer" data-historial="'+p.id+'"><div class="card-num">#'+esc(num)+'</div><div class="card-body">';
     h+='<div class="card-cliente">'+esc(p.cliente||'Sin nombre')+'</div>';
-    h+='<div class="card-meta">'+esc(p.ciudad||'')+(p.vendedor?' · '+esc(p.vendedor):'')+'</div>';
+    h+='<div class="card-meta">'+esc(p.ciudad||'')+(vendedorPedido(p)?' · 👤 '+esc(vendedorPedido(p)):'')+'</div>';
     h+='<div style="font-size:11px;color:var(--success);font-weight:600;margin-top:3px">✅ '+esc(p.fechaEntrega||'')+(p.horaEntrega?' '+esc(p.horaEntrega):'')+(p.entregadoPor?' · por '+esc(p.entregadoPor):'')+'</div>';
     if(p.notaEntrega)h+='<div style="font-size:11px;color:var(--muted);margin-top:2px">📝 '+esc(p.notaEntrega)+'</div>';
     if(r.total)h+='<div style="font-size:11px;color:var(--muted);margin-top:2px">🧾 '+r.total+' orden(es)</div>';
@@ -2265,7 +2265,7 @@ function abrirHistorial(id){
   h+='</div>';
   function dato(k,v){return v?('<div style="display:flex;gap:8px;font-size:13px;padding:4px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted);min-width:104px;flex-shrink:0">'+k+'</span><span style="flex:1">'+esc(v)+'</span></div>'):'';}
   h+='<div class="sec-label">Datos del pedido</div><div style="margin-bottom:12px">';
-  h+=dato('Cliente',p.cliente)+dato('Ciudad',p.ciudad)+dato('Dirección',p.direccion)+dato('Vendedor',p.vendedor);
+  h+=dato('Cliente',p.cliente)+dato('Ciudad',p.ciudad)+dato('Dirección',p.direccion)+dato('Vendedor',vendedorPedido(p)||'Sin vendedor');
   h+=dato('Transporte',p.transporte==='retira'?'Retira en sitio':p.transporte==='envio'?'Envío':'')
     +dato('Fecha límite',p.fechaLimite)+dato('Creado',(p.fechaCreacion||'')+(p.creadoPorNombre?' por '+p.creadoPorNombre:''));
   h+='</div>';
@@ -2393,7 +2393,7 @@ function cardHTML(p,conEntregar){
   var pid=p.id;var num=p.numero||pid.substring(0,6);
   var os=getOrdenes(p);var r=resumenOrdenes(p);
   var anulEstilo=(p.estatus==='ANULADO')?' style="opacity:.6;border:1px dashed #dc2626"':'';
-  var h='<div class="card" id="card-'+pid+'"'+anulEstilo+'><div class="card-head"><div class="card-num">#'+num+'</div><div class="card-body"><div class="card-cliente">'+(p.cliente||'Sin nombre')+'</div><div class="card-meta">'+(p.ciudad||'sin ciudad')+(p.vendedor?' - '+p.vendedor:'')+'</div>';
+  var h='<div class="card" id="card-'+pid+'"'+anulEstilo+'><div class="card-head"><div class="card-num">#'+num+'</div><div class="card-body"><div class="card-cliente">'+(p.cliente||'Sin nombre')+'</div><div class="card-meta">'+(p.ciudad||'sin ciudad')+'</div>'+chipVendedorPedido(p);
   // Estado del pedido completo, a la vista para cambiarlo rápido.
   if(p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO')h+='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px"><span style="font-size:11px;font-weight:700;color:var(--muted)">Pedido:</span>'+selEstadoPedidoHTML(p)+'</div>';
   h+=ubicacionChipHTML(p);
@@ -3216,6 +3216,23 @@ var EST1_MANUAL=EST1_OPCIONES.filter(function(e){return e!=='DEJO DE CONTESTAR'&
 // y el resumen semanal (atendidos / presupuestos / ventas).
 var RESULTADO_MENU=[['CONTACTADO','Contactado'],['NO CONTESTA','No contesta'],['PRESUPUESTO ENVIADO','Presupuesto enviado'],['VENTA','Venta cerrada'],['NO INTERESADO','No interesado']];
 function getClientes(){if(!Array.isArray(DB.clientes))DB.clientes=[];return DB.clientes;}
+// Vendedor que lleva el pedido. En pedidos viejos (cargados como 'Bot WhatsApp')
+// se toma del cliente del CRM que tiene ese pedido adjunto.
+function vendedorPedido(p){
+  var v=String((p&&p.vendedor)||'').trim();
+  if(v&&v!=='Bot WhatsApp')return v;
+  var num=String((p&&p.numero)||'').replace(/^0+/,'');
+  if(!num)return '';
+  var cls=getClientes();
+  for(var i=0;i<cls.length;i++){var cl=cls[i];var ps=cl.pedidos||[];
+    for(var j=0;j<ps.length;j++){if(String(ps[j].numero||'').replace(/^0+/,'')===num)return ps[j].vendedor||cl.vendedor||'';}}
+  return '';
+}
+function chipVendedorPedido(p){
+  var v=vendedorPedido(p);
+  return v?'<span style="display:inline-block;margin-top:4px;padding:2px 8px;border-radius:10px;background:#e8f0fe;color:#1a1a2e;font-size:11px;font-weight:700">👤 '+esc(v)+'</span>'
+    :'<span style="display:inline-block;margin-top:4px;padding:2px 8px;border-radius:10px;background:#fff7ed;color:#c2410c;font-size:11px;font-weight:700">👤 Sin vendedor</span>';
+}
 function est1De(cl){return ((cl.estado1||'').trim()||'SIN CONTACTAR').toUpperCase();}
 // Cliente finalizado: ya compro (CERRADO) o no interesado. El sistema no lo recuerda mas.
 function estaFinalizado(cl){var e=est1De(cl);return e==='CERRADO'||e==='NO INTERESADO'||e==='FRIO';}
@@ -4569,7 +4586,7 @@ function renderReportes(c){
   var listos=DB.pedidos.filter(pedidoListo).length;
   var entHoy=DB.pedidos.filter(function(p){return p.estatus==='ENTREGADO'&&p.fechaEntrega===fecha();}).length;
   var pct=total?Math.round((ent/total)*100):0;
-  var pv={};DB.pedidos.forEach(function(p){var v=p.vendedor||'Sin vendedor';if(!pv[v])pv[v]={t:0,e:0};pv[v].t++;if(p.estatus==='ENTREGADO')pv[v].e++;});
+  var pv={};DB.pedidos.forEach(function(p){var v=vendedorPedido(p)||'Sin vendedor';if(!pv[v])pv[v]={t:0,e:0};pv[v].t++;if(p.estatus==='ENTREGADO')pv[v].e++;});
   var va=[];for(var v in pv)va.push({v:v,t:pv[v].t,e:pv[v].e});va.sort(function(a,b){return b.t-a.t;});
   var maxT=va.length?va[0].t:1;var bit=DB.bitacora.slice(-10).reverse();
   var html='<div style="padding:14px 14px 0"><button class="btn btn-dark" style="width:100%;padding:13px;font-size:15px" onclick="generarReporte()">\uD83D\uDCC4 Generar Reporte PDF de pedidos pendientes</button></div>';
@@ -4811,7 +4828,7 @@ function importarPedidosExcel(inp){
   inp.value='';
 }
 function exportarJSON(){var a=document.createElement('a');a.href='data:application/json;charset=utf-8,'+encodeURIComponent(JSON.stringify({pedidos:DB.pedidos,bitacora:DB.bitacora},null,2));a.download='veoyoca_'+fecha().replace(/\//g,'-')+'.json';a.click();}
-function exportarCSV(){var rows=[['ID','Numero','Cliente','Ciudad','Vendedor','Estado','Fecha limite','Ordenes','Ordenes recibidas','Descripcion']];DB.pedidos.forEach(function(p){var r=resumenOrdenes(p);var ords=getOrdenes(p).map(function(o){return tipoLabel(o.tipo)+' '+(o.proveedor||'')+(o.numeroOC?' #'+o.numeroOC:'')+' ['+(o.estado||'PENDIENTE')+']';}).join(' | ');rows.push([p.id,p.numero||'',p.cliente||'',p.ciudad||'',p.vendedor||'',p.estatus||'',p.fechaLimite||'',ords,r.listas+'/'+r.total,p.descripcion||'']);});var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download='pedidos_'+fecha().replace(/\//g,'-')+'.csv';a.click();}
+function exportarCSV(){var rows=[['ID','Numero','Cliente','Ciudad','Vendedor','Estado','Fecha limite','Ordenes','Ordenes recibidas','Descripcion']];DB.pedidos.forEach(function(p){var r=resumenOrdenes(p);var ords=getOrdenes(p).map(function(o){return tipoLabel(o.tipo)+' '+(o.proveedor||'')+(o.numeroOC?' #'+o.numeroOC:'')+' ['+(o.estado||'PENDIENTE')+']';}).join(' | ');rows.push([p.id,p.numero||'',p.cliente||'',p.ciudad||'',vendedorPedido(p),p.estatus||'',p.fechaLimite||'',ords,r.listas+'/'+r.total,p.descripcion||'']);});var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download='pedidos_'+fecha().replace(/\//g,'-')+'.csv';a.click();}
 
 var ZONAS=[{nombre:'Maracaibo',ciudades:['MARACAIBO','NORTE','SUR','CENTRO','AMPARO','COROMOTO','HATICOS','DELICIAS','SANTA LUCIA','SAN FRANCISCO','SIERRA MAESTRA','ZONA INDUSTRIAL','BELLA VISTA']},{nombre:'Sur del lago',ciudades:['EL MOJAN','MARA','SANTA BARBARA','LOS PUERTOS','ALTAGRACIA']},{nombre:'Cabimas / C. Ojeda',ciudades:['CABIMAS','CIUDAD OJEDA','LAGUNILLAS']},{nombre:'Machiques / Perija',ciudades:['MACHIQUES','PERIJA','VILLA DEL ROSARIO','LA VILLA','CARRASQUERO']},{nombre:'Coro / Falcon',ciudades:['CORO','FALCON','TUCACAS','DABAJURO','PUNTO FIJO']},{nombre:'Barquisimeto',ciudades:['BARQUISIMETO','CARORA','YARACUY']},{nombre:'San Cristobal',ciudades:['SAN CRISTOBAL','TACHIRA']},{nombre:'Merida / Los Andes',ciudades:['MERIDA','VALERA','TRUJILLO']},{nombre:'Barinas / Llanos',ciudades:['BARINAS','ACARIGUA','GUASDUALITO','APURE']},{nombre:'Caracas / Centro',ciudades:['CARACAS','PETARE','LOS TEQUES','MIRANDA']},{nombre:'Valencia / Carabobo',ciudades:['VALENCIA','CARABOBO','MARACAY','ARAGUA','TURMERO']},{nombre:'Oriente',ciudades:['MATURIN','EL TIGRE','BARCELONA','CIUDAD BOLIVAR','ANZOATEGUI','PUERTO ORDAZ']},{nombre:'Otros',ciudades:[]}];
 function getZona(ciudad){if(!ciudad)return 'Sin ciudad';var cu=ciudad.toUpperCase().trim();for(var i=0;i<ZONAS.length-1;i++)for(var j=0;j<ZONAS[i].ciudades.length;j++)if(cu.indexOf(ZONAS[i].ciudades[j])>=0||ZONAS[i].ciudades[j].indexOf(cu)>=0)return ZONAS[i].nombre;return ciudad;}
@@ -4856,7 +4873,7 @@ function renderPlanificacion(c){
   var zo=Object.keys(grupos).sort(function(a,b){var ma=9999,mb=9999;grupos[a].forEach(function(p){var d=diasRestantes(p.fechaLimite);if(d!==null&&d<ma)ma=d;});grupos[b].forEach(function(p){var d=diasRestantes(p.fechaLimite);if(d!==null&&d<mb)mb=d;});return ma-mb;});
   var tv=pends.filter(function(p){return clasif(p)==='vencido';}).length,tu=pends.filter(function(p){return clasif(p)==='urgente';}).length;
   var html='<div class="stats-bar"><div class="stat"><div class="stat-v">'+pends.length+'</div><div class="stat-l">pedidos</div></div><div class="stat"><div class="stat-v" style="color:#fca5a5">'+tv+'</div><div class="stat-l">vencidos</div></div><div class="stat"><div class="stat-v" style="color:#fcd34d">'+tu+'</div><div class="stat-l">urgentes</div></div><div class="stat"><div class="stat-v">'+zo.length+'</div><div class="stat-l">zonas</div></div></div><div style="padding:10px 14px 0"><div class="sec-label">Plan de entregas</div><button class="btn btn-ghost btn-sm" style="margin-bottom:10px;width:100%" onclick="exportarPlan()">Exportar CSV</button>';
-  zo.forEach(function(zona){var pedidos=grupos[zona];var urgV=pedidos.filter(function(p){return clasif(p)==='vencido';}).length;var urgU=pedidos.filter(function(p){return clasif(p)==='urgente';}).length;var ch=urgV?'#dc2626':urgU?'#d97706':'#1a1a2e';html+='<div class="card" style="margin-bottom:12px"><div style="background:'+ch+';padding:10px 14px"><div style="color:#fff;font-size:13px;font-weight:700">'+zona+' ('+pedidos.length+' pedidos)</div>'+(urgV?'<div style="color:#fca5a5;font-size:11px">'+urgV+' vencido'+(urgV>1?'s':'')+'</div>':urgU?'<div style="color:#fcd34d;font-size:11px">'+urgU+' urgente'+(urgU>1?'s':'')+'</div>':'')+'</div><div style="padding:6px 0">';pedidos.forEach(function(p,pi){var d=diasRestantes(p.fechaLimite);var col=!p.fechaLimite?'#6b7280':d<0?'#dc2626':d<=7?'#d97706':'#16a34a';var r=resumenOrdenes(p);html+='<div style="padding:8px 14px;border-bottom:1px solid #f3f4f6;display:flex;gap:10px;align-items:center"><div style="min-width:22px;height:22px;border-radius:50%;background:'+col+';color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+(pi+1)+'</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+(p.cliente||'Sin nombre')+'</div><div style="font-size:11px;color:#6b7280">#'+(p.numero||p.id.substring(0,6))+(p.vendedor?' - '+p.vendedor:'')+(r.total?' \u00B7 \u00F3rdenes '+r.listas+'/'+r.total:'')+'</div></div>'+badgeHTML(p)+'</div>';});html+='</div></div>';});
+  zo.forEach(function(zona){var pedidos=grupos[zona];var urgV=pedidos.filter(function(p){return clasif(p)==='vencido';}).length;var urgU=pedidos.filter(function(p){return clasif(p)==='urgente';}).length;var ch=urgV?'#dc2626':urgU?'#d97706':'#1a1a2e';html+='<div class="card" style="margin-bottom:12px"><div style="background:'+ch+';padding:10px 14px"><div style="color:#fff;font-size:13px;font-weight:700">'+zona+' ('+pedidos.length+' pedidos)</div>'+(urgV?'<div style="color:#fca5a5;font-size:11px">'+urgV+' vencido'+(urgV>1?'s':'')+'</div>':urgU?'<div style="color:#fcd34d;font-size:11px">'+urgU+' urgente'+(urgU>1?'s':'')+'</div>':'')+'</div><div style="padding:6px 0">';pedidos.forEach(function(p,pi){var d=diasRestantes(p.fechaLimite);var col=!p.fechaLimite?'#6b7280':d<0?'#dc2626':d<=7?'#d97706':'#16a34a';var r=resumenOrdenes(p);html+='<div style="padding:8px 14px;border-bottom:1px solid #f3f4f6;display:flex;gap:10px;align-items:center"><div style="min-width:22px;height:22px;border-radius:50%;background:'+col+';color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+(pi+1)+'</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+(p.cliente||'Sin nombre')+'</div><div style="font-size:11px;color:#6b7280">#'+(p.numero||p.id.substring(0,6))+(vendedorPedido(p)?' - '+vendedorPedido(p):'')+(r.total?' \u00B7 \u00F3rdenes '+r.listas+'/'+r.total:'')+'</div></div>'+badgeHTML(p)+'</div>';});html+='</div></div>';});
   c.innerHTML=planToggleHTML()+html+'</div>';
 }
 // Agenda general de instalaciones: pedidos con instalación, agrupados por día.
@@ -5178,7 +5195,7 @@ function renderCargaBoard(){
   return h;
 }
 // ═══════════════ FIN PLANIFICACIÓN DE CARGA ═══════════════
-function exportarPlan(){var pends=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO';});pends.sort(function(a,b){var da=diasRestantes(a.fechaLimite),db=diasRestantes(b.fechaLimite);if(da===null&&db===null)return 0;if(da===null)return 1;if(db===null)return -1;return da-db;});var rows=[['#','Pedido','Cliente','Ciudad','Zona','Vendedor','Fecha limite','Dias','Estado','Ordenes','Descripcion']];pends.forEach(function(p,i){var d=diasRestantes(p.fechaLimite);var r=resumenOrdenes(p);rows.push([i+1,p.numero||p.id.substring(0,6),p.cliente||'',p.ciudad||'',getZona(p.ciudad),p.vendedor||'',p.fechaLimite||'',d!==null?d:'',p.estatus||'',r.total?r.listas+'/'+r.total:'',(p.descripcion||'').substring(0,80)]);});var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download='plan_'+fecha().replace(/\//g,'-')+'.csv';a.click();}
+function exportarPlan(){var pends=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO';});pends.sort(function(a,b){var da=diasRestantes(a.fechaLimite),db=diasRestantes(b.fechaLimite);if(da===null&&db===null)return 0;if(da===null)return 1;if(db===null)return -1;return da-db;});var rows=[['#','Pedido','Cliente','Ciudad','Zona','Vendedor','Fecha limite','Dias','Estado','Ordenes','Descripcion']];pends.forEach(function(p,i){var d=diasRestantes(p.fechaLimite);var r=resumenOrdenes(p);rows.push([i+1,p.numero||p.id.substring(0,6),p.cliente||'',p.ciudad||'',getZona(p.ciudad),vendedorPedido(p),p.fechaLimite||'',d!==null?d:'',p.estatus||'',r.total?r.listas+'/'+r.total:'',(p.descripcion||'').substring(0,80)]);});var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download='plan_'+fecha().replace(/\//g,'-')+'.csv';a.click();}
 
 var MODELO='claude-sonnet-4-6';
 // ═══════════════════════════════════════════════════════════
@@ -7134,7 +7151,7 @@ function enviarCorreo(){
         +'<td style="padding:8px 10px;font-weight:600;color:#1a1a2e">#'+(p.numero||'?')+'</td>'
         +'<td style="padding:8px 10px">'+(p.cliente||'')+'</td>'
         +'<td style="padding:8px 10px;color:#6b7280">'+(p.ciudad||'—')+'</td>'
-        +'<td style="padding:8px 10px;color:#6b7280">'+(p.vendedor||'—')+'</td>'
+        +'<td style="padding:8px 10px;color:#6b7280">'+(vendedorPedido(p)||'—')+'</td>'
         +'<td style="padding:8px 10px">'+(p.fechaLimite||'—')+'</td>'
         +'<td style="padding:8px 10px;font-weight:700;color:'+colorDias+'">'+diasTxt+'</td>'
         +'</tr>';
