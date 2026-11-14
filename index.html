@@ -1355,7 +1355,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v102 · vendedor en la ficha del pedido';
+var APP_VERSION='v103 · buscar pedidos por producto y medida';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -2130,7 +2130,7 @@ function renderHome(c){
   var op=(DB.ordenesPendientes||[]);
   var opSinPed=op.filter(function(x){return !((x.numeroPedido||'').toString().trim());}).length;
   var bannerOP=op.length?'<div onclick="abrirOrdenesPendientes()" style="background:#7c3aed;color:#fff;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px"><span>\u23F3 '+op.length+' orden'+(op.length>1?'es':'')+' a la espera de pedido'+(opSinPed?' \u00B7 '+opSinPed+' sin # de pedido':'')+'</span><span style="font-size:11px;opacity:.85;white-space:nowrap">Toca para ver \u2192</span></div>':'';
-  c.innerHTML=statsBar+bannerOP+bannerSF+'<div class="prog-wrap"><div class="prog-bar"><div class="prog-fill" style="width:'+pct+'%"></div></div><div class="prog-label">'+ent+' de '+total+' entregados ('+pct+'%)</div></div><div class="toolbar"><input type="text" id="h-buscar" placeholder="Buscar cliente o numero..." oninput="filtrarHome()"><select id="h-est" onchange="filtrarHome()"><option value="">Todos</option><option value="vencido">Vencidos</option><option value="urgente">Urgentes</option><option value="sf">Sin fecha</option><option value="ok">Con tiempo</option><option value="LISTO">Listos</option><option value="ORDENES">Con \u00F3rdenes pendientes</option><option value="SINFECHA">\u00D3rdenes sin fecha estimada</option><option value="ENTREGADOS">\u2705 Historial de entregados</option></select>'+selCiudadHTML()+selOrdenHTML()+'<button class="btn btn-dark btn-sm" onclick="generarReporte()" style="align-self:center">\uD83D\uDCC4 Generar Reporte</button></div><div class="section-pad" id="home-lista"></div>';
+  c.innerHTML=statsBar+bannerOP+bannerSF+'<div class="prog-wrap"><div class="prog-bar"><div class="prog-fill" style="width:'+pct+'%"></div></div><div class="prog-label">'+ent+' de '+total+' entregados ('+pct+'%)</div></div><div class="toolbar"><input type="text" id="h-buscar" placeholder="Buscar cliente, número o producto (ej: pirámide pared 2 mts)" oninput="filtrarHome()"><select id="h-est" onchange="filtrarHome()"><option value="">Todos</option><option value="vencido">Vencidos</option><option value="urgente">Urgentes</option><option value="sf">Sin fecha</option><option value="ok">Con tiempo</option><option value="LISTO">Listos</option><option value="ORDENES">Con \u00F3rdenes pendientes</option><option value="SINFECHA">\u00D3rdenes sin fecha estimada</option><option value="ENTREGADOS">\u2705 Historial de entregados</option></select>'+selCiudadHTML()+selOrdenHTML()+'<button class="btn btn-dark btn-sm" onclick="generarReporte()" style="align-self:center">\uD83D\uDCC4 Generar Reporte</button></div><div class="section-pad" id="home-lista"></div>';
   filtrarHome();
 }
 function aplicarFiltro(valor){
@@ -2214,7 +2214,7 @@ var HIST_BUSCA='';
 function histLista(){
   var q=HIST_BUSCA.toLowerCase().trim();
   var l=DB.pedidos.filter(function(p){return p.estatus==='ENTREGADO';});
-  if(q)l=l.filter(function(p){return ((p.numero||'')+' '+(p.cliente||'')+' '+(p.ciudad||'')+' '+vendedorPedido(p)+' '+(p.descripcion||'')).toLowerCase().indexOf(q)>=0;});
+  if(q)l=l.filter(function(p){return pedidoCoincideBusqueda(p,q);});
   l.sort(function(a,b){return (b.entregadoTS||0)-(a.entregadoTS||0)||(b.fechaEntrega||'').localeCompare(a.fechaEntrega||'');});
   return l;
 }
@@ -2354,11 +2354,17 @@ function pedidoEdad(p){
   return {t:d?d.getTime():(p&&p.creadoTS)||0,n:isNaN(n)?0:n};
 }
 function compararEdad(a,b){var x=pedidoEdad(a),y=pedidoEdad(b);return (y.t-x.t)||(y.n-x.n);}
+// Mientras se pinta la lista con una búsqueda de producto, cada ficha muestra el renglón que coincide.
+var BUSQ_ACTUAL='';
 function filtrarHome(){
+  BUSQ_ACTUAL=(document.getElementById('h-buscar')||{value:''}).value.trim();
+  try{_filtrarHome();}finally{BUSQ_ACTUAL='';}
+}
+function _filtrarHome(){
   var b=(document.getElementById('h-buscar')||{value:''}).value.toLowerCase();
   var fe=(document.getElementById('h-est')||{value:''}).value;
   if(fe==='ENTREGADOS'){aplicarFiltroEntregados();return;}
-  var lista=DB.pedidos.filter(function(p){if(p.estatus==='ENTREGADO')return false;if(HOME_CIUDAD&&ciudadDe(p)!==HOME_CIUDAD)return false;var mb=!b||((p.cliente||'').toLowerCase().indexOf(b)>=0||(p.numero||'').indexOf(b)>=0);var mfe=!fe||clasif(p)===fe||(fe==='LISTO'&&pedidoListo(p))||(fe==='ORDENES'&&(function(){var r=resumenOrdenes(p);return r.total>0&&r.listas<r.total;})())||(fe==='SINFECHA'&&getOrdenes(p).some(function(o){return !ordenRecibida(o)&&!o.fechaEstimadaEntrega;}));return mb&&mfe;});
+  var lista=DB.pedidos.filter(function(p){if(p.estatus==='ENTREGADO')return false;if(HOME_CIUDAD&&ciudadDe(p)!==HOME_CIUDAD)return false;var mb=pedidoCoincideBusqueda(p,b);var mfe=!fe||clasif(p)===fe||(fe==='LISTO'&&pedidoListo(p))||(fe==='ORDENES'&&(function(){var r=resumenOrdenes(p);return r.total>0&&r.listas<r.total;})())||(fe==='SINFECHA'&&getOrdenes(p).some(function(o){return !ordenRecibida(o)&&!o.fechaEstimadaEntrega;}));return mb&&mfe;});
   lista.sort(function(a,b){var da=diasRestantes(a.fechaLimite),db=diasRestantes(b.fechaLimite);if(da===null&&db===null)return 0;if(da===null)return 1;if(db===null)return -1;return da-db;});
   var el=document.getElementById('home-lista');if(!el)return;
   var avisoCiudad=HOME_CIUDAD?'<div style="font-size:13px;font-weight:700;margin-bottom:8px">📍 '+esc(ciudadTitulo(HOME_CIUDAD))+': '+lista.length+(lista.length===1?' pedido pendiente':' pedidos pendientes')+' <button type="button" class="btn btn-ghost btn-sm" onclick="HOME_CIUDAD=\'\';var s=document.getElementById(\'h-ciudad\');if(s)s.value=\'\';filtrarHome()">Quitar filtro</button></div>':'';
@@ -2394,6 +2400,7 @@ function cardHTML(p,conEntregar){
   var os=getOrdenes(p);var r=resumenOrdenes(p);
   var anulEstilo=(p.estatus==='ANULADO')?' style="opacity:.6;border:1px dashed #dc2626"':'';
   var h='<div class="card" id="card-'+pid+'"'+anulEstilo+'><div class="card-head"><div class="card-num">#'+num+'</div><div class="card-body"><div class="card-cliente">'+(p.cliente||'Sin nombre')+'</div><div class="card-meta">'+(p.ciudad||'sin ciudad')+'</div>'+chipVendedorPedido(p);
+  if(BUSQ_ACTUAL){var _hits=busqRenglonesPedido(p,BUSQ_ACTUAL);if(_hits.length)h+='<div style="margin-top:4px;font-size:11px;color:#7c3aed;font-weight:600">'+_hits.slice(0,3).map(function(x){return '🔎 '+esc(x.trim());}).join('<br>')+'</div>';}
   // Estado del pedido completo, a la vista para cambiarlo rápido.
   if(p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO')h+='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px"><span style="font-size:11px;font-weight:700;color:var(--muted)">Pedido:</span>'+selEstadoPedidoHTML(p)+'</div>';
   h+=ubicacionChipHTML(p);
@@ -3227,6 +3234,43 @@ function vendedorPedido(p){
   for(var i=0;i<cls.length;i++){var cl=cls[i];var ps=cl.pedidos||[];
     for(var j=0;j<ps.length;j++){if(String(ps[j].numero||'').replace(/^0+/,'')===num)return ps[j].vendedor||cl.vendedor||'';}}
   return '';
+}
+// ─── Búsqueda de pedidos por producto y medida ───
+// "pirámide de pared de 2 metros" encuentra "PIRAMIDE DE PARED 2.00 X 0.40".
+// Producto y medida deben estar en el MISMO renglón del pedido; la cantidad del
+// inicio del renglón no cuenta como medida. 1,20 = 1.20 = 120 cm.
+var BUSQ_VACIAS={de:1,del:1,la:1,el:1,los:1,las:1,con:1,que:1,y:1,en:1,para:1,por:1,un:1,una:1,pedido:1,pedidos:1,tengan:1,tenga:1,tiene:1,tienen:1,
+  mts:1,mt:1,m:1,cm:1,mm:1,metro:1,metros:1,centimetro:1,centimetros:1,pulgada:1,pulgadas:1,medida:1,medidas:1,x:1};
+function busqNorm(t){return String(t||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/(\d),(\d)/g,'$1.$2');}
+function busqRaiz(w){return w.length>3?w.replace(/s$/,''):w;}
+function busqNums(t){return (String(t).match(/\d+(?:\.\d+)?/g)||[]).map(parseFloat).filter(isFinite);}
+function busqMismaMedida(a,b){var eq=function(x,y){return Math.abs(x-y)<0.0001;};return eq(a,b)||eq(a*100,b)||eq(a,b*100);}
+function busqConsulta(q){
+  var t=busqNorm(q);
+  return {nums:busqNums(t),palabras:t.replace(/\d+(?:\.\d+)?/g,' ').split(/[^a-z]+/).filter(function(w){return w.length>=3&&!BUSQ_VACIAS[w];}).map(busqRaiz)};
+}
+function busqRenglon(r,c){
+  var t=busqNorm(r);
+  var pal=t.split(/[^a-z]+/).filter(Boolean).map(busqRaiz);
+  var ok=c.palabras.every(function(w){return pal.some(function(x){return x===w||(w.length>=4&&x.length>=4&&(x.indexOf(w)===0||w.indexOf(x)===0));});});
+  if(!ok)return false;
+  if(!c.nums.length)return true;
+  var ns=busqNums(t.replace(/^\s*\d+(?:\.\d+)?\s+/,''));   // sin la cantidad del inicio
+  return c.nums.every(function(n){return ns.some(function(m){return busqMismaMedida(n,m);});});
+}
+// Renglones del pedido que coinciden con la búsqueda de producto (vacío si no).
+function busqRenglonesPedido(p,q){
+  var c=busqConsulta(q);
+  if(!c.palabras.length)return [];
+  return String(p.descripcion||'').split(/\s*\|\s*|\n+/).filter(function(r){return r&&busqRenglon(r,c);});
+}
+function pedidoCoincideBusqueda(p,q){
+  q=String(q||'').trim();if(!q)return true;
+  var ql=q.toLowerCase();
+  var base=((p.numero||'')+' '+(p.cliente||'')+' '+(p.ciudad||'')+' '+vendedorPedido(p)).toLowerCase();
+  if(base.indexOf(ql)>=0)return true;
+  if(String(p.descripcion||'').toLowerCase().indexOf(ql)>=0)return true;
+  return busqRenglonesPedido(p,q).length>0;
 }
 function chipVendedorPedido(p){
   var v=vendedorPedido(p);
