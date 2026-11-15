@@ -1355,7 +1355,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v104 · productos preguntados en inventario';
+var APP_VERSION='v105 · preguntados vs stock';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1675,6 +1675,12 @@ function cargarConsultasInv(){
     }).catch(function(e){var b=document.getElementById('consultas-inv-box');if(b)b.innerHTML='<div style="font-size:12px;color:#dc2626">No se pudieron cargar los productos preguntados: '+esc(e.message||'')+'</div>';});
   }catch(e){}
 }
+// Stock actual de los artículos del inventario que corresponden a un producto preguntado.
+// null = todavía no se sabe qué artículo es (se aprende cuando el inventario está cargado).
+function cinvStock(k){
+  var p=((CINV.datos||{}).productos||{})[k];if(!p||!Array.isArray(p.invIds)||!p.invIds.length)return null;
+  var t=0;p.invIds.forEach(function(id){t+=(typeof invStockItem==='function')?invStockItem(id):0;});return t;
+}
 function cinvPeriodo(p){CINV.periodo=p;CINV.abierto='';pintarConsultasInv();}
 function cinvAbrir(k){CINV.abierto=(CINV.abierto===k)?'':k;pintarConsultasInv();}
 function _cinvFecha(ts){var d=new Date(ts);return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);}
@@ -1710,6 +1716,9 @@ function pintarConsultasInv(){
   h+='<div style="font-size:12px;color:#64748b;margin-bottom:8px">'+totPreg+' pregunta'+(totPreg===1?'':'s')+' · '+arr.length+' producto'+(arr.length===1?'':'s')+' distinto'+(arr.length===1?'':'s')+(CINV.periodo==='todo'?' · desde que se activó':' · últimos '+CINV.periodo+' días')+'</div>';
   if(!arr.length){h+='<div style="font-size:13px;color:#64748b">Nadie ha preguntado productos en este período.</div></div>';box.innerHTML=h;return;}
   var max=arr[0].veces||1;
+  // Lo que más preguntan y no hay: lo primero que conviene fabricar o importar.
+  var sinStock=arr.filter(function(x){var st=cinvStock(x.k);return st!==null&&st<=0;}).slice(0,8);
+  if(sinStock.length)h+='<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:8px 10px;margin-bottom:10px"><div style="font-size:12px;font-weight:700;color:#b91c1c;margin-bottom:4px">🔴 Los preguntan y NO hay en inventario</div>'+sinStock.map(function(x){return '<div style="font-size:12px;color:#7f1d1d">• '+esc(x.nombre)+' — '+x.veces+' vez'+(x.veces===1?'':'es')+'</div>';}).join('')+'</div>';
   arr.slice(0,40).forEach(function(x,i){
     var vs=Object.keys(x.vend).sort(function(a,b){return x.vend[b]-x.vend[a];});
     var abierto=CINV.abierto===x.k;
@@ -1717,6 +1726,8 @@ function pintarConsultasInv(){
     h+='<div style="display:flex;align-items:center;gap:8px"><div style="width:22px;font-size:12px;color:#94a3b8;font-weight:700">'+(i+1)+'</div>';
     h+='<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:#111">'+esc(x.nombre)+'</div>';
     h+='<div style="height:6px;background:#f1f5f9;border-radius:4px;margin-top:4px"><div style="height:6px;width:'+Math.max(4,Math.round(x.veces*100/max))+'%;background:#7c3aed;border-radius:4px"></div></div>';
+    var _st=cinvStock(x.k);
+    h+='<div style="font-size:11px;margin-top:3px;font-weight:700;color:'+(_st===null?'#94a3b8':_st>0?'#15803d':'#b91c1c')+'">'+(_st===null?'📦 sin cruzar con inventario':_st>0?'📦 hay '+(Math.round(_st*100)/100)+' en inventario':'📦 sin stock')+'</div>';
     h+='<div style="font-size:11px;color:#64748b;margin-top:3px">👤 '+vs.slice(0,3).map(function(v){return esc(v)+' ('+x.vend[v]+')';}).join(' · ')+(vs.length>3?' · +'+(vs.length-3):'')+'</div></div>';
     h+='<div style="text-align:right"><div style="font-size:18px;font-weight:800;color:#7c3aed">'+x.veces+'</div><div style="font-size:10px;color:#94a3b8">veces</div>'+(x.unid?'<div style="font-size:10px;color:#64748b">'+(Math.round(x.unid*100)/100)+' und</div>':'')+'</div></div>';
     if(abierto){
@@ -1732,6 +1743,7 @@ function pintarConsultasInv(){
     h+='<div style="font-size:13px;font-weight:700;margin:12px 0 4px">Quién pregunta más</div>';
     h+=va.map(function(v){return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 2px;border-bottom:1px solid #f5f5f5"><span>👤 '+esc(v)+'</span><b>'+porVend[v]+'</b></div>';}).join('');
   }
+  h+='<div style="font-size:12px;margin-top:10px;padding:8px 10px;border-radius:8px;background:'+(d.responder?'#f0fdf4;color:#166534':'#f8fafc;color:#475569')+'">'+(d.responder?'🤖 El bot está <b>respondiendo</b> en el grupo con el inventario. Para pausarlo: <b>!inventario pausa</b>':'🤖 Respuestas automáticas <b>apagadas</b>. Cuando el inventario esté cargado, escribe <b>!inventario listo</b> en el grupo.')+'</div>';
   h+='<div style="font-size:11px;color:#94a3b8;margin-top:8px">Toca un producto para ver los mensajes. Se anota solo cuando un vendedor pregunta si hay o se consigue algo en el grupo de inventario.</div>';
   h+='</div>';
   box.innerHTML=h;
