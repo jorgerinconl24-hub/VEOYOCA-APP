@@ -1216,7 +1216,7 @@ function renderCotizar(c){
   if(COTIZAR_MODO==='pedido'){c.innerHTML=toggle+cotUIpresu('pedido');presuInitForm();return;}
   if(COTIZAR_MODO==='lista'){c.innerHTML=toggle+cotUIlista('presu');return;}
   if(COTIZAR_MODO==='listapedido'){c.innerHTML=toggle+cotUIlista('pedido');return;}
-  if(COTIZAR_MODO==='stats'){c.innerHTML=toggle+cotUIstats();return;}
+  if(COTIZAR_MODO==='stats'){c.innerHTML=toggle+'<div class="section-pad" style="max-width:760px;margin:0 auto;padding-bottom:0"><div id="consultas-inv-box"></div></div>'+cotUIstats();cargarConsultasInv();return;}
   if(COTIZAR_MODO==='tasa'){c.innerHTML=toggle+cotUItasa();if(RKV_TASAS)tasaCalc();rkvCargarTasas(function(){tasaCalc();});return;}
   if(COTIZAR_MODO==='precios'){c.innerHTML=toggle+'<div id="precios-cont"></div>';preciosRender();preciosCargarDyn();rkvCargarTasas(function(){preciosRender();});return;}
   c.innerHTML=toggle+cotUIrack();
@@ -1355,7 +1355,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v103 · buscar pedidos por producto y medida';
+var APP_VERSION='v104 · productos preguntados en inventario';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1658,6 +1658,83 @@ function cotUIlista(kind){
       +'</div></div>';
   });
   return h+'</div>';
+}
+
+// ===== PRODUCTOS PREGUNTADOS EN EL GRUPO DE INVENTARIO =====
+// Lo escribe el webhook en veoyoca/consultasInv cada vez que un vendedor pregunta
+// en el grupo si hay o se consigue un producto. Aquí solo se lee.
+var CINV={datos:null,periodo:'30',abierto:''};
+function cargarConsultasInv(){
+  var box=document.getElementById('consultas-inv-box');if(!box)return;
+  if(CINV.datos){pintarConsultasInv();}
+  else box.innerHTML='<div style="font-size:12px;color:#94a3b8;padding:8px 2px">Cargando productos preguntados…</div>';
+  var fs=window._firestore;if(!fs||!_db){box.innerHTML='<div style="font-size:12px;color:#94a3b8">Sin conexión a la nube.</div>';return;}
+  try{
+    fs.getDoc(fs.doc(_db,'veoyoca','consultasInv')).then(function(snap){
+      CINV.datos=snap.exists()?snap.data():{};pintarConsultasInv();
+    }).catch(function(e){var b=document.getElementById('consultas-inv-box');if(b)b.innerHTML='<div style="font-size:12px;color:#dc2626">No se pudieron cargar los productos preguntados: '+esc(e.message||'')+'</div>';});
+  }catch(e){}
+}
+function cinvPeriodo(p){CINV.periodo=p;CINV.abierto='';pintarConsultasInv();}
+function cinvAbrir(k){CINV.abierto=(CINV.abierto===k)?'':k;pintarConsultasInv();}
+function _cinvFecha(ts){var d=new Date(ts);return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);}
+function pintarConsultasInv(){
+  var box=document.getElementById('consultas-inv-box');if(!box)return;
+  var d=CINV.datos||{},prods=d.productos||{},rec=d.recientes||[];
+  var h='<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin:12px 0 14px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><div style="font-size:14px;font-weight:700">🔎 Productos más preguntados en el grupo de inventario</div>';
+  h+='<div style="display:flex;gap:4px">'+[['7','7 días'],['30','30 días'],['todo','Todo']].map(function(o){return '<button class="btn '+(CINV.periodo===o[0]?'btn-dark':'btn-ghost')+' btn-sm" onclick="cinvPeriodo(\''+o[0]+'\')">'+o[1]+'</button>';}).join('')+'</div></div>';
+  if(!d.grupoId&&!Object.keys(prods).length){
+    h+='<div style="font-size:13px;color:#64748b;line-height:1.5">Aún no está activado. Entra al grupo de inventario en WhatsApp y escribe <b>!consultas aqui</b> (como administrador). Desde ese momento el bot anota cada producto que pregunten los vendedores.</div></div>';
+    box.innerHTML=h;return;
+  }
+  // Conteo del período: con "Todo" se usan los totales; con 7/30 días, los mensajes recientes.
+  var filas={},porVend={},nMsg=0;
+  if(CINV.periodo==='todo'){
+    Object.keys(prods).forEach(function(k){var p=prods[k];filas[k]={nombre:p.nombre,veces:p.veces||0,unid:p.unidades||0,vend:p.vendedores||{},ultima:p.ultima||0};
+      Object.keys(p.vendedores||{}).forEach(function(v){porVend[v]=(porVend[v]||0)+p.vendedores[v];});});
+    nMsg=rec.length;
+  }else{
+    var desde=Date.now()-(+CINV.periodo)*86400000;
+    rec.forEach(function(r){
+      if((r.ts||0)<desde)return;nMsg++;
+      (r.productos||[]).forEach(function(k,i){
+        var f=filas[k]||(filas[k]={nombre:(prods[k]&&prods[k].nombre)||k,veces:0,unid:0,vend:{},ultima:0});
+        f.veces++;f.unid+=(+((r.cants||[])[i])||0);f.vend[r.vendedor]=(f.vend[r.vendedor]||0)+1;if(r.ts>f.ultima)f.ultima=r.ts;
+        porVend[r.vendedor]=(porVend[r.vendedor]||0)+1;
+      });
+    });
+  }
+  var arr=Object.keys(filas).map(function(k){filas[k].k=k;return filas[k];}).sort(function(a,b){return b.veces-a.veces||b.ultima-a.ultima;});
+  var totPreg=arr.reduce(function(s,x){return s+x.veces;},0);
+  h+='<div style="font-size:12px;color:#64748b;margin-bottom:8px">'+totPreg+' pregunta'+(totPreg===1?'':'s')+' · '+arr.length+' producto'+(arr.length===1?'':'s')+' distinto'+(arr.length===1?'':'s')+(CINV.periodo==='todo'?' · desde que se activó':' · últimos '+CINV.periodo+' días')+'</div>';
+  if(!arr.length){h+='<div style="font-size:13px;color:#64748b">Nadie ha preguntado productos en este período.</div></div>';box.innerHTML=h;return;}
+  var max=arr[0].veces||1;
+  arr.slice(0,40).forEach(function(x,i){
+    var vs=Object.keys(x.vend).sort(function(a,b){return x.vend[b]-x.vend[a];});
+    var abierto=CINV.abierto===x.k;
+    h+='<div onclick="cinvAbrir(\''+x.k.replace(/'/g,'')+'\')" style="cursor:pointer;padding:9px 2px;border-bottom:1px solid #f0f0f0">';
+    h+='<div style="display:flex;align-items:center;gap:8px"><div style="width:22px;font-size:12px;color:#94a3b8;font-weight:700">'+(i+1)+'</div>';
+    h+='<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:#111">'+esc(x.nombre)+'</div>';
+    h+='<div style="height:6px;background:#f1f5f9;border-radius:4px;margin-top:4px"><div style="height:6px;width:'+Math.max(4,Math.round(x.veces*100/max))+'%;background:#7c3aed;border-radius:4px"></div></div>';
+    h+='<div style="font-size:11px;color:#64748b;margin-top:3px">👤 '+vs.slice(0,3).map(function(v){return esc(v)+' ('+x.vend[v]+')';}).join(' · ')+(vs.length>3?' · +'+(vs.length-3):'')+'</div></div>';
+    h+='<div style="text-align:right"><div style="font-size:18px;font-weight:800;color:#7c3aed">'+x.veces+'</div><div style="font-size:10px;color:#94a3b8">veces</div>'+(x.unid?'<div style="font-size:10px;color:#64748b">'+(Math.round(x.unid*100)/100)+' und</div>':'')+'</div></div>';
+    if(abierto){
+      var msgs=rec.filter(function(r){return (r.productos||[]).indexOf(x.k)>=0;}).slice(-8).reverse();
+      h+='<div style="margin:8px 0 2px 30px;background:#f8fafc;border-radius:8px;padding:8px">'+(msgs.length?msgs.map(function(r){return '<div style="font-size:12px;padding:3px 0"><b>'+esc(r.vendedor||'')+'</b> <span style="color:#94a3b8">'+_cinvFecha(r.ts)+'</span><br>'+esc(r.texto||'')+'</div>';}).join(''):'<div style="font-size:12px;color:#94a3b8">Sin mensajes recientes guardados.</div>')+'</div>';
+    }
+    h+='</div>';
+  });
+  if(arr.length>40)h+='<div style="font-size:11px;color:#94a3b8;padding-top:6px">…y '+(arr.length-40)+' productos más.</div>';
+  // Quién pregunta más
+  var va=Object.keys(porVend).sort(function(a,b){return porVend[b]-porVend[a];});
+  if(va.length){
+    h+='<div style="font-size:13px;font-weight:700;margin:12px 0 4px">Quién pregunta más</div>';
+    h+=va.map(function(v){return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 2px;border-bottom:1px solid #f5f5f5"><span>👤 '+esc(v)+'</span><b>'+porVend[v]+'</b></div>';}).join('');
+  }
+  h+='<div style="font-size:11px;color:#94a3b8;margin-top:8px">Toca un producto para ver los mensajes. Se anota solo cuando un vendedor pregunta si hay o se consigue algo en el grupo de inventario.</div>';
+  h+='</div>';
+  box.innerHTML=h;
 }
 
 // ===== ESTADISTICAS DE PRESUPUESTOS (solo admin) =====
