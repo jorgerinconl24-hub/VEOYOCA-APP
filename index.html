@@ -1355,7 +1355,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v109 · top productos desde PDFs de Valery';
+var APP_VERSION='v110 · top productos por demanda';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -2319,24 +2319,25 @@ function statTopProductosMesHTML(peds,tablaAbrir){
   b+='</select></div>';
   claves.concat(['todos']).forEach(function(mk){
     var M=mk==='todos'?T:meses[mk];
-    var lista=Object.keys(M.prod).map(function(k){return M.prod[k];}).sort(function(a,c){return c.cant-a.cant||c.pedidos-a.pedidos||a.nombre.localeCompare(c.nombre);});
-    var max=lista.length?lista[0].cant:0;
+    var lista=Object.keys(M.prod).map(function(k){return M.prod[k];}).sort(function(a,c){return c.pedidos-a.pedidos||c.cant-a.cant||a.nombre.localeCompare(c.nombre);});
+    var max=lista.length?lista[0].pedidos:0;
     b+='<div class="tp-mes" data-mes="'+mk+'" style="display:'+(mk===STAT_TOPMES_SEL?'block':'none')+'">';
     b+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">'
       +['<b style="font-size:18px">'+M.conDetalle+'</b><br>pedidos'+(M.pedidos>M.conDetalle?' leídos de '+M.pedidos:''),'<b style="font-size:18px">'+lista.length+'</b><br>productos distintos','<b style="font-size:18px">'+fmtCant(M.unidades)+'</b><br>unidades'+(M.monto?' · $'+fmtMoney(M.monto):'')].map(function(x){return '<div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:8px;text-align:center;font-size:11px;color:#475569;font-weight:600;line-height:1.3">'+x+'</div>';}).join('')
       +'</div>';
     if(!lista.length)b+='<div style="font-size:12px;color:var(--muted)">Aún no hay productos leídos de los PDFs de este período. Usa el botón <b>📄 Leer los PDFs</b> de arriba.</div>';
     else{
-      b+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:420px"><thead><tr style="text-align:left;border-bottom:2px solid #111"><th style="padding:6px 4px;width:28px">#</th><th style="padding:6px 4px">Producto</th><th style="padding:6px 4px;text-align:right">Cantidad</th><th style="padding:6px 4px;text-align:right">$ vendido</th><th style="padding:6px 4px;text-align:right">En pedidos</th></tr></thead><tbody>';
+      b+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:420px"><thead><tr style="text-align:left;border-bottom:2px solid #111"><th style="padding:6px 4px;width:28px">#</th><th style="padding:6px 4px">Producto</th><th style="padding:6px 4px;text-align:right">Veces comprado</th><th style="padding:6px 4px;text-align:right">Cantidad</th><th style="padding:6px 4px;text-align:right">$ vendido</th></tr></thead><tbody>';
       lista.forEach(function(pr,i){
-        var pct=max?Math.max(3,Math.round(pr.cant*100/max)):0;
+        var pct=max?Math.max(3,Math.round(pr.pedidos*100/max)):0;
         var medalla=i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1);
         var refs=Object.keys(pr.refs).map(function(r){return pr.refs[r];}).sort(function(a,c){return (parseInt(c.num,10)||0)-(parseInt(a.num,10)||0);});
         b+='<tr style="border-bottom:1px solid #eee;cursor:pointer" onclick="var d=this.nextElementSibling;d.style.display=d.style.display===\'none\'?\'table-row\':\'none\'"><td style="padding:6px 4px;font-weight:700;color:#475569">'+medalla+'</td>'
           +'<td style="padding:6px 4px"><div>'+esc(pr.nombre)+'</div><div style="height:5px;background:#f1f5f9;border-radius:3px;margin-top:4px"><div style="height:5px;width:'+pct+'%;background:#1a1a2e;border-radius:3px"></div></div></td>'
-          +'<td style="padding:6px 4px;text-align:right;font-weight:700">'+fmtCant(pr.cant)+'</td>'
+          +'<td style="padding:6px 4px;text-align:right;font-weight:800">'+pr.pedidos+' ▾</td>'
+          +'<td style="padding:6px 4px;text-align:right">'+fmtCant(pr.cant)+'</td>'
           +'<td style="padding:6px 4px;text-align:right;white-space:nowrap">'+(pr.monto?'$'+fmtMoney(pr.monto):'—')+'</td>'
-          +'<td style="padding:6px 4px;text-align:right">'+pr.pedidos+' ▾</td></tr>'
+          +'</tr>'
           +'<tr style="display:none;background:#f8fafc"><td></td><td colspan="4" style="padding:6px 4px 10px;font-size:11px;color:#475569">'+refs.map(function(x){return '<div>#'+esc(x.num)+' · '+esc(x.cliente)+' — <b>'+fmtCant(x.cant)+'</b></div>';}).join('')+'</td></tr>';
       });
       b+='</tbody></table>';
@@ -2344,7 +2345,7 @@ function statTopProductosMesHTML(peds,tablaAbrir){
     if(M.pedidos>M.conDetalle)b+='<div style="font-size:11px;color:#b45309;margin-top:6px">⚠️ '+(M.pedidos-M.conDetalle)+' pedido(s) de este período todavía no tienen sus productos leídos del PDF y no se cuentan.</div>';
     b+='</div>';
   });
-  b+='<div style="font-size:11px;color:#94a3b8;margin-top:8px">Ordenado de más a menos vendido por <b>cantidad</b> (unidades). "En pedidos" = en cuántos pedidos distintos aparece; toca un producto para ver de qué pedidos sale. Los productos y montos salen del PDF de Valery de cada pedido, nunca del desglose. El mes es la fecha de emisión del pedido. No cuenta pedidos anulados. Los productos se agrupan por descripción exacta.'+(sinFecha?' '+sinFecha+' pedido(s) sin fecha no se cuentan.':'')+'</div>';
+  b+='<div style="font-size:11px;color:#94a3b8;margin-top:8px">Ordenado por <b>veces comprado</b> (en cuántos pedidos distintos aparece: eso mide la demanda) y, si empatan, por <b>cantidad</b> de unidades. Toca un producto para ver de qué pedidos sale. Los productos y montos salen del PDF de Valery de cada pedido, nunca del desglose. El mes es la fecha de emisión del pedido. No cuenta pedidos anulados. Los productos se agrupan por descripción exacta.'+(sinFecha?' '+sinFecha+' pedido(s) sin fecha no se cuentan.':'')+'</div>';
   b+='</div>';
   return b;
 }
