@@ -11,7 +11,7 @@ importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js");
 // Sube este numero cada vez que cambies un archivo de la lista.
 // Ese bump es lo que obliga al navegador a bajar la version nueva.
 // ───────────────────────────────────────────────────────────
-var CACHE_NAME = 'veoyoca-v78';
+var CACHE_NAME = 'veoyoca-v79';
 
 var BASE = '/VEOYOCA-APP/';
 
@@ -32,7 +32,7 @@ self.addEventListener('install', function(e) {
       // addAll falla entero si UN archivo no existe.
       // Por eso se cachean de a uno: si falta el icono, el resto igual entra.
       return Promise.all(ARCHIVOS.map(function(url) {
-        return cache.add(url).catch(function(err) {
+        return cache.add(new Request(url, { cache: 'reload' })).catch(function(err) {
           console.warn('[SW] No se pudo cachear:', url, err);
         });
       }));
@@ -77,7 +77,9 @@ self.addEventListener('fetch', function(e) {
   if (url.pathname.indexOf(BASE) !== 0) return;
 
   e.respondWith(
-    fetch(req).then(function(resp) {
+    // cache:'no-cache' = siempre pregunta al servidor si hay version nueva
+    // (sin esto el navegador reusa su copia de GitHub Pages hasta 10 min).
+    fetch(req, { cache: 'no-cache' }).then(function(resp) {
       // Guardar copia fresca para la proxima vez que no haya señal
       if (resp && resp.status === 200 && resp.type === 'basic') {
         var copia = resp.clone();
