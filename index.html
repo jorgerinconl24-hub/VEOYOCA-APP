@@ -1355,7 +1355,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v107 · top productos por mes';
+var APP_VERSION='v108 · top productos: pedido con montos';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -2191,6 +2191,52 @@ function statSel(k){
   for(var j=0;j<cs.length;j++)cs[j].classList.toggle('on',cs[j].getAttribute('data-sp')===k);
 }
 
+// ===== PEDIDO ORIGINAL vs DESGLOSE A MANO =====
+// Cuando mandan al grupo de pedidos la planilla "DESGLOSE DE PIRAMIDES, RACK Y ESTANTERIA"
+// con PEDIDO# escrito, el bot la tomaba como corrección y reemplazaba la descripción y el PDF
+// del pedido de Valery. El bot guarda lo anterior en p.versionesPrevias: de ahí se recupera.
+var _RX_PIEZA_DG=/^(espaldar|entrepa[ñn]os?|soporte|paral|chambrana|corona|marcos?|vigas?|angulos?|ángulos?|modulos?|módulos?)\b/i;
+function _descPareceDesglose(d){
+  d=String(d||'');var rs=d.split(/\s*\|\s*|\n+/).map(function(r){return r.trim().replace(/^\d+(?:[.,]\d+)?\s*/,'');}).filter(Boolean);
+  if(rs.length<3)return false;
+  var imp=(d.match(/\(\s*imp\s*\)/gi)||[]).length;
+  var piezas=rs.filter(function(r){return _RX_PIEZA_DG.test(r);}).length;
+  return imp>=2||(piezas>=3&&piezas*2>=rs.length);
+}
+// Devuelve {i,v} con la versión anterior que sí es el pedido (no el desglose), o null.
+function pedidoVersionOriginal(p){
+  if(!p||!_descPareceDesglose(p.descripcion))return null;
+  var vs=Array.isArray(p.versionesPrevias)?p.versionesPrevias:[];
+  for(var i=vs.length-1;i>=0;i--){if(vs[i]&&vs[i].descripcion&&!_descPareceDesglose(vs[i].descripcion))return {i:i,v:vs[i]};}
+  return null;
+}
+function _descPedidoReal(p){var o=pedidoVersionOriginal(p);return o?o.v.descripcion:(p.descripcion||'');}
+function _restaurarPedidoOriginal(p){
+  var o=pedidoVersionOriginal(p);if(!o)return false;
+  var v=o.v;
+  if(p.pdfUrl&&p.pdfUrl!==v.pdfUrl)p.desglosesMano=(Array.isArray(p.desglosesMano)?p.desglosesMano:[]).concat([{url:p.pdfUrl,fecha:fecha(),hora:hora(),ts:Date.now()}]).slice(-5);
+  ['cliente','ciudad','direccion','fechaEmision','fechaLimite','total','telefono','proveedor','pdfUrl','descripcion'].forEach(function(k){if(v[k])p[k]=v[k];});
+  p.versionesPrevias=p.versionesPrevias.filter(function(x,j){return j!==o.i;});
+  p.actualizadoTS=Date.now();
+  registrarBitacora(p.id,'RESTAURADO el pedido original (con montos). El desglose a mano quedó guardado aparte.');
+  return true;
+}
+async function restaurarPedidoOriginalUI(id){
+  var p=DB.pedidos.find(function(x){return x.id===id;});if(!p)return;
+  if(!confirm('¿Restaurar el pedido original #'+(p.numero||'')+'? El desglose a mano no se borra: queda en el botón "🧩 Desglose a mano".'))return;
+  if(!_restaurarPedidoOriginal(p)){toast('No encontré la versión original de este pedido','err');return;}
+  await guardarDB();toast('Pedido #'+(p.numero||'')+' restaurado','ok');
+  if(TAB)goTab(TAB,document.getElementById('nb-'+TAB));
+}
+async function restaurarTodosPedidosDesglose(){
+  var lista=(DB.pedidos||[]).filter(pedidoVersionOriginal);
+  if(!lista.length){toast('No hay pedidos para restaurar','ok');return;}
+  if(!confirm('Restaurar '+lista.length+' pedido(s) que quedaron con el desglose a mano: '+lista.map(function(p){return '#'+p.numero;}).join(', ')+'?\n\nLos desgloses no se borran, quedan guardados aparte.'))return;
+  var n=0;lista.forEach(function(p){if(_restaurarPedidoOriginal(p))n++;});
+  await guardarDB();toast(n+' pedido(s) restaurados','ok');
+  if(TAB)goTab(TAB,document.getElementById('nb-'+TAB));
+}
+
 // ===== ESTADÍSTICAS DE VENTA — TOP PRODUCTOS POR MES =====
 // Los productos de cada pedido vienen en p.descripcion como "4 PIRAMIDE ... | 2 CHECK OUT ...".
 var STAT_TOPMES_SEL='';
@@ -2200,7 +2246,17 @@ function _tpNum(s){return parseFloat(String(s).replace(',','.'))||0;}
 function _tpRenglon(r){
   r=String(r||'').replace(/\s+/g,' ').trim().replace(/^[-•*·]+\s*/,'').replace(/[.;,]+$/,'').trim();
   if(!r)return null;
+  // quitar precio/total del final: ", Precio: 315,00", "- Precio unitario 65", "Total: 3150"
+  r=r.replace(/\s*[,;\-–]?\s*(precio|p\.\s*unit|total|monto)\b.*$/i,'').replace(/[.;,\-–\s]+$/,'').trim();
   var cant=1,m;
+  // "Cantidad: 10" en cualquier parte del renglón
+  m=r.match(/\s*[,;\-–]?\s*\bcant(?:idad)?\.?\s*:\s*(\d+(?:[.,]\d+)?)\s*(?:und\w*|unid\w*|pzas?)?/i);
+  if(m){cant=_tpNum(m[1]);r=(r.slice(0,m.index)+' '+r.slice(m.index+m[0].length)).replace(/\s+/g,' ').replace(/^[,;\-–\s]+|[,;\-–\s]+$/g,'').trim();
+    return r&&/[a-záéíóúñ]/i.test(r)?{cant:cant>0?cant:1,nombre:r}:null;}
+  // "x6" suelto en medio o al final: "(5 ENTREPAÑOS) x6 - ESPALDAR" (no confunde medidas como 1.20x0.40)
+  m=r.match(/(^|[\s)])x\s*(\d+)(?![\d.,*x])/i);
+  if(m&&!/^\d/.test(r)){cant=_tpNum(m[2]);r=(r.slice(0,m.index)+m[1]+r.slice(m.index+m[0].length)).replace(/\s+/g,' ').replace(/\s+-\s*$/,'').trim();
+    return r&&/[a-záéíóúñ]/i.test(r)?{cant:cant>0?cant:1,nombre:r}:null;}
   m=r.match(/^(\d+)(?![.,]\d)\s*(?:und\w*|unid\w*|pzas?|piezas?|x)?\s*[-:]?\s+(.+)$/i);
   if(m&&/[a-záéíóúñ]/i.test(m[2])){cant=_tpNum(m[1]);r=m[2];}
   else{
@@ -2218,7 +2274,7 @@ function _tpFechaPedido(p){
   return d&&!isNaN(d.getTime())?d:null;
 }
 function statTopProductosMesHTML(peds,tablaAbrir){
-  var meses={},sinFecha=0,sinDetalle=0;
+  var meses={},sinFecha=0,sinDetalle=0,nDesg=0,nDesgSinOrig=0;
   peds.forEach(function(p){
     if(!p||(p.estatus||'').toUpperCase()==='ANULADO')return;
     var d=_tpFechaPedido(p);
@@ -2226,14 +2282,16 @@ function statTopProductosMesHTML(peds,tablaAbrir){
     var mk=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2);
     var M=meses[mk]||(meses[mk]={pedidos:0,conDetalle:0,unidades:0,prod:{}});
     M.pedidos++;
-    var renglones=String(p.descripcion||'').split(/\s*\|\s*|\n+/).map(_tpRenglon).filter(Boolean);
+    if(pedidoVersionOriginal(p))nDesg++;else if(_descPareceDesglose(p.descripcion))nDesgSinOrig++;
+    var renglones=String(_descPedidoReal(p)).split(/\s*\|\s*|\n+/).map(_tpRenglon).filter(Boolean);
     if(!renglones.length){sinDetalle++;return;}
     M.conDetalle++;
     var vistos={};
     renglones.forEach(function(x){
       var k=_tpClave(x.nombre);if(!k)return;
-      var pr=M.prod[k]||(M.prod[k]={nombre:x.nombre,cant:0,pedidos:0});
+      var pr=M.prod[k]||(M.prod[k]={nombre:x.nombre,cant:0,pedidos:0,refs:{}});
       pr.cant+=x.cant;M.unidades+=x.cant;
+      var rk=String(p.numero||p.id);pr.refs[rk]=pr.refs[rk]||{num:p.numero||'?',cliente:p.cliente||'',cant:0};pr.refs[rk].cant+=x.cant;
       if(!vistos[k]){vistos[k]=true;pr.pedidos++;}
     });
   });
@@ -2246,8 +2304,10 @@ function statTopProductosMesHTML(peds,tablaAbrir){
   // "Todos" acumula todos los meses
   var T={pedidos:0,conDetalle:0,unidades:0,prod:{}};
   claves.forEach(function(mk){var M=meses[mk];T.pedidos+=M.pedidos;T.conDetalle+=M.conDetalle;T.unidades+=M.unidades;
-    Object.keys(M.prod).forEach(function(k){var a=M.prod[k],t=T.prod[k]||(T.prod[k]={nombre:a.nombre,cant:0,pedidos:0});t.cant+=a.cant;t.pedidos+=a.pedidos;});});
+    Object.keys(M.prod).forEach(function(k){var a=M.prod[k],t=T.prod[k]||(T.prod[k]={nombre:a.nombre,cant:0,pedidos:0,refs:{}});t.cant+=a.cant;t.pedidos+=a.pedidos;Object.keys(a.refs).forEach(function(r){t.refs[r]=a.refs[r];});});});
   if(!STAT_TOPMES_SEL||(STAT_TOPMES_SEL!=='todos'&&!meses[STAT_TOPMES_SEL]))STAT_TOPMES_SEL=claves[0];
+  if(nDesg)b+='<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:10px;padding:10px;margin-bottom:10px;font-size:12px;color:#9a3412">⚠️ <b>'+nDesg+' pedido(s)</b> quedaron con el <b>desglose a mano</b> en vez del pedido con montos. Aquí ya se cuentan con el pedido original.<div style="margin-top:8px"><button class="btn btn-dark btn-sm" onclick="restaurarTodosPedidosDesglose()">↩️ Restaurar los '+nDesg+' pedidos originales</button></div></div>';
+  if(nDesgSinOrig)b+='<div style="font-size:11px;color:#b45309;margin-bottom:8px">⚠️ '+nDesgSinOrig+' pedido(s) parecen tener solo el desglose (sin copia del pedido original). Para corregirlos, reenvía al grupo el PDF del pedido con montos con el texto <b>corrige</b>.</div>';
   function etiqueta(mk){if(mk==='todos')return 'Todos los meses';var y=mk.slice(0,4),m=parseInt(mk.slice(5),10);return _TP_MESES[m-1]+' '+y;}
   b+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap"><label style="font-size:12px;font-weight:600;color:#475569">Mes:</label>'
     +'<select onchange="statTopMesSel(this.value)" style="padding:7px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;font-weight:600;background:#fff">';
@@ -2267,17 +2327,19 @@ function statTopProductosMesHTML(peds,tablaAbrir){
       lista.forEach(function(pr,i){
         var pct=max?Math.max(3,Math.round(pr.cant*100/max)):0;
         var medalla=i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1);
-        b+='<tr style="border-bottom:1px solid #eee"><td style="padding:6px 4px;font-weight:700;color:#475569">'+medalla+'</td>'
+        var refs=Object.keys(pr.refs).map(function(r){return pr.refs[r];}).sort(function(a,c){return (parseInt(c.num,10)||0)-(parseInt(a.num,10)||0);});
+        b+='<tr style="border-bottom:1px solid #eee;cursor:pointer" onclick="var d=this.nextElementSibling;d.style.display=d.style.display===\'none\'?\'table-row\':\'none\'"><td style="padding:6px 4px;font-weight:700;color:#475569">'+medalla+'</td>'
           +'<td style="padding:6px 4px"><div>'+esc(pr.nombre)+'</div><div style="height:5px;background:#f1f5f9;border-radius:3px;margin-top:4px"><div style="height:5px;width:'+pct+'%;background:#1a1a2e;border-radius:3px"></div></div></td>'
           +'<td style="padding:6px 4px;text-align:right;font-weight:700">'+fmtCant(pr.cant)+'</td>'
-          +'<td style="padding:6px 4px;text-align:right">'+pr.pedidos+'</td></tr>';
+          +'<td style="padding:6px 4px;text-align:right">'+pr.pedidos+' ▾</td></tr>'
+          +'<tr style="display:none;background:#f8fafc"><td></td><td colspan="3" style="padding:6px 4px 10px;font-size:11px;color:#475569">'+refs.map(function(x){return '<div>#'+esc(x.num)+' · '+esc(x.cliente)+' — <b>'+fmtCant(x.cant)+'</b></div>';}).join('')+'</td></tr>';
       });
       b+='</tbody></table>';
     }
     if(M.pedidos>M.conDetalle)b+='<div style="font-size:11px;color:#b45309;margin-top:6px">⚠️ '+(M.pedidos-M.conDetalle)+' pedido(s) de este período no traen productos en la descripción y no se cuentan.</div>';
     b+='</div>';
   });
-  b+='<div style="font-size:11px;color:#94a3b8;margin-top:8px">Ordenado de más a menos vendido por <b>cantidad</b> (unidades). "En pedidos" = en cuántos pedidos distintos aparece. El mes es la fecha de emisión del pedido. No cuenta pedidos anulados. Los productos se agrupan por descripción exacta.'+(sinFecha?' '+sinFecha+' pedido(s) sin fecha no se cuentan.':'')+'</div>';
+  b+='<div style="font-size:11px;color:#94a3b8;margin-top:8px">Ordenado de más a menos vendido por <b>cantidad</b> (unidades). "En pedidos" = en cuántos pedidos distintos aparece; toca un producto para ver de qué pedidos sale. Se toma el pedido con montos (Valery), nunca el desglose. El mes es la fecha de emisión del pedido. No cuenta pedidos anulados. Los productos se agrupan por descripción exacta.'+(sinFecha?' '+sinFecha+' pedido(s) sin fecha no se cuentan.':'')+'</div>';
   b+='</div>';
   return b;
 }
@@ -2617,6 +2679,7 @@ function cardHTML(p,conEntregar){
   if(p.estatus==='ANULADO')h+='<div style="font-size:11px;color:#dc2626;font-weight:700;margin-top:3px">🔴 Anulado'+(p.reemplazadoPor?' · reemplazado por #'+esc(p.reemplazadoPor):'')+'</div>';
   h+=instChipHTML(p);
   h+=transporteChipHTML(p);
+  if(SESSION&&SESSION.rol==='admin'&&pedidoVersionOriginal(p))h+='<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:7px 9px;margin-top:6px;font-size:12px;color:#9a3412">⚠️ Quedó cargado el <b>desglose a mano</b> en vez del pedido con montos.<div style="margin-top:6px"><button class="btn btn-dark btn-sm" onclick="event.stopPropagation();restaurarPedidoOriginalUI(\''+p.id+'\')">↩️ Restaurar pedido original</button></div></div>';
   h+='<div class="card-desc">'+(p.descripcion||'')+'</div></div>'+badgeHTML(p)+'</div><div class="card-foot">';
   if(SESSION.rol==='admin'&&parseFloat(p.monto||0)>0){
     var _cr=(typeof cobrarDePedido==='function')?cobrarDePedido(p.numero):null;
@@ -2631,6 +2694,7 @@ function cardHTML(p,conEntregar){
   if(p.pdfUrl)h+='<a href="'+p.pdfUrl+'" target="_blank" class="btn btn-blue btn-sm" style="text-decoration:none">📄 Ver PDF</a>';
   if(p.planoUrl)h+='<a href="'+esc(p.planoUrl)+'" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none">📐 Ver plano</a>';
   if(dgPorNumero(p.numero))h+='<button class="btn btn-ghost btn-sm" onclick="verDesglosePedido(\''+esc((p.numero||'').toString())+'\')">🧩 Desglose</button>';
+  if(Array.isArray(p.desglosesMano)&&p.desglosesMano.length){var _dm=p.desglosesMano[p.desglosesMano.length-1];if(_dm&&_dm.url)h+='<a href="'+esc(_dm.url)+'" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none">🧩 Desglose a mano</a>';}
   if(SESSION.rol==='admin'){
     var _crA=cuentaAbonosDePedido(p.numero);
     if(_crA&&(_crA.abonos||[]).length)h+='<button class="btn btn-ghost btn-sm" onclick="verAbonosPedido(\''+pid+'\')">🧾 Abonos ('+_crA.abonos.length+')</button>';
