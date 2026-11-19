@@ -1355,7 +1355,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v111 · top productos por demanda';
+var APP_VERSION='v112 · presupuesto desde foto';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1423,6 +1423,14 @@ function cotUIpresu(kind){
     +'<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:14px">'
     +'<div style="font-size:15px;font-weight:700;color:#1a1a2e;margin-bottom:4px">📄 Hacer '+_doc+'</div>'
     +'<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Datos del cliente e ítems. Se arma el '+_doc+' con número de control e IVA 16%, para copiar o descargar en PDF.</div>'
+    +(esPed?'':'<div style="background:#eff6ff;border:1px dashed #93c5fd;border-radius:10px;padding:12px;margin-bottom:14px">'
+      +'<div style="font-size:13px;font-weight:700;color:#1e3a8a;margin-bottom:2px">📷 Desde foto de presupuesto a mano</div>'
+      +'<div style="font-size:11px;color:#475569;margin-bottom:8px">1) Escribe nombre y teléfono del cliente abajo · 2) Toma o sube la foto · 3) Sale el PDF solo.</div>'
+      +'<input type="file" id="pp-foto" accept="image/*,application/pdf" style="display:none" onchange="presuFotoLeer(this)">'
+      +'<button class="btn btn-dark btn-sm" style="width:100%" id="pp-foto-btn" onclick="document.getElementById(\'pp-foto\').click()">📷 Tomar / subir foto</button>'
+      +'<label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:#374151"><input type="checkbox" id="pp-foto-auto" checked> Generar el PDF automáticamente al leer la foto</label>'
+      +'<div id="pp-foto-msg" style="font-size:12px;margin-top:6px"></div>'
+      +'</div>')
     +'<div style="margin-bottom:10px"><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">🔎 Cliente guardado (busca y selecciona, o deja vacío si es nuevo)</label><input id="pp-buscar" list="pp-cli-dl" placeholder="Escribe el nombre o teléfono..." onchange="presuElegirCliente(this.value)" oninput="presuElegirCliente(this.value)" style="width:100%;padding:9px;border:1px solid #d1d5db;border-radius:8px;font-size:14px"><datalist id="pp-cli-dl"></datalist></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
     +presuCampo('Nombre del cliente *','pp-nombre','')+presuCampo('Teléfono *','pp-tel','04141234567')
@@ -1517,6 +1525,56 @@ function presuAdjuntarPDFaCliente(p,cl){
       })
       .catch(function(){toast('Presupuesto guardado; el PDF no subió (revisa conexión). Puedes descargarlo abajo.','err');});
   }).catch(function(){toast('Presupuesto guardado; no cargaron las librerías del PDF','err');});
+}
+// ── Presupuesto desde FOTO a mano: la IA (webhook) lee los ítems y se arma el PDF ──
+function presuFotoComprimir(file){
+  return new Promise(function(ok,ko){
+    if(file.type==='application/pdf'){var fr=new FileReader();fr.onload=function(){ok({data:fr.result,mime:'application/pdf'});};fr.onerror=ko;fr.readAsDataURL(file);return;}
+    var url=URL.createObjectURL(file);var img=new Image();
+    img.onload=function(){
+      var MAX=2000,w=img.naturalWidth,h=img.naturalHeight,k=Math.min(1,MAX/Math.max(w,h));
+      var cv=document.createElement('canvas');cv.width=Math.round(w*k);cv.height=Math.round(h*k);
+      var cx=cv.getContext('2d');cx.fillStyle='#fff';cx.fillRect(0,0,cv.width,cv.height);cx.drawImage(img,0,0,cv.width,cv.height);
+      URL.revokeObjectURL(url);ok({data:cv.toDataURL('image/jpeg',0.85),mime:'image/jpeg'});
+    };
+    img.onerror=function(){URL.revokeObjectURL(url);ko(new Error('No pude abrir la imagen'));};
+    img.src=url;
+  });
+}
+function presuFotoLeer(inp){
+  var file=inp&&inp.files&&inp.files[0];if(!file)return;
+  var msg=document.getElementById('pp-foto-msg'),btn=document.getElementById('pp-foto-btn');
+  var setMsg=function(h){if(msg)msg.innerHTML=h;};
+  if(btn){btn.disabled=true;btn.textContent='⏳ Leyendo la foto...';}
+  setMsg('<span style="color:#1d4ed8">Leyendo el presupuesto a mano, espera unos segundos...</span>');
+  presuFotoComprimir(file).then(function(f){
+    return fetch('https://veoyoca-webhook.onrender.com/presupuesto/leer-foto',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imagen:f.data,mime:f.mime})}).then(function(r){return r.json();});
+  }).then(function(res){
+    if(!res||!res.ok)throw new Error((res&&res.error)||'No se pudo leer la foto');
+    if(!res.items||!res.items.length)throw new Error('No encontré ítems en la foto');
+    PRESU_ITEMS=res.items.map(function(it){return {desc:it.desc,cant:String(it.cant),precio:String(it.precio)};});
+    presuRenderItems();presuActualizarTotales();
+    var g=function(id){return document.getElementById(id);};
+    var c=res.cliente||{};
+    if(g('pp-nombre')&&!g('pp-nombre').value.trim()&&c.nombre)g('pp-nombre').value=c.nombre;
+    if(g('pp-tel')&&!g('pp-tel').value.trim()&&c.telefono)g('pp-tel').value=c.telefono;
+    if(g('pp-rif')&&!g('pp-rif').value.trim()&&c.rif)g('pp-rif').value=c.rif;
+    if(g('pp-dir')&&!g('pp-dir').value.trim()&&c.direccion)g('pp-dir').value=c.direccion;
+    if(g('pp-nota')&&!g('pp-nota').value.trim()&&res.nota)g('pp-nota').value=res.nota;
+    var aviso=res.avisos?'<div style="color:#b45309;margin-top:4px">⚠️ '+esc(res.avisos)+'</div>':'';
+    var sinPrecio=PRESU_ITEMS.some(function(it){return !(parseFloat(it.precio)>0);});
+    var nom=(g('pp-nombre').value||'').trim(),tel=(g('pp-tel').value||'').replace(/[^0-9]/g,'');
+    var auto=(g('pp-foto-auto')||{}).checked;
+    if(auto&&nom&&tel.length>=7&&!sinPrecio){
+      setMsg('<span style="color:#065f46">✅ '+PRESU_ITEMS.length+' ítem(s) leídos. Generando PDF...</span>'+aviso);
+      var _nro=presuNextNro();presuGenerar();
+      if(presuFind(_nro))presuDescargarPDF(_nro);
+    }else{
+      var falta=[];if(!nom)falta.push('nombre');if(tel.length<7)falta.push('teléfono');if(sinPrecio)falta.push('precio de algún ítem');
+      setMsg('<span style="color:#065f46">✅ '+PRESU_ITEMS.length+' ítem(s) leídos. Revisa abajo'+(falta.length?' y completa: <b>'+falta.join(', ')+'</b>':'')+', luego toca <b>Generar presupuesto</b>.</span>'+aviso);
+    }
+  }).catch(function(e){setMsg('<span style="color:#b91c1c">❌ '+esc(e.message||'Error')+'. Intenta con una foto más clara o de frente.</span>');})
+  .then(function(){if(btn){btn.disabled=false;btn.textContent='📷 Tomar / subir foto';}if(inp)inp.value='';});
 }
 function presuGenerar(){
   var nombre=(document.getElementById('pp-nombre').value||'').trim();
