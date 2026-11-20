@@ -1355,7 +1355,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v114 · comparar lista física de pedidos';
+var APP_VERSION='v115 · comparar lista no se cierra sola';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -2442,6 +2442,7 @@ function statTopMesSel(mk){
 }
 
 function goTab(tab,btn){
+  if(tab!=='reportes')REP_VISTA='';
   TAB=tab;document.querySelectorAll('.nav-btn').forEach(function(b){b.classList.remove('on');});if(btn)btn.classList.add('on');
   var titulos={home:'Pedidos',finanzas:'Finanzas',nuevo:'Nuevo pedido',reportes:'Reportes',admin:'Administracion',plan:'Planificación',ia:'Plan IA',notif:'Alertas y Notificaciones',ventas:'Ventas / CRM',cotizar:'Cotizador de Racks',inventario:'Inventario'};
   document.getElementById('topbar-sub').textContent=titulos[tab]||SESSION.nombre;
@@ -4969,14 +4970,19 @@ function ecEnviarWA(){
 var REP_OTROS_ABIERTO=false;
 // ── Comparar una lista física de pedidos (papel) con los pedidos de la app ──
 var COMPARAR_LISTA_DEF="293 GENERADORES (VIANIS/SR JORGE)\n396 SUPERMERCADO LEA (VIANIS)\n407 FARMA EXPRESS AMPARO (SR JORGE)\n420 FASTO (SR JORGE)\n433 IBRAHIN ATTA (SR JORGE)\n529 KALDUN CECILIO ACOSTA (JORGE LUIS)\n548 AUTOMERCADO PUNTA DEL SOL (IVANI/SR JORGE)\n555 KALDUN LOS CACTUS (JORGE LUIS)\n568 GRUPO KOREANO (SR JORGE)\n620 INVERSIONES FRONTINO 2023 (CARLOS)\n635 SUPER HOGAR METROPOLIS (VIANIS/JORGE LUIS)\n644 GENERADORES (VIANIS/SR JORGE)\n647 NIZZAR YOUNESEE (JORGE LUIS)\n649 MARAPLUS BARQUISIMETO (SR JORGE)\n652 DISTRIBUIDORA DISEL (SR JORGE)\n653 JORGE LICORES (SR JORGE)\n654 SUPERMERCADO OLANO (SR JORGE)\n665 BRIOS (VIANIS)\n673 REINIMAR ANGELICA PEREZ (CARLOS)\n681 HIERRO MOCA (VIANIS/SR JORGE)\n687 KELVIN SANCHEZ (CARLOS)\n688 INVERSIONES MADRE MIA (VIANIS)\n693 FARMACIA EL SAMAN (CARLOS)\n695 COMERCIAL MI MESA (VIANIS)\n696 FARMA EXPRESS AMPARO (SR JORGE)\n702 DISTRIBUIDORA DE HIERRO EL VIGIA (VIANIS)\n704 D&D INVERSIONES (IVANNI/SR JORGE)\n707 KELVIN SANCHEZ (CARLOS)\n710 DISTRIBUIDORA MOVEN (VIANIS)\n725 SUPER DISTRIBUIDORA CG (JORGE LUIS)\n726 YUSLEYDI CELIS (VIANIS)\n728 DISTRIBUIDORA E INVERSIONES ECONOMARKET GYG (VIANIS)\n730 FARMACIA FARMA EXPRESS MACHIQUES (JORGE LUIS)\n731 FARMACIA 24 HORAS (CARLOS)\n732 SUPERMERCADO SLEDO (JORGE LUIS)\n739 RAY QUINTERO (CARLOS)\n740 INVERSIONES LOPEZ SANDOVAL (VIANIS)\n745 FARMACIA 24 HORAS (CARLOS)\n746 JUSEF ATTA MENDEZ (SR JORGE)\n748 INVERSIONES LA MORENITA (IVANNY)\n749 JOHNNY SANDOVAL (CARLOS)\n750 PANADERIA KALDUN SIERRA MAESTRA (JORGE LUIS)\n757 CODIZULCA (VIANIS)\n758 COMERCIAL DE JESUS (SR JORGE)\n761 JOSE DARIO URDANETA ATENCIO (IVANY)\n763 VERUZKA PAOLA LUZARDO BARBOZA (CARLOS)\n768 JHON ALVARADO (CARLOS/SR JORGE)\n774 FARMA VENEZUELA (SR JORGE)\n775 FARMA VENEZUELA (SR JORGE)\n776 INVERSIONES YUBIA DE LUZ (CARLOS)\n780 MOVILMAR (VIANIS/SR JORGE)\n785 DIXON OLIVERO (JORGE LUIS)\n786 DISTRIBUIDORA E INVERSIONES ECONOMARKET GYG (VIANIS)\n787 KELVIN SANCHEZ (CARLOS)\n791 SUPERMERCADO GRAN ROQUE (CARLOS)\n795 IBRAHIN ATTA (SR JORGE)\n796 HERMANOS ATENCIO (SR JORGE)\n799 D&D INVERSIONES (IVANY/SR JORGE)\n800 D&D INVERSIONES (IVANY/SR JORGE)\n802 EMPRESAS CHIQUINQUIRA (CARLOS)\n804 SUPER HOGAR METROPOLIS (VIANIS)\n805 INVERSIONES MADRE MIA (VIANIS)\n807 DISTRIBUIDORA E INVERSIONES ECONOMARKET GYG (VIANIS)\n821 ALFREDO FRIGORIFICO (a mano)\n827 DIST. E INV. ECONOMARKET (a mano)\n525 FARMA EXPRESS COROMOTO (a mano)\n816 GRUPO PINYTEX (a mano)\n550 KALDUN (a mano, verificar)\n811 KALDUN (a mano)\n826 KALDUN (a mano)";
-function abrirCompararLista(){
-  var c=document.getElementById('content');var txt;
+// La app se vuelve a dibujar sola cuando llegan cambios de Firebase (goTab(TAB)).
+// REP_VISTA mantiene abierta la comparación en esos redibujos.
+var REP_VISTA='';
+function abrirCompararLista(){REP_VISTA='comparar';renderCompararLista(document.getElementById('content'));}
+function cerrarCompararLista(){REP_VISTA='';goTab('reportes',document.getElementById('nb-reportes'));}
+function renderCompararLista(c){
+  var txt;
   try{txt=localStorage.getItem('veo_comparar_lista');}catch(e){}
   c.innerHTML='<div style="padding:14px">'
-    +'<button class="btn btn-ghost btn-sm" onclick="goTab(\'reportes\',document.getElementById(\'nb-reportes\'))">← Volver a Reportes</button>'
+    +'<button class="btn btn-ghost btn-sm" onclick="cerrarCompararLista()">← Volver a Reportes</button>'
     +'<h3 style="margin:12px 0 4px">🔍 Comparar lista física con la app</h3>'
     +'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Un pedido por línea: el número primero y después el cliente (opcional). Ya viene cargada la lista de las hojas "Resumen de pedidos 2026".</div>'
-    +'<textarea id="cmp-lista" rows="10" style="width:100%;font-family:monospace;font-size:12px;padding:8px;border:1px solid var(--border);border-radius:8px">'+esc(txt||COMPARAR_LISTA_DEF)+'</textarea>'
+    +'<textarea id="cmp-lista" oninput="try{localStorage.setItem(\'veo_comparar_lista\',this.value)}catch(e){}" rows="10" style="width:100%;font-family:monospace;font-size:12px;padding:8px;border:1px solid var(--border);border-radius:8px">'+esc(txt||COMPARAR_LISTA_DEF)+'</textarea>'
     +'<div style="display:flex;gap:8px;margin:8px 0 14px"><button class="btn btn-dark" style="flex:2" onclick="compararListaRun()">Comparar</button>'
     +'<button class="btn btn-ghost" style="flex:1" onclick="document.getElementById(\'cmp-lista\').value=COMPARAR_LISTA_DEF">Restaurar lista</button></div>'
     +'<div id="cmp-res"></div></div>';
@@ -5015,6 +5021,11 @@ function compararListaCopiar(){
   try{navigator.clipboard.writeText(t).then(function(){toast('Resultado copiado','ok');});}catch(e){toast('No se pudo copiar','err');}
 }
 function renderReportes(c){
+  if(REP_VISTA==='comparar'){
+    // Si la comparación ya está en pantalla, solo se actualizan los resultados (no se borra lo que escribes).
+    if(document.getElementById('cmp-lista')&&c.contains(document.getElementById('cmp-lista'))){compararListaRun();return;}
+    renderCompararLista(c);return;
+  }
   var total=DB.pedidos.length,ent=DB.pedidos.filter(function(p){return p.estatus==='ENTREGADO';}).length;
   var pend=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO';}).length;
   var venc=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO'&&clasif(p)==='vencido';}).length;
