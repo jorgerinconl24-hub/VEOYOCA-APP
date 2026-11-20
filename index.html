@@ -694,8 +694,16 @@ async function guardarCliente1(cl){
     await setDoc(doc(_db,'clientes',cl.id),cl);
     mostrarBadge('ok');
   }catch(e){mostrarBadge('err');toast('No se guardo el cliente: '+e.message,'err');}
-  guardarDB();
+  guardarDBDiferido();
 }
+// El documento grande (bitácora, etc.) pesa mucho: si un vendedor marca 10 clientes
+// seguidos, se guarda UNA vez al terminar, no 10.
+var _guardarDBDifTimer=null;
+function guardarDBDiferido(){
+  clearTimeout(_guardarDBDifTimer);
+  _guardarDBDifTimer=setTimeout(function(){_guardarDBDifTimer=null;guardarDB();},2500);
+}
+window.addEventListener('pagehide',function(){if(_guardarDBDifTimer){clearTimeout(_guardarDBDifTimer);_guardarDBDifTimer=null;guardarDB();}});
 async function borrarCliente1(id){
   if(!_db||!id)return;
   mostrarBadge('syncing');
@@ -1355,7 +1363,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v116 · listas de precios de proveedores';
+var APP_VERSION='v117 · CRM más rápido y sin saltos';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -3739,7 +3747,23 @@ function notificarBienvenidaVendedor(cl){
   }catch(e){console.log('notificarBienvenidaVendedor err',e);}
 }
 function chipCliente(txt,bg,col){return '<span class="card-vend" style="background:'+bg+';color:'+col+';margin-right:4px">'+esc(txt)+'</span>';}
+// Posición de scroll de la pantalla y de la tabla, para que nada salte al redibujar.
+function _scrollGuardar(){
+  var w=document.querySelector('#ventas-lista .crm-wrap'),ct=document.getElementById('content'),se=document.scrollingElement||document.documentElement;
+  return {y:se?se.scrollTop:0,cy:ct?ct.scrollTop:0,wt:w?w.scrollTop:0,wl:w?w.scrollLeft:0};
+}
+function _scrollRestaurar(p){
+  if(!p)return;
+  var w=document.querySelector('#ventas-lista .crm-wrap'),ct=document.getElementById('content'),se=document.scrollingElement||document.documentElement;
+  if(se)se.scrollTop=p.y;if(ct)ct.scrollTop=p.cy;if(w){w.scrollTop=p.wt;w.scrollLeft=p.wl;}
+}
 function renderVentas(c){
+  // Si ya estábamos en Ventas, se conservan los filtros y la posición (antes se perdían y la lista saltaba arriba).
+  var _filt=null,_pos=null;
+  if(document.getElementById('ventas-lista')){
+    _filt={};['v-buscar','v-vendedor','v-est1','v-fecha-contacto'].forEach(function(k){var e=document.getElementById(k);if(e)_filt[k]=e.value;});
+    _pos=_scrollGuardar();
+  }
   var cls=getClientes();
   var contactados=cls.filter(function(x){return est1De(x)==='CONTACTADO';}).length;
   var presup=cls.filter(function(x){return (x.estado2||'')==='PRESUPUESTO ENVIADO';}).length;
@@ -3780,7 +3804,9 @@ function renderVentas(c){
   var pendCt=cls.filter(function(x){if(estaFinalizado(x))return false;var d=diasRestantes(x.proximoContacto);if(d===null||d>0)return false;return SESSION.rol==='admin'||x.vendedor===SESSION.nombre;});
   var bannerCt=pendCt.length?'<div onclick="var s=document.getElementById(\'v-est1\');if(s){s.value=\'__VENC__\';filtrarVentas();}" style="background:var(--warning);color:#fff;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;justify-content:space-between;gap:8px"><span>\uD83D\uDCC5 '+pendCt.length+' contacto'+(pendCt.length>1?'s':'')+' para hoy o vencido'+(pendCt.length>1?'s':'')+(SESSION.rol==='admin'?' (todos)':' tuyos')+'</span><span style="font-size:11px;opacity:.85">Toca para ver \u2192</span></div>':'';
   c.innerHTML=statsBar+bannerCt+toolbar+'<div style="font-size:10px;color:#cbd5e1;text-align:right;padding:2px 10px">'+APP_VERSION+'</div><div id="ventas-lista"></div>';
+  if(_filt)Object.keys(_filt).forEach(function(k){var e=document.getElementById(k);if(e)e.value=_filt[k];});
   filtrarVentas();
+  if(_pos)_scrollRestaurar(_pos);
 }
 function cambiarVistaVentas(v){VENTAS_VISTA=v;localStorage.setItem('veo_ventas_vista',v);renderVentas(document.getElementById('content'));}
 // ¿El cliente fue marcado como CONTACTADO en la fecha dada (DD/MM/YYYY) por 'quien'?
@@ -4114,7 +4140,7 @@ function filtrarVentas(){
   var lista=ordenarClientes(clientesFiltrados());
   var cnt=document.getElementById('v-fecha-count');
   if(cnt){var ffc=(document.getElementById('v-fecha-contacto')||{value:''}).value;cnt.textContent=ffc?('✓ '+lista.length+' contactado'+(lista.length===1?'':'s')+' ese día'):'';}
-  if(VENTAS_VISTA==='tabla'){renderTablaCRM(el,lista);return;}
+  if(VENTAS_VISTA==='tabla'){var _p=_scrollGuardar();renderTablaCRM(el,lista);_scrollRestaurar(_p);return;}
   if(!getClientes().length){el.innerHTML='<div class="empty"><div class="empty-icon">\uD83D\uDCBC</div>A\u00FAn no hay clientes en el CRM<br><span style="font-size:12px">Toca "+ Nuevo cliente" para agregar el primero</span></div>';return;}
   if(!lista.length){el.innerHTML='<div class="empty"><div class="empty-icon">\uD83D\uDD0D</div>Ning\u00FAn cliente coincide con el filtro</div>';return;}
   if(VENTAS_VISTA==='tablero'){
@@ -4147,7 +4173,13 @@ function filtrarVentas(){
 // ---- VISTA TABLA: edición directa en las casillas, tipo Notion ----
 // Cada cambio en una celda se guarda solo (con espera de 0.9s para
 // agrupar varios cambios seguidos en un solo guardado a Firebase).
-var CRM_SAVE_TIMER=null;
+var CRM_SAVE_TIMER=null,CRM_PEND={};
+// Guarda cada cliente editado (agrupando ráfagas), sin que uno cancele al otro.
+function crmGuardarLuego(cl){
+  CRM_PEND[cl.id]=cl;
+  clearTimeout(CRM_SAVE_TIMER);
+  CRM_SAVE_TIMER=setTimeout(function(){var pend=CRM_PEND;CRM_PEND={};Object.keys(pend).forEach(function(k){guardarCliente1(pend[k]);});},700);
+}
 function crmCampo(id,campo,valor){
   var cl=getClientes().find(function(x){return x.id===id;});if(!cl)return;
   var prev=cl[campo];
@@ -4186,8 +4218,7 @@ function crmCampo(id,campo,valor){
   }
   // Al marcar la visita a la oficina a mano, se registra la fecha automaticamente
   if(campo==='visitoOficina'){ if(valor==='SÍ'){ if(!cl.fechaVisita)cl.fechaVisita=fecha(); } else { cl.fechaVisita=''; } }
-  clearTimeout(CRM_SAVE_TIMER);
-  CRM_SAVE_TIMER=setTimeout(function(){guardarCliente1(cl);},900);
+  crmGuardarLuego(cl);
   if(campo==='proximoContacto'&&valor)notificarProximoContacto(cl);
   if(campo==='redSocial'&&valor)notificarNuevoLeadGrupo(cl);
   // Bot vendedor: al asignar el vendedor, o al poner el teléfono cuando ya hay vendedor.
@@ -4239,6 +4270,7 @@ function renderTablaCRM(el,lista){
   h+='</tr></thead><tbody>';
   // Fila de alta rapida, como la fila "Nuevo" de Notion
   h+='<tr><td class="colfija" style="background:var(--ibg)"><input id="crm-nuevo" placeholder="+ Nuevo cliente (Enter)" onkeydown="if(event.key===\'Enter\')crmQuickAdd(this)"></td><td colspan="'+(esDuenoJorge()?21:20)+'" style="padding:8px 10px;font-size:11px;color:var(--muted);background:var(--ibg)">Escribe el nombre, presiona Enter y llena las casillas directamente \u2014 los cambios se guardan solos. Toca \uD83D\uDCC2 para abrir la ficha y los seguimientos.</td></tr>';
+  var _total=lista.length;lista=lista.slice(0,CRM_TABLA_MAX);
   lista.forEach(function(cl){
     var id=cl.id;
     h+='<tr>';
@@ -4266,10 +4298,15 @@ function renderTablaCRM(el,lista){
     if(esDuenoJorge()){var _ta=tiempoAtencionTxt(cl);h+='<td style="min-width:130px;font-size:11px;color:#7c3aed;font-weight:600">'+(_ta?esc(_ta):'\u2014')+'</td>';}
     h+='</tr>';
   });
-  h+='</tbody></table></div>';
+  h+='</tbody></table>';
+  if(_total>lista.length)h+='<div style="padding:12px;text-align:center"><button class="btn btn-ghost" onclick="CRM_TABLA_MAX+=200;filtrarVentas()">Mostrar 200 más ('+(_total-lista.length)+' restantes)</button></div>';
+  h+='</div>';
   if(!lista.length&&getClientes().length)h+='<div class="empty" style="padding:20px">Ning\u00FAn cliente coincide con el filtro</div>';
   el.innerHTML=h;
 }
+// La tabla dibuja de a tandas: 670 clientes × 22 columnas de una vez era lo que la ponía lenta.
+// El buscador y los filtros siguen buscando en TODOS los clientes.
+var CRM_TABLA_MAX=120;
 // ═══════════════════════════════════════════════════════════
 // COLUMNA DE SEGUIMIENTOS EN LA TABLA
 // Se escribe y se agrega sin abrir la ficha: escribir y Enter. Muestra el
@@ -7975,6 +8012,8 @@ async function cargarDatos(){
     var mapa={};
     cs.docs.forEach(function(d){mapa[d.id]=d.data();});
     DB.clientes=Object.keys(mapa).map(function(k){return mapa[k];});
+    // Cambios hechos aquí mismo: la pantalla ya los muestra; redibujar todo era lo que la ponía lenta.
+    if(cs.metadata&&cs.metadata.hasPendingWrites)return;
     if(TAB==='ventas')programarRerender();
   },function(e){console.error('Escucha de clientes:',e);});
 
