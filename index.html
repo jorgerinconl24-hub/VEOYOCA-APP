@@ -1355,7 +1355,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v115 · comparar lista no se cierra sola';
+var APP_VERSION='v116 · listas de precios de proveedores';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -5138,6 +5138,67 @@ function initBotControl(){
   _botTimer=setInterval(function(){if(!_botCargando&&_botEl('botControlCard'))botCargar();},60000);
 }
 
+// ── LISTAS DE PRECIOS DE PROVEEDORES (solo admin) ──
+// Los PDF se suben a la nube por el webhook (/subir-pdf-orden) y aquí solo se guarda
+// la lista de enlaces, en su propio documento: veoyoca/listasProveedores.
+var LISTAS_PROV=null;
+function listasProvCargar(){
+  var fs=window._firestore;if(!fs||!_db)return;
+  fs.getDoc(fs.doc(_db,'veoyoca','listasProveedores')).then(function(snap){
+    LISTAS_PROV=(snap.exists()&&Array.isArray(snap.data().listas))?snap.data().listas:[];
+    var b=document.getElementById('listas-prov-box');if(b)b.innerHTML=listasProvHTML();
+  }).catch(function(){LISTAS_PROV=LISTAS_PROV||[];var b=document.getElementById('listas-prov-box');if(b)b.innerHTML=listasProvHTML();});
+}
+function listasProvGuardar(arr){
+  var fs=window._firestore;if(!fs||!_db){toast('Sin conexión a la nube','err');return Promise.reject();}
+  return fs.setDoc(fs.doc(_db,'veoyoca','listasProveedores'),{listas:arr,updatedAt:Date.now(),updatedBy:SESSION?SESSION.nombre:''})
+    .then(function(){LISTAS_PROV=arr;var b=document.getElementById('listas-prov-box');if(b)b.innerHTML=listasProvHTML();});
+}
+function listasProvHTML(){
+  if(LISTAS_PROV===null)return '<div class="admin-row"><div class="admin-meta">Cargando...</div></div>';
+  var h='';
+  if(!LISTAS_PROV.length)h+='<div class="admin-row"><div class="admin-info"><div class="admin-meta" style="color:var(--muted)">Aún no hay listas. Sube el PDF de la lista de un proveedor.</div></div></div>';
+  LISTAS_PROV.slice().sort(function(a,b){return (a.proveedor||'').localeCompare(b.proveedor||'')||(b.ts||0)-(a.ts||0);}).forEach(function(l){
+    h+='<div class="admin-row"><div class="admin-info"><div class="admin-name">'+esc(l.proveedor||'')+' · '+esc(l.nombre||'')+'</div>'
+      +'<div class="admin-meta">'+(l.vigencia?'Vigencia: '+esc(l.vigencia)+' · ':'')+'subida '+esc(l.fecha||'')+(l.por?' por '+esc(l.por):'')+'</div></div>'
+      +'<a class="btn btn-dark btn-sm" href="'+esc(l.url)+'" target="_blank" rel="noopener">Ver PDF</a>'
+      +'<button class="btn btn-red btn-sm" style="margin-left:6px" onclick="listasProvEliminar(\''+l.id+'\')">Eliminar</button></div>';
+  });
+  h+='<div class="admin-row" style="display:block">'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">'
+    +'<input id="lp-prov" placeholder="Proveedor (ej. EL SOL)" style="flex:1;min-width:120px;padding:8px;border:1px solid var(--border);border-radius:8px">'
+    +'<input id="lp-nombre" placeholder="Nombre (ej. Lista 153)" style="flex:1;min-width:120px;padding:8px;border:1px solid var(--border);border-radius:8px">'
+    +'<input id="lp-vig" placeholder="Vigencia (ej. Enero 2025)" style="flex:1;min-width:120px;padding:8px;border:1px solid var(--border);border-radius:8px"></div>'
+    +'<input type="file" id="lp-file" accept="application/pdf,image/*" style="display:none" onchange="listasProvSubir(this)">'
+    +'<button class="btn btn-dark btn-sm" style="width:100%" id="lp-btn" onclick="document.getElementById(\'lp-file\').click()">📎 Subir PDF de la lista</button></div>';
+  return h;
+}
+function listasProvSubir(inp){
+  if(!SESSION||SESSION.rol!=='admin'){toast('Solo el admin','err');return;}
+  var f=inp.files&&inp.files[0];if(!f)return;
+  var g=function(id){return (document.getElementById(id)||{}).value||'';};
+  var prov=g('lp-prov').trim().toUpperCase(),nom=g('lp-nombre').trim(),vig=g('lp-vig').trim();
+  if(!prov){toast('Escribe el proveedor primero','err');inp.value='';return;}
+  if(!nom)nom=f.name.replace(/\.[^.]+$/,'');
+  var btn=document.getElementById('lp-btn');if(btn){btn.disabled=true;btn.textContent='⏳ Subiendo...';}
+  var rd=new FileReader();
+  rd.onload=function(){
+    var mt=f.type||'application/pdf';
+    veoPost('/subir-pdf-orden',{data:rd.result,mediaType:mt,nombre:'listaprov_'+(prov+'_'+nom).replace(/[^A-Za-z0-9]+/g,'_').substring(0,50)}).then(function(r){
+      if(!r||!r.ok||!r.url)throw new Error((r&&r.error)||'sin enlace');
+      var arr=(LISTAS_PROV||[]).concat([{id:uid(),proveedor:prov,nombre:nom,vigencia:vig,url:r.url,archivo:f.name,fecha:fecha(),ts:Date.now(),por:SESSION.nombre}]);
+      return listasProvGuardar(arr).then(function(){toast('Lista guardada ✓','ok');});
+    }).catch(function(e){toast('No se pudo subir: '+(e&&e.message||''),'err');})
+    .then(function(){if(btn){btn.disabled=false;btn.textContent='📎 Subir PDF de la lista';}inp.value='';});
+  };
+  rd.readAsDataURL(f);
+}
+function listasProvEliminar(id){
+  if(!SESSION||SESSION.rol!=='admin')return;
+  var l=(LISTAS_PROV||[]).find(function(x){return x.id===id;});if(!l)return;
+  if(!confirm('¿Quitar la lista "'+(l.proveedor||'')+' · '+(l.nombre||'')+'"?'))return;
+  listasProvGuardar(LISTAS_PROV.filter(function(x){return x.id!==id;})).then(function(){toast('Lista quitada','warn');});
+}
 function renderAdmin(c){
   if(SESSION.rol!=='admin'){c.innerHTML='<div class="empty">Acceso denegado</div>';return;}
   var html='<div class="section-pad"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="sec-label" style="margin:0">Usuarios ('+DB.usuarios.length+')</div><button class="btn btn-dark btn-sm" data-nuevo-usuario="1">+ Agregar</button></div><div class="admin-section">';
@@ -5147,6 +5208,8 @@ function renderAdmin(c){
   if((DB.instaladores||[]).length)DB.instaladores.forEach(function(ins){html+='<div class="admin-row"><div class="admin-info"><div class="admin-name">'+esc(ins.nombre)+'</div><div class="admin-meta">'+(ins.telefono?('📱 '+esc(ins.telefono)):'sin teléfono')+'</div></div><button class="btn btn-red btn-sm" onclick="eliminarInstalador(\''+ins.id+'\')">Eliminar</button></div>';});
   else html+='<div class="admin-row"><div class="admin-info"><div class="admin-meta" style="color:var(--muted)">Aún no hay instaladores. Agrégalos para asignarlos a las instalaciones.</div></div></div>';
   html+='</div>';
+  html+='<div style="margin:20px 0 10px"><div class="sec-label" style="margin:0">📑 Listas de precios de proveedores</div><div style="font-size:11px;color:var(--muted)">Solo las ve el admin.</div></div><div class="admin-section" id="listas-prov-box">'+listasProvHTML()+'</div>';
+  if(LISTAS_PROV===null)listasProvCargar();
   html+=botControlHTML();
   html+='<div class="sec-label" style="margin-top:20px">Sistema</div><div class="admin-section"><div class="admin-row"><div class="admin-info"><div class="admin-name">Total pedidos</div></div><strong>'+DB.pedidos.length+'</strong></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Base de datos</div></div><span style="color:var(--success);font-weight:600">Firebase activo</span></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Exportar</div></div><button class="btn btn-ghost btn-sm" data-exportar="json">JSON</button><button class="btn btn-ghost btn-sm" data-exportar="csv" style="margin-left:6px">CSV</button></div><div class="admin-row"><div class="admin-info"><div class="admin-name">Importar pedidos (Excel)</div><div class="admin-meta">Reemplaza TODOS los pedidos por los del archivo (Hoja1)</div></div><input type="file" id="ped-file" accept=".xlsx,.xls" style="display:none" onchange="importarPedidosExcel(this)"><button class="btn btn-blue btn-sm" onclick="document.getElementById(\'ped-file\').click()">Importar</button></div><div class="admin-row"><div class="admin-info"><div class="admin-name" style="color:var(--danger)">Borrar todos los pedidos</div><div class="admin-meta">No se puede deshacer</div></div><button class="btn btn-red btn-sm" data-borrar-pedidos="1">Borrar</button></div></div></div>';
   c.innerHTML=html;
