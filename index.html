@@ -1355,7 +1355,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v113 · editar presupuesto (nuevo nº)';
+var APP_VERSION='v114 · comparar lista física de pedidos';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -4967,6 +4967,53 @@ function ecEnviarWA(){
 }
 
 var REP_OTROS_ABIERTO=false;
+// ── Comparar una lista física de pedidos (papel) con los pedidos de la app ──
+var COMPARAR_LISTA_DEF="293 GENERADORES (VIANIS/SR JORGE)\n396 SUPERMERCADO LEA (VIANIS)\n407 FARMA EXPRESS AMPARO (SR JORGE)\n420 FASTO (SR JORGE)\n433 IBRAHIN ATTA (SR JORGE)\n529 KALDUN CECILIO ACOSTA (JORGE LUIS)\n548 AUTOMERCADO PUNTA DEL SOL (IVANI/SR JORGE)\n555 KALDUN LOS CACTUS (JORGE LUIS)\n568 GRUPO KOREANO (SR JORGE)\n620 INVERSIONES FRONTINO 2023 (CARLOS)\n635 SUPER HOGAR METROPOLIS (VIANIS/JORGE LUIS)\n644 GENERADORES (VIANIS/SR JORGE)\n647 NIZZAR YOUNESEE (JORGE LUIS)\n649 MARAPLUS BARQUISIMETO (SR JORGE)\n652 DISTRIBUIDORA DISEL (SR JORGE)\n653 JORGE LICORES (SR JORGE)\n654 SUPERMERCADO OLANO (SR JORGE)\n665 BRIOS (VIANIS)\n673 REINIMAR ANGELICA PEREZ (CARLOS)\n681 HIERRO MOCA (VIANIS/SR JORGE)\n687 KELVIN SANCHEZ (CARLOS)\n688 INVERSIONES MADRE MIA (VIANIS)\n693 FARMACIA EL SAMAN (CARLOS)\n695 COMERCIAL MI MESA (VIANIS)\n696 FARMA EXPRESS AMPARO (SR JORGE)\n702 DISTRIBUIDORA DE HIERRO EL VIGIA (VIANIS)\n704 D&D INVERSIONES (IVANNI/SR JORGE)\n707 KELVIN SANCHEZ (CARLOS)\n710 DISTRIBUIDORA MOVEN (VIANIS)\n725 SUPER DISTRIBUIDORA CG (JORGE LUIS)\n726 YUSLEYDI CELIS (VIANIS)\n728 DISTRIBUIDORA E INVERSIONES ECONOMARKET GYG (VIANIS)\n730 FARMACIA FARMA EXPRESS MACHIQUES (JORGE LUIS)\n731 FARMACIA 24 HORAS (CARLOS)\n732 SUPERMERCADO SLEDO (JORGE LUIS)\n739 RAY QUINTERO (CARLOS)\n740 INVERSIONES LOPEZ SANDOVAL (VIANIS)\n745 FARMACIA 24 HORAS (CARLOS)\n746 JUSEF ATTA MENDEZ (SR JORGE)\n748 INVERSIONES LA MORENITA (IVANNY)\n749 JOHNNY SANDOVAL (CARLOS)\n750 PANADERIA KALDUN SIERRA MAESTRA (JORGE LUIS)\n757 CODIZULCA (VIANIS)\n758 COMERCIAL DE JESUS (SR JORGE)\n761 JOSE DARIO URDANETA ATENCIO (IVANY)\n763 VERUZKA PAOLA LUZARDO BARBOZA (CARLOS)\n768 JHON ALVARADO (CARLOS/SR JORGE)\n774 FARMA VENEZUELA (SR JORGE)\n775 FARMA VENEZUELA (SR JORGE)\n776 INVERSIONES YUBIA DE LUZ (CARLOS)\n780 MOVILMAR (VIANIS/SR JORGE)\n785 DIXON OLIVERO (JORGE LUIS)\n786 DISTRIBUIDORA E INVERSIONES ECONOMARKET GYG (VIANIS)\n787 KELVIN SANCHEZ (CARLOS)\n791 SUPERMERCADO GRAN ROQUE (CARLOS)\n795 IBRAHIN ATTA (SR JORGE)\n796 HERMANOS ATENCIO (SR JORGE)\n799 D&D INVERSIONES (IVANY/SR JORGE)\n800 D&D INVERSIONES (IVANY/SR JORGE)\n802 EMPRESAS CHIQUINQUIRA (CARLOS)\n804 SUPER HOGAR METROPOLIS (VIANIS)\n805 INVERSIONES MADRE MIA (VIANIS)\n807 DISTRIBUIDORA E INVERSIONES ECONOMARKET GYG (VIANIS)\n821 ALFREDO FRIGORIFICO (a mano)\n827 DIST. E INV. ECONOMARKET (a mano)\n525 FARMA EXPRESS COROMOTO (a mano)\n816 GRUPO PINYTEX (a mano)\n550 KALDUN (a mano, verificar)\n811 KALDUN (a mano)\n826 KALDUN (a mano)";
+function abrirCompararLista(){
+  var c=document.getElementById('content');var txt;
+  try{txt=localStorage.getItem('veo_comparar_lista');}catch(e){}
+  c.innerHTML='<div style="padding:14px">'
+    +'<button class="btn btn-ghost btn-sm" onclick="goTab(\'reportes\',document.getElementById(\'nb-reportes\'))">← Volver a Reportes</button>'
+    +'<h3 style="margin:12px 0 4px">🔍 Comparar lista física con la app</h3>'
+    +'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Un pedido por línea: el número primero y después el cliente (opcional). Ya viene cargada la lista de las hojas "Resumen de pedidos 2026".</div>'
+    +'<textarea id="cmp-lista" rows="10" style="width:100%;font-family:monospace;font-size:12px;padding:8px;border:1px solid var(--border);border-radius:8px">'+esc(txt||COMPARAR_LISTA_DEF)+'</textarea>'
+    +'<div style="display:flex;gap:8px;margin:8px 0 14px"><button class="btn btn-dark" style="flex:2" onclick="compararListaRun()">Comparar</button>'
+    +'<button class="btn btn-ghost" style="flex:1" onclick="document.getElementById(\'cmp-lista\').value=COMPARAR_LISTA_DEF">Restaurar lista</button></div>'
+    +'<div id="cmp-res"></div></div>';
+  compararListaRun();
+}
+function compararListaRun(){
+  var ta=document.getElementById('cmp-lista');if(!ta)return;
+  try{localStorage.setItem('veo_comparar_lista',ta.value);}catch(e){}
+  var norm=function(n){return String(n==null?'':n).replace(/\D/g,'').replace(/^0+/,'');};
+  var lista=[],vistos={};
+  ta.value.split(/\n/).forEach(function(l){var m=l.match(/^\s*#?\s*(\d{1,6})\s*[-–:.]?\s*(.*)$/);if(!m)return;var n=norm(m[1]);if(!n||vistos[n])return;vistos[n]=1;lista.push({n:n,txt:m[2].trim()});});
+  var app={};(DB.pedidos||[]).forEach(function(p){var n=norm(p.numero);if(n&&!app[n])app[n]=p;});
+  var est=function(p){return p.estatus==='ENTREGADO'?'Entregado':p.estatus==='ANULADO'?'Anulado':estadoPedidoLabel(p.estatus);};
+  var enAmbas=[],soloLista=[],ojo=[];
+  lista.forEach(function(it){var p=app[it.n];if(!p){soloLista.push(it);return;}
+    (p.estatus==='ENTREGADO'||p.estatus==='ANULADO'?ojo:enAmbas).push({it:it,p:p});});
+  var soloApp=(DB.pedidos||[]).filter(function(p){var n=norm(p.numero);return n&&!vistos[n]&&p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO';})
+    .sort(function(a,b){return (+norm(a.numero))-(+norm(b.numero));});
+  var fila=function(n,cli,extra){return '<div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px"><b style="min-width:42px">#'+esc(n)+'</b><div style="flex:1">'+esc(cli||'')+(extra?'<div style="color:var(--muted);font-size:11px">'+extra+'</div>':'')+'</div></div>';};
+  var bloque=function(t,col,arr,f){return '<div class="chart-wrap" style="margin:0 0 12px"><div class="chart-title" style="color:'+col+'">'+t+' ('+arr.length+')</div>'+(arr.length?arr.map(f).join(''):'<div style="font-size:12px;color:var(--muted)">Ninguno</div>')+'</div>';};
+  var html='<div style="font-size:13px;margin-bottom:10px">Lista: <b>'+lista.length+'</b> pedidos · App: <b>'+Object.keys(app).length+'</b> pedidos</div>'
+    +bloque('✅ En la lista y en la app (pendientes)','#047857',enAmbas,function(x){return fila(x.it.n,x.p.cliente,'Lista: '+esc(x.it.txt)+' · App: '+esc(est(x.p))+(vendedorPedido(x.p)?' · '+esc(vendedorPedido(x.p)):''));})
+    +bloque('⚠️ En la lista pero en la app ya están ENTREGADOS o ANULADOS','#b45309',ojo,function(x){return fila(x.it.n,x.p.cliente,'Lista: '+esc(x.it.txt)+' · App: <b>'+esc(est(x.p))+'</b>');})
+    +bloque('❌ En la lista y NO están en la app','#b91c1c',soloLista,function(it){return fila(it.n,it.txt,'');})
+    +bloque('📱 Pendientes en la app que NO están en la lista','#1d4ed8',soloApp,function(p){return fila(norm(p.numero),p.cliente,esc(est(p))+(vendedorPedido(p)?' · '+esc(vendedorPedido(p)):'')+(p.fechaEmision?' · '+esc(p.fechaEmision):''));})
+    +'<button class="btn btn-ghost" style="width:100%" onclick="compararListaCopiar()">📋 Copiar resultado en texto</button>';
+  document.getElementById('cmp-res').innerHTML=html;
+  window._CMP={enAmbas:enAmbas,ojo:ojo,soloLista:soloLista,soloApp:soloApp,norm:norm,est:est};
+}
+function compararListaCopiar(){
+  var r=window._CMP;if(!r)return;
+  var t='*Comparación lista física vs app*\n\n✅ En ambas, pendientes ('+r.enAmbas.length+'): '+r.enAmbas.map(function(x){return x.it.n;}).join(', ')
+   +'\n\n⚠️ En la lista pero en la app entregados/anulados ('+r.ojo.length+'):\n'+r.ojo.map(function(x){return '#'+x.it.n+' '+(x.p.cliente||'')+' — '+r.est(x.p);}).join('\n')
+   +'\n\n❌ En la lista y NO en la app ('+r.soloLista.length+'):\n'+r.soloLista.map(function(it){return '#'+it.n+' '+it.txt;}).join('\n')
+   +'\n\n📱 Pendientes en la app que NO están en la lista ('+r.soloApp.length+'):\n'+r.soloApp.map(function(p){return '#'+r.norm(p.numero)+' '+(p.cliente||'');}).join('\n');
+  try{navigator.clipboard.writeText(t).then(function(){toast('Resultado copiado','ok');});}catch(e){toast('No se pudo copiar','err');}
+}
 function renderReportes(c){
   var total=DB.pedidos.length,ent=DB.pedidos.filter(function(p){return p.estatus==='ENTREGADO';}).length;
   var pend=DB.pedidos.filter(function(p){return p.estatus!=='ENTREGADO'&&p.estatus!=='ANULADO';}).length;
@@ -4983,7 +5030,7 @@ function renderReportes(c){
   if(va.length){html+='<div class="chart-wrap"><div class="chart-title">Por vendedor</div>';va.slice(0,8).forEach(function(item){html+='<div class="bar-row"><div class="bar-label">'+item.v.split(' ')[0]+'</div><div class="bar-track"><div class="bar-fill" style="width:'+Math.round((item.t/maxT)*100)+'%;background:var(--accent)"></div></div><div class="bar-val">'+item.t+'</div></div>';});html+='</div>';}
   if(bit.length){html+='<div class="chart-wrap"><div class="chart-title">Actividad reciente</div>';bit.forEach(function(b){html+='<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:12px"><div style="font-weight:600">'+(b.accion||'').substring(0,60)+'</div><div style="color:var(--muted)">'+b.fecha+' '+b.hora+'</div></div>';});html+='</div>';}
   // Reportes es de ordenes de compra. Lo demas queda plegado al final, sin perderse.
-  c.innerHTML='<div style="padding-top:14px"><div id="rep-oc">'+(repOcHTML()||'<div class="empty">No hay órdenes registradas.</div>')+'</div></div>'
+  c.innerHTML='<div style="padding:14px 14px 0"><button class="btn btn-dark" style="width:100%;padding:12px" onclick="abrirCompararLista()">🔍 Comparar lista física de pedidos con la app</button></div><div style="padding-top:14px"><div id="rep-oc">'+(repOcHTML()||'<div class="empty">No hay órdenes registradas.</div>')+'</div></div>'
     +'<details'+(REP_OTROS_ABIERTO?' open':'')+' ontoggle="REP_OTROS_ABIERTO=this.open" style="margin:0 14px 14px"><summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);padding:8px 0">Otros: reporte de pedidos y actividad</summary><div style="margin:0 -14px">'+html+'</div></details>';
 }
 
