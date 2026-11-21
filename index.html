@@ -1363,7 +1363,27 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v118 · Presupuesto con formato del sistema';
+var APP_VERSION='v119 · Presupuesto con formato del sistema + auto-actualización';
+// ===== AUTO-ACTUALIZACIÓN: si hay una versión nueva publicada, recarga sola =====
+// (en iPhone la app instalada queda abierta en memoria y no toma los cambios)
+(function(){
+  var chequeando=false,ultimo=0;
+  function revisar(forzar){
+    if(chequeando)return;var ahora=Date.now();if(!forzar&&ahora-ultimo<60000)return;
+    chequeando=true;ultimo=ahora;
+    fetch('/VEOYOCA-APP/index.html?v='+ahora,{cache:'no-store'}).then(function(r){return r.ok?r.text():'';}).then(function(t){
+      chequeando=false;var m=t.match(/var APP_VERSION='([^']*)'/);if(!m||m[1]===APP_VERSION)return;
+      var k='veo_upd_'+m[1];try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,'1');}catch(e){}
+      try{toast('Actualizando la app a la versión nueva...','ok');}catch(e){}
+      var fin=function(){location.reload();};
+      try{if(window.caches){caches.keys().then(function(ns){return Promise.all(ns.map(function(n){return caches.delete(n);}));}).then(function(){if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.update();});});setTimeout(fin,600);}).catch(fin);}else fin();}catch(e){fin();}
+    }).catch(function(){chequeando=false;});
+  }
+  document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')revisar(false);});
+  window.addEventListener('focus',function(){revisar(false);});
+  window.addEventListener('load',function(){setTimeout(function(){revisar(true);},3000);});
+  setInterval(function(){if(document.visibilityState==='visible')revisar(false);},5*60000);
+})();
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
