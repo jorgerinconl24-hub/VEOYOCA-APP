@@ -1363,7 +1363,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v117 · CRM más rápido y sin saltos';
+var APP_VERSION='v118 · Presupuesto con formato del sistema';
 var PRESU_EMPRESA={nombre:'VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE, C.A.',rif:'J305897085'};
 var PRESU_ITEMS=[{desc:'',cant:'',precio:''}];
 function fmtMoney(n){n=Number(n)||0;return n.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1664,28 +1664,63 @@ function presuResultHTML(p,kind){
     +'</div>';
 }
 function presuCopiarTexto(nro){var p=presuFind(nro);if(!p){toast('No encontré ese presupuesto','err');return;}copiarAlPortapapeles(presuTexto(p),'Presupuesto copiado');}
+function presuFechaMas(f,n){var d;var pt=(f||'').split('/');if(pt.length===3){var y=+pt[2];if(y<100)y+=2000;d=new Date(y,+pt[1]-1,+pt[0]);}else{d=new Date();}d.setDate(d.getDate()+n);return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear();}
 function presuPDF(p,kind){
+  // Formato calcado del presupuesto del sistema administrativo (Presupuesto Nro. 0000001317)
   var LBLP=(kind==='pedido')?'Pedido':'Presupuesto';
-  var jsPDF=window.jspdf.jsPDF;var doc=new jsPDF({unit:'pt',format:'a4'});
-  var W=doc.internal.pageSize.getWidth(),M=40;
-  doc.setFont('helvetica','bold');doc.setFontSize(12);doc.text(PRESU_EMPRESA.nombre,M,48,{maxWidth:W-230});
-  doc.setFont('helvetica','normal');doc.setFontSize(8);doc.text('RIF: '+PRESU_EMPRESA.rif,M,62);
-  doc.setFont('helvetica','bold');doc.setFontSize(13);doc.text(LBLP+' Nro.',W-M,48,{align:'right'});
-  doc.setFontSize(11);doc.text(presuNroFmt(p.nro),W-M,64,{align:'right'});
-  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text('Fecha Emisión: '+(p.fecha||''),W-M,84,{align:'right'});
-  var cy=108;doc.setFontSize(9);
-  doc.text('Razón Social: '+(p.cliente.nombre||''),M,cy);cy+=14;
-  doc.text('RIF: '+(p.cliente.rif||''),M,cy);cy+=14;
-  doc.text('Dirección: '+(p.cliente.direccion||''),M,cy);cy+=14;
-  doc.text('Teléfonos: '+(p.cliente.telefono||''),M,cy);
-  var body=p.items.map(function(it){return [it.desc,fmtMoney(it.cant),fmtMoney(it.precio),fmtMoney(it.total)];});
-  doc.autoTable({startY:cy+16,head:[['Descripción','Cantidad','Precio Unitario','Total']],body:body,theme:'plain',styles:{fontSize:9,cellPadding:3,textColor:[0,0,0]},headStyles:{fontStyle:'bold',textColor:[0,0,0],lineColor:[0,0,0],lineWidth:{bottom:0.7}},bodyStyles:{textColor:[0,0,0]},columnStyles:{0:{cellWidth:'auto'},1:{halign:'right',cellWidth:70},2:{halign:'right',cellWidth:90},3:{halign:'right',cellWidth:90}},margin:{left:M,right:M}});
-  var y=doc.lastAutoTable.finalY+22;
-  if(p.nota){doc.setFontSize(9);doc.text('NOTA: '+p.nota,M,y,{maxWidth:W-2*M});y+=26;}
-  doc.setFontSize(10);var tx=W-M-170,tv=W-M;
-  doc.text('Sub-Total:',tx,y);doc.text(fmtMoney(p.subtotal),tv,y,{align:'right'});y+=16;
-  doc.text('IVA 16%:',tx,y);doc.text(fmtMoney(p.iva),tv,y,{align:'right'});y+=16;
-  doc.setFont('helvetica','bold');doc.text('Total Operación:',tx,y);doc.text(fmtMoney(p.total),tv,y,{align:'right'});doc.setFont('helvetica','normal');
+  var jsPDF=window.jspdf.jsPDF;var doc=new jsPDF({unit:'pt',format:'letter'});
+  var W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight(),M=36;
+  var nro10=('0000000000'+(p.nro||0)).slice(-10);
+  var cli=p.cliente||{};
+  doc.setTextColor(0,0,0);doc.setDrawColor(0,0,0);
+  // ---- Recuadro de cabecera ----
+  var bx=M+4,by=30,bw=W-2*M-8,bh=100;
+  doc.setLineWidth(0.8);doc.rect(bx,by,bw,bh);
+  doc.setFont('helvetica','bold');doc.setFontSize(11.5);doc.text(PRESU_EMPRESA.nombre,bx+8,by+17);
+  doc.setFont('helvetica','normal');doc.setFontSize(7);doc.text(PRESU_EMPRESA.rif,bx+8,by+32);
+  var rx=bx+bw-82;
+  doc.setFont('helvetica','bold');doc.setFontSize(12);doc.text(LBLP+' Nro.',rx,by+28,{align:'center'});
+  doc.setFont('helvetica','normal');doc.setFontSize(11);doc.text(nro10,rx,by+43,{align:'center'});
+  doc.setFontSize(7.5);
+  doc.text('Fecha Emisión:',rx-62,by+55);doc.text(p.fecha||'',bx+bw-8,by+55,{align:'right'});
+  doc.text('Fecha Vencimiento:',rx-62,by+64);doc.text(presuFechaMas(p.fecha,5),bx+bw-8,by+64,{align:'right'});
+  var lx=bx+11,vx=bx+92;
+  doc.setFontSize(9);doc.text('Razón Social:',lx,by+55);doc.setFontSize(8);doc.text((cli.nombre||'').toUpperCase(),vx,by+55,{maxWidth:bx+bw-200-vx});
+  doc.setFontSize(9);doc.text('Rif:',lx,by+67);doc.text(cli.rif||'',lx+28,by+67);
+  doc.text('Teléfonos:',bx+192,by+67);doc.text(cli.telefono||'',bx+250,by+67);
+  doc.text('Dirección:',lx,by+78);doc.setFontSize(8);doc.text((cli.direccion||'').toUpperCase(),vx-3,by+77,{maxWidth:bx+bw-120-vx});
+  // ---- Tabla de ítems ----
+  var body=p.items.map(function(it){return [it.codigo||'GEN2',(it.desc||'').toUpperCase(),fmtMoney(it.cant),fmtMoney(it.precio),fmtMoney(it.total)];});
+  doc.autoTable({startY:by+bh+4,head:[['Código Producto','Descripción','Cantidad','Precio Unitario','Total']],body:body,theme:'plain',
+    styles:{font:'helvetica',fontSize:7,cellPadding:{top:0.6,bottom:0.6,left:1,right:1},textColor:[0,0,0],overflow:'linebreak'},
+    headStyles:{fontStyle:'normal',fontSize:8.5,textColor:[0,0,0],cellPadding:{top:3,bottom:4,left:1,right:1},lineColor:[0,0,0],lineWidth:{bottom:0.8}},
+    columnStyles:{0:{cellWidth:83},1:{cellWidth:'auto'},2:{halign:'right',cellWidth:55},3:{halign:'right',cellWidth:85},4:{halign:'right',cellWidth:75}},
+    didParseCell:function(d){if(d.section==='head'&&d.column.index>=2)d.cell.styles.halign=(d.column.index===3?'center':'right');if(d.section==='body'&&d.row.index===0)d.cell.styles.cellPadding={top:3,bottom:0.6,left:1,right:1};},
+    margin:{left:M,right:M}});
+  var y=doc.lastAutoTable.finalY+50;
+  // ---- Nota (cada línea con guion) ----
+  if(p.nota){
+    var lineas=String(p.nota).split(/\n|·|•|;/).map(function(t){return t.trim().replace(/^[-–]\s*/,'');}).filter(Boolean);
+    doc.setFontSize(8.5);doc.text('NOTA:',M+16,y);y+=11;
+    lineas.forEach(function(t){var w=doc.splitTextToSize('- '+t.toUpperCase(),W-2*M-32);doc.text(w,M+16,y);y+=11*w.length;});
+  }
+  // ---- Totales al pie de la página ----
+  var ty=Math.max(y+30,H-160);
+  if(ty>H-90){doc.addPage();ty=60;}
+  doc.setFontSize(8.5);doc.setFont('helvetica','normal');
+  var L1=M+18,L2=M+142,L3=M+204,R1=W/2+66,R2=W/2+194,R3=W-M-30,dl=10.5;
+  doc.text('Sub-Total:',L1,ty);doc.text(fmtMoney(p.subtotal),L3,ty,{align:'right'});
+  doc.text('Descuento 1',L1,ty+dl);doc.text('0',L2,ty+dl);doc.text('0,00',L3,ty+dl,{align:'right'});
+  doc.text('Descuento 2',L1,ty+2*dl);doc.text('0',L2,ty+2*dl);doc.text('0,00',L3,ty+2*dl,{align:'right'});
+  doc.text('Flete',L1,ty+3*dl);doc.text('0',L2-23,ty+3*dl);doc.text('0,00',L3,ty+3*dl,{align:'right'});
+  doc.setFont('helvetica','bold');doc.text('Nota:',L1,ty+4*dl+2);doc.setFont('helvetica','normal');
+  var tasa=p.subtotal?Math.round(p.iva/p.subtotal*100):16;
+  doc.text('Total Exento:',R1,ty);doc.text('0,00',R3,ty,{align:'right'});
+  doc.text('Total Base Imponible',R1,ty+dl+0.5);doc.text(fmtMoney(p.subtotal),R3,ty+dl+0.5,{align:'right'});
+  doc.text('Total Impuesto:',R1,ty+2*dl+1);doc.text(fmtMoney(tasa)+' %',R2,ty+2*dl+1.5,{align:'right'});doc.text(fmtMoney(p.iva),R3,ty+2*dl+1,{align:'right'});
+  doc.text('Total IGTF:',R1,ty+3*dl+1.5);doc.text('0,00 %',R2,ty+3*dl+2,{align:'right'});doc.text('0,00',R3,ty+3*dl+1.5,{align:'right'});
+  doc.text('Total Operación:',R1,ty+4*dl+2);doc.text(fmtMoney(p.total),R3,ty+4*dl+2,{align:'right'});
+  doc.setLineWidth(0.6);doc.line(M+16,ty+4*dl+30,W-M-24,ty+4*dl+30);
   return doc;
 }
 function presuDescargarPDF(nro){var p=presuFind(nro);if(!p){toast('No encontré ese presupuesto','err');return;}toast('Generando PDF...','ok');cargarLibsPDF().then(function(){var doc=presuPDF(p);doc.save('Presupuesto-'+presuNroFmt(p.nro)+'.pdf');}).catch(function(){toast('No se pudo generar el PDF','err');});}
