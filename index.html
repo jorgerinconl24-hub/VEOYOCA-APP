@@ -1364,7 +1364,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v122 · Pedidos: filtro Pagados, pendientes por entregar';
+var APP_VERSION='v123 · Finanzas: Ingresos del mes (admin)';
 // ===== AUTO-ACTUALIZACIÓN: si hay una versión nueva publicada, recarga sola =====
 // (en iPhone la app instalada queda abierta en memoria y no toma los cambios)
 (function(){
@@ -6795,7 +6795,7 @@ function renderFinanzas(c){
   if(!SESSION||SESSION.rol!=='admin'){c.innerHTML='<div class="empty">Acceso denegado</div>';return;}
   finDB();
   var _nCola=(DB.abonosCola||[]).length;
-  var modos=[['resumen','\uD83D\uDCCA Resumen'],['cola','\uD83D\uDCE5 Por asignar'+(_nCola?' ('+_nCola+')':'')],['cobrar','\uD83D\uDCB5 Por cobrar'],['transf','\uD83C\uDFE6 Transferencias'],['cuenta','\uD83D\uDCC4 Estados de cuenta'],['pagar','\uD83E\uDDFE Por pagar'],['gastos','\uD83D\uDCB8 Gastos'],['rentab','\uD83D\uDCC8 Rentabilidad'],['terra','\uD83E\uDD1D Terramoda']];
+  var modos=[['resumen','\uD83D\uDCCA Resumen'],['cola','\uD83D\uDCE5 Por asignar'+(_nCola?' ('+_nCola+')':'')],['cobrar','\uD83D\uDCB5 Por cobrar'],['transf','\uD83C\uDFE6 Transferencias'],['cuenta','\uD83D\uDCC4 Estados de cuenta'],['pagar','\uD83E\uDDFE Por pagar'],['gastos','\uD83D\uDCB8 Gastos'],['ingresos','\uD83D\uDCC6 Ingresos del mes'],['rentab','\uD83D\uDCC8 Rentabilidad'],['terra','\uD83E\uDD1D Terramoda']];
   var h='<div class="section-pad" style="padding-bottom:0"><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">'
     +modos.map(function(m){return '<button class="btn '+(FIN_MODO===m[0]?'btn-dark':'btn-ghost')+' btn-sm" style="flex:1;min-width:'+(m[0]==='cola'||m[0]==='cuenta'||m[0]==='transf'?140:92)+'px" onclick="finSetModo(\''+m[0]+'\')">'+m[1]+'</button>';}).join('')
     +'</div></div>';
@@ -6806,6 +6806,7 @@ function renderFinanzas(c){
   else if(FIN_MODO==='cuenta')h+=ecHTML();
   else if(FIN_MODO==='pagar')h+=finTabla('pagar');
   else if(FIN_MODO==='gastos')h+=finGastos();
+  else if(FIN_MODO==='ingresos')h+=finIngresosMes();
   else if(FIN_MODO==='rentab')h+=finRentabilidad();
   else if(FIN_MODO==='terra')h+=finTerramoda();
   h+='<div style="font-size:10px;color:#cbd5e1;text-align:center;padding:6px">'+APP_VERSION+'</div>';
@@ -7164,6 +7165,79 @@ function finGastos(){
     h+='<div class="card" style="margin-bottom:5px;padding:10px 12px"><div style="display:flex;justify-content:space-between;gap:8px"><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+esc(g.desc||'(sin detalle)')+'</div><div style="font-size:11px;color:var(--muted)">'+esc(g.categoria||'Otros')+' \u00B7 '+esc(g.fecha||'')+(g.pedidoNum?' \u00B7 pedido #'+esc(g.pedidoNum):'')+(g.metodo?' \u00B7 '+esc(g.metodo):'')+'</div></div><div style="font-size:16px;font-weight:800;color:#7c3aed;flex-shrink:0">$'+fmtMoney(g.monto)+'</div></div>';
     h+='<div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-ghost btn-sm" onclick="finAbrir(\'gastos\',\''+g.id+'\')">\u270F\uFE0F</button><button class="btn btn-ghost btn-sm" style="color:#dc2626;margin-left:auto" onclick="finBorrar(\'gastos\',\''+g.id+'\')">\uD83D\uDDD1</button></div></div>';
   });
+  return h+'</div>';
+}
+
+// ── INGRESOS DEL MES (solo admin) ───────────────────────────
+// Suma los pedidos INGRESADOS al sistema en el mes (por fecha de creación),
+// excluye los anulados. Monto = base imponible; IVA y total aparte.
+var ING_MES=null; // 'YYYY-MM'
+function ingMesKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+function ingFechaPedido(p){
+  if(p&&p.creadoTS)return new Date(p.creadoTS);
+  var d=p&&p.fechaCreacion?parseFechaDMY(p.fechaCreacion):null;
+  return d||null;
+}
+function ingMover(delta){
+  var k=ING_MES||ingMesKey(new Date());var a=k.split('-');
+  var d=new Date(parseInt(a[0]),parseInt(a[1])-1+delta,1);
+  if(delta>0&&ingMesKey(d)>ingMesKey(new Date()))return;
+  ING_MES=ingMesKey(d);renderFinanzas(document.getElementById('content'));
+}
+function finIngresosMes(){
+  if(!SESSION||SESSION.rol!=='admin')return '<div class="empty">Acceso denegado</div>';
+  var hoy=new Date(),k=ING_MES||ingMesKey(hoy);
+  var MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  var a=k.split('-'),titulo=MESES[parseInt(a[1])-1]+' '+a[0];
+  var lista=[],sinFecha=0,anulados=0;
+  (DB.pedidos||[]).forEach(function(p){
+    if(!p)return;var d=ingFechaPedido(p);
+    if(!d){sinFecha++;return;}
+    if(ingMesKey(d)!==k)return;
+    if(p.estatus==='ANULADO'){anulados++;return;}
+    lista.push({p:p,d:d});
+  });
+  lista.sort(function(x,y){return y.d-x.d;});
+  var tb=0,ti=0,tt=0,sinMonto=0,porVend={};
+  lista.forEach(function(x){
+    var p=x.p,b=parseFloat(p.monto||0)||0,iv=parseFloat(p.iva||0)||0,t=parseFloat(p.totalOperacion||0)||0;
+    if(!t&&b)t=b+iv;
+    if(!b&&!t)sinMonto++;
+    tb+=b;ti+=iv;tt+=t;
+    var v=vendedorPedido(p)||'Sin vendedor';
+    if(!porVend[v])porVend[v]={n:0,b:0,t:0};
+    porVend[v].n++;porVend[v].b+=b;porVend[v].t+=t;
+  });
+  var conMonto=lista.length-sinMonto,prom=conMonto>0?tb/conMonto:0;
+  var esActual=k===ingMesKey(hoy);
+  var caja=function(t,v,col,sub){return '<div class="card" style="padding:12px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:600">'+t+'</div><div style="font-size:20px;font-weight:800;color:'+col+'">'+v+'</div>'+(sub?'<div style="font-size:11px;color:var(--muted)">'+sub+'</div>':'')+'</div>';};
+  var h='<div class="section-pad" style="padding-top:0">';
+  h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><button class="btn btn-ghost btn-sm" onclick="ingMover(-1)">◀</button><div style="flex:1;text-align:center;font-weight:800;font-size:16px">'+titulo+(esActual?' <span style="font-size:11px;color:var(--muted);font-weight:600">(en curso)</span>':'')+'</div><button class="btn btn-ghost btn-sm" onclick="ingMover(1)"'+(esActual?' disabled style="opacity:.4"':'')+'>▶</button></div>';
+  h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px">';
+  h+=caja('Ingreso (base imponible)','$'+fmtMoney(tb),'#166534');
+  h+=caja('IVA','$'+fmtMoney(ti),'#b45309');
+  h+=caja('Total con IVA','$'+fmtMoney(tt),'#1d4ed8');
+  h+=caja('Pedidos ingresados',String(lista.length),'var(--text)',sinMonto?sinMonto+' sin monto cargado':'');
+  h+=caja('Ticket promedio','$'+fmtMoney(prom),'var(--text)','base imponible');
+  h+='</div>';
+  var vs=Object.keys(porVend).map(function(v){return {v:v,o:porVend[v]};}).sort(function(x,y){return y.o.b-x.o.b;});
+  if(vs.length){
+    h+='<div style="font-weight:700;font-size:13px;margin:4px 0 6px">Por vendedor</div>';
+    h+='<div class="tabla-env" style="overflow-x:auto;background:#fff;border:1px solid var(--border);border-radius:10px;margin-bottom:12px"><table style="width:100%;border-collapse:collapse;font-size:12px">';
+    h+='<thead><tr style="background:#f4f4f8"><th style="text-align:left;padding:8px">Vendedor</th><th style="text-align:right;padding:8px">Pedidos</th><th style="text-align:right;padding:8px">Base</th><th style="text-align:right;padding:8px">%</th></tr></thead><tbody>';
+    vs.forEach(function(x){h+='<tr style="border-top:1px solid #eef0f4"><td style="padding:7px 8px;font-weight:600">'+esc(x.v)+'</td><td style="padding:7px 8px;text-align:right">'+x.o.n+'</td><td style="padding:7px 8px;text-align:right;font-weight:700">$'+fmtMoney(x.o.b)+'</td><td style="padding:7px 8px;text-align:right">'+(tb>0?(x.o.b/tb*100).toFixed(0):'0')+'%</td></tr>';});
+    h+='</tbody></table></div>';
+  }
+  if(!lista.length){h+='<div class="empty"><div class="empty-icon">📆</div>No hay pedidos ingresados en '+titulo+'.</div>';}
+  else{
+    h+='<div style="font-weight:700;font-size:13px;margin:4px 0 6px">Pedidos del mes</div>';
+    lista.forEach(function(x){
+      var p=x.p,b=parseFloat(p.monto||0)||0;
+      var cli=typeof p.cliente==='object'&&p.cliente?(p.cliente.nombre||''):(p.cliente||'');
+      h+='<div class="card" style="margin-bottom:5px;padding:9px 12px;display:flex;justify-content:space-between;gap:8px;align-items:center"><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(p.numero?'#'+esc(String(p.numero))+' · ':'')+esc(cli||'(sin cliente)')+'</div><div style="font-size:11px;color:var(--muted)">'+x.d.toLocaleDateString('es-VE')+(vendedorPedido(p)?' · '+esc(vendedorPedido(p)):'')+(p.estatus?' · '+esc(p.estatus):'')+'</div></div><div style="font-weight:800;font-size:13px;color:'+(b>0?'#166534':'#dc2626')+'">'+(b>0?'$'+fmtMoney(b):'sin monto')+'</div></div>';
+    });
+  }
+  h+='<div style="font-size:11px;color:var(--muted);margin-top:8px">Cuenta los pedidos por la <b>fecha en que se ingresaron</b> al sistema, no por la de entrega ni de cobro. Los anulados no suman'+(anulados?' ('+anulados+' anulado'+(anulados>1?'s':'')+' este mes)':'')+'.'+(sinFecha?' '+sinFecha+' pedido(s) sin fecha de creación no entran en ningún mes.':'')+'</div>';
   return h+'</div>';
 }
 
