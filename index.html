@@ -1364,7 +1364,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v123 · Finanzas: Ingresos del mes (admin)';
+var APP_VERSION='v124 · Ingresos del mes: tocar pedido abre su PDF';
 // ===== AUTO-ACTUALIZACIÓN: si hay una versión nueva publicada, recarga sola =====
 // (en iPhone la app instalada queda abierta en memoria y no toma los cambios)
 (function(){
@@ -7234,10 +7234,11 @@ function finIngresosMes(){
     lista.forEach(function(x){
       var p=x.p,b=parseFloat(p.monto||0)||0;
       var cli=typeof p.cliente==='object'&&p.cliente?(p.cliente.nombre||''):(p.cliente||'');
-      h+='<div class="card" style="margin-bottom:5px;padding:9px 12px;display:flex;justify-content:space-between;gap:8px;align-items:center"><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(p.numero?'#'+esc(String(p.numero))+' · ':'')+esc(cli||'(sin cliente)')+'</div><div style="font-size:11px;color:var(--muted)">'+x.d.toLocaleDateString('es-VE')+(vendedorPedido(p)?' · '+esc(vendedorPedido(p)):'')+(p.estatus?' · '+esc(p.estatus):'')+'</div></div><div style="font-weight:800;font-size:13px;color:'+(b>0?'#166534':'#dc2626')+'">'+(b>0?'$'+fmtMoney(b):'sin monto')+'</div></div>';
+      var _st='margin-bottom:5px;padding:9px 12px;display:flex;justify-content:space-between;gap:8px;align-items:center;cursor:pointer;text-decoration:none;color:inherit';
+      h+=(p.pdfUrl?'<a class="card" href="'+esc(p.pdfUrl)+'" target="_blank" rel="noopener" style="'+_st+'">':'<div class="card" onclick="toast(\'Este pedido no tiene PDF cargado\',\'warn\')" style="'+_st+'">')+'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(p.numero?'#'+esc(String(p.numero))+' · ':'')+esc(cli||'(sin cliente)')+'</div><div style="font-size:11px;color:var(--muted)">'+x.d.toLocaleDateString('es-VE')+(vendedorPedido(p)?' · '+esc(vendedorPedido(p)):'')+(p.estatus?' · '+esc(p.estatus):'')+'</div></div><div style="font-weight:800;font-size:13px;color:'+(b>0?'#166534':'#dc2626')+'">'+(b>0?'$'+fmtMoney(b):'sin monto')+'</div><div style="font-size:16px;opacity:'+(p.pdfUrl?'1':'.25')+'">\uD83D\uDCC4</div>'+(p.pdfUrl?'</a>':'</div>');
     });
   }
-  h+='<div style="font-size:11px;color:var(--muted);margin-top:8px">Cuenta los pedidos por la <b>fecha en que se ingresaron</b> al sistema, no por la de entrega ni de cobro. Los anulados no suman'+(anulados?' ('+anulados+' anulado'+(anulados>1?'s':'')+' este mes)':'')+'.'+(sinFecha?' '+sinFecha+' pedido(s) sin fecha de creación no entran en ningún mes.':'')+'</div>';
+  h+='<div style="font-size:11px;color:var(--muted);margin-top:8px">Cuenta los pedidos por la <b>fecha en que se ingresaron</b> al sistema, no por la de entrega ni de cobro. Toca un pedido para abrir su PDF. Los anulados no suman'+(anulados?' ('+anulados+' anulado'+(anulados>1?'s':'')+' este mes)':'')+'.'+(sinFecha?' '+sinFecha+' pedido(s) sin fecha de creación no entran en ningún mes.':'')+'</div>';
   return h+'</div>';
 }
 
