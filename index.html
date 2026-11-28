@@ -1364,7 +1364,7 @@ function cot_copiar(btn){var msg=decodeURIComponent(btn.getAttribute('data-msg')
  * PRESUPUESTADOR (documento formal al cliente) — con número de control,
  * IVA 16%, PDF y texto. Encabezado: VITRINAS ESTANTES DE OCCIDENTE Y ORIENTE.
  * ═══════════════════════════════════════════════════════════════ */
-var APP_VERSION='v125 · Editar PDF del pedido (solo admin)';
+var APP_VERSION='v126 · Filtro: entregados pendientes por cobrar';
 // ===== AUTO-ACTUALIZACIÓN: si hay una versión nueva publicada, recarga sola =====
 // (en iPhone la app instalada queda abierta en memoria y no toma los cambios)
 (function(){
@@ -2537,7 +2537,7 @@ function renderHome(c){
   var op=(DB.ordenesPendientes||[]);
   var opSinPed=op.filter(function(x){return !((x.numeroPedido||'').toString().trim());}).length;
   var bannerOP=op.length?'<div onclick="abrirOrdenesPendientes()" style="background:#7c3aed;color:#fff;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px"><span>\u23F3 '+op.length+' orden'+(op.length>1?'es':'')+' a la espera de pedido'+(opSinPed?' \u00B7 '+opSinPed+' sin # de pedido':'')+'</span><span style="font-size:11px;opacity:.85;white-space:nowrap">Toca para ver \u2192</span></div>':'';
-  c.innerHTML=statsBar+bannerOP+bannerSF+'<div class="prog-wrap"><div class="prog-bar"><div class="prog-fill" style="width:'+pct+'%"></div></div><div class="prog-label">'+ent+' de '+total+' entregados ('+pct+'%)</div></div><div class="toolbar"><input type="text" id="h-buscar" placeholder="Buscar cliente, número o producto (ej: pirámide pared 2 mts)" oninput="filtrarHome()"><select id="h-est" onchange="filtrarHome()"><option value="">Todos</option><option value="vencido">Vencidos</option><option value="urgente">Urgentes</option><option value="sf">Sin fecha</option><option value="ok">Con tiempo</option><option value="LISTO">Listos</option><option value="ORDENES">Con \u00F3rdenes pendientes</option><option value="SINFECHA">\u00D3rdenes sin fecha estimada</option>'+((SESSION&&SESSION.rol==='admin')?'<option value="PAGADOS">\uD83D\uDCB5 Pagados, pendientes por entregar</option>':'')+'<option value="ENTREGADOS">\u2705 Historial de entregados</option></select>'+selCiudadHTML()+selOrdenHTML()+'<button class="btn btn-dark btn-sm" onclick="generarReporte()" style="align-self:center">\uD83D\uDCC4 Generar Reporte</button></div><div class="section-pad" id="home-lista"></div>';
+  c.innerHTML=statsBar+bannerOP+bannerSF+'<div class="prog-wrap"><div class="prog-bar"><div class="prog-fill" style="width:'+pct+'%"></div></div><div class="prog-label">'+ent+' de '+total+' entregados ('+pct+'%)</div></div><div class="toolbar"><input type="text" id="h-buscar" placeholder="Buscar cliente, número o producto (ej: pirámide pared 2 mts)" oninput="filtrarHome()"><select id="h-est" onchange="filtrarHome()"><option value="">Todos</option><option value="vencido">Vencidos</option><option value="urgente">Urgentes</option><option value="sf">Sin fecha</option><option value="ok">Con tiempo</option><option value="LISTO">Listos</option><option value="ORDENES">Con \u00F3rdenes pendientes</option><option value="SINFECHA">\u00D3rdenes sin fecha estimada</option>'+((SESSION&&SESSION.rol==='admin')?'<option value="PAGADOS">\uD83D\uDCB5 Pagados, pendientes por entregar</option><option value="POR_COBRAR">\uD83D\uDCE5 Entregados, pendientes por cobrar</option>':'')+'<option value="ENTREGADOS">\u2705 Historial de entregados</option></select>'+selCiudadHTML()+selOrdenHTML()+'<button class="btn btn-dark btn-sm" onclick="generarReporte()" style="align-self:center">\uD83D\uDCC4 Generar Reporte</button></div><div class="section-pad" id="home-lista"></div>';
   filtrarHome();
 }
 function aplicarFiltro(valor){
@@ -2775,10 +2775,39 @@ function pedidoPagadoPorEntregar(p){
   var cr=(typeof cobrarDePedido==='function')?cobrarDePedido(p.numero):null;
   return !!(cr&&finNum(cr.monto)>0&&finPagado(cr));
 }
+// Pedido ENTREGADO con monto que todavía tiene saldo por cobrar (o que no
+// tiene cuenta en Finanzas). Solo lo usa el filtro del administrador.
+function saldoPorCobrarPedido(p){
+  if(p.estatus!=='ENTREGADO')return 0;
+  var m=parseFloat(p.monto||0);if(!(m>0))return 0;
+  var cr=(typeof cobrarDePedido==='function')?cobrarDePedido(p.numero):null;
+  if(!cr)return m;
+  if(finPagado(cr))return 0;
+  return Math.max(0,finSaldo(cr));
+}
+function aplicarFiltroPorCobrar(){
+  var el=document.getElementById('home-lista');if(!el)return;
+  if(!(SESSION&&SESSION.rol==='admin')){el.innerHTML='';return;}
+  var b=(document.getElementById('h-buscar')||{value:''}).value.toLowerCase();
+  var lista=DB.pedidos.filter(function(p){if(saldoPorCobrarPedido(p)<=0)return false;if(HOME_CIUDAD&&ciudadDe(p)!==HOME_CIUDAD)return false;return pedidoCoincideBusqueda(p,b);});
+  // Primero los que llevan más tiempo entregados sin cobrar.
+  lista.sort(function(a,c){var ta=a.entregadoTS||(parseFechaDMY(a.fechaEntrega)||{getTime:function(){return 0;}}).getTime(),tc=c.entregadoTS||(parseFechaDMY(c.fechaEntrega)||{getTime:function(){return 0;}}).getTime();return ta-tc;});
+  if(HOME_ORDEN==='NUEVOS')lista.reverse();
+  if(!lista.length){el.innerHTML='<div class="empty"><div class="empty-icon">✅</div>No hay pedidos entregados pendientes por cobrar</div>';return;}
+  var tot=lista.reduce(function(s,p){return s+saldoPorCobrarPedido(p);},0);
+  var h='<div class="sec-label">Entregados, pendientes por cobrar ('+lista.length+') · falta $'+fmtMoney(tot)+'</div>';
+  lista.forEach(function(p){
+    var d=diasTranscurridos(p.fechaEntrega);
+    h+='<div style="font-size:11px;font-weight:700;color:#b45309;margin:0 2px 3px">📦 Entregado '+esc(p.fechaEntrega||'')+(d!=null?' · hace '+d+(d===1?' día':' días'):'')+' · falta $'+fmtMoney(saldoPorCobrarPedido(p))+'</div>';
+    h+=cardHTML(p,false);
+  });
+  el.innerHTML=h;
+}
 function _filtrarHome(){
   var b=(document.getElementById('h-buscar')||{value:''}).value.toLowerCase();
   var fe=(document.getElementById('h-est')||{value:''}).value;
   if(fe==='ENTREGADOS'){aplicarFiltroEntregados();return;}
+  if(fe==='POR_COBRAR'){aplicarFiltroPorCobrar();return;}
   var lista=DB.pedidos.filter(function(p){if(p.estatus==='ENTREGADO')return false;if(HOME_CIUDAD&&ciudadDe(p)!==HOME_CIUDAD)return false;var mb=pedidoCoincideBusqueda(p,b);var mfe=!fe||clasif(p)===fe||(fe==='LISTO'&&pedidoListo(p))||(fe==='ORDENES'&&(function(){var r=resumenOrdenes(p);return r.total>0&&r.listas<r.total;})())||(fe==='SINFECHA'&&getOrdenes(p).some(function(o){return !ordenRecibida(o)&&!o.fechaEstimadaEntrega;}))||(fe==='PAGADOS'&&pedidoPagadoPorEntregar(p));return mb&&mfe;});
   lista.sort(function(a,b){var da=diasRestantes(a.fechaLimite),db=diasRestantes(b.fechaLimite);if(da===null&&db===null)return 0;if(da===null)return 1;if(db===null)return -1;return da-db;});
   var el=document.getElementById('home-lista');if(!el)return;
